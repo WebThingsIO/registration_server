@@ -22,28 +22,34 @@ function doDiscovery() {
   console.log("Starting discovery.");
   loadJSON("GET", "http://cloud.desre.org:4242/ping").then(data => {
     console.log("Got data: " + JSON.stringify(data));
+    var node = document.getElementById("content");
 
     if (!data) {
       return;
     }
-    document.getElementById("content").innerHTML = "";
+    // Reset while we wait for an answer.
+    node.innerHTML = "";
 
     var content = "";
-    data.forEach(item => {
-      content += `<p>FoxBox found at ${item.local_ip}</p>`;
-      loadJSON("GET", `http://${item.local_ip}:3000/services/list.json`).then(list => {
-        console.log("Service list: " + JSON.stringify(list));
-        let html = "<ul>";
-        for (let s in list) {
-          console.log("We have " + s);
-          html += `<li>${list[s].name}</li>`;
-        }
-        html += "<ul>";
-        document.getElementById("content").innerHTML += html;
+    if (data.length == 0) {
+      content = "<p>No FoxBox available!</p>";
+    } else {
+      data.forEach(item => {
+        content += `<p>FoxBox found at ${item.local_ip}</p>`;
+        loadJSON("GET", `http://${item.local_ip}:3000/services/list.json`).then(list => {
+          console.log("Service list: " + JSON.stringify(list));
+          let html = "<ul>";
+          for (let s in list) {
+            console.log("We have " + s);
+            html += `<li>${list[s].name}</li>`;
+          }
+          html += "<ul>";
+          node.innerHTML += html;
+        });
       });
-    });
+    }
 
-    document.getElementById("content").innerHTML = content;
+    node.innerHTML = content;
   });
 }
 
