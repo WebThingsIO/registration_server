@@ -1,0 +1,15 @@
+[package]
+name = "registration_server"
+version = "0.1.0"
+authors = ["fabrice <fabrice@desre.org>"]
+
+[dependencies]
+env_logger = "0.3.2"
+iron = "0.2.6"
+log = "0.3"
+params = "0.0.3"
+mount = "0.0.10"
+router = "0.1.0"
+rusqlite = "0.6.0"
+
+
