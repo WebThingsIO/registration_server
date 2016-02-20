@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use db::{ Db, FindFilter, Record };
-use iron::headers::ContentType;
+use iron::headers::{ AccessControlAllowOrigin, ContentType };
 use iron::prelude::*;
 use iron::status::Status;
 use params::{ Map, Params, Value };
@@ -85,6 +85,7 @@ pub fn create() -> Router {
 
         let mut response = Response::with("{\"status\" : \"registered\"}");
         response.status = Some(Status::Ok);
+        response.headers.set(AccessControlAllowOrigin::Any);
         response.headers.set(ContentType::json());
 
         Ok(response)
@@ -111,6 +112,7 @@ pub fn create() -> Router {
         let mut response = Response::with(serialized);
         //let mut response = Response::with("ok");
         response.status = Some(Status::Ok);
+        response.headers.set(AccessControlAllowOrigin::Any);
         response.headers.set(ContentType::json());
 
         Ok(response)
