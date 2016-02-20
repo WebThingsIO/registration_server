@@ -101,8 +101,14 @@ pub fn create() -> Router {
         match db.find(FindFilter::PublicIp(public_ip)) {
             Ok(rvect) => {
                 // Serialize the vector.
+                let max = rvect.len();
+                let mut index = 0;
                 for record in rvect {
                     serialized.push_str(&record.to_json());
+                    index += 1;
+                    if index < max {
+                        serialized.push_str(",");
+                    }
                 }
             },
             Err(_) => { }

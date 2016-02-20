@@ -26,6 +26,7 @@ function doDiscovery() {
     if (!data) {
       return;
     }
+    document.getElementById("content").innerHTML = "";
 
     var content = "";
     data.forEach(item => {
