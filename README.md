@@ -1,6 +1,5 @@
 # Registration server
 
-https://travis-ci.org/fxbox/registration_server.svg?branch=master
 [![Build Status](https://travis-ci.org/fxbox/registration_server.svg?branch=master)](https://travis-ci.org/fxbox/registration_server)
 
 This server listen on port 4242 and let you register devices from your home network and discover them later on.
