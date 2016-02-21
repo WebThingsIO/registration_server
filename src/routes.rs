@@ -10,7 +10,6 @@ use params::{ Map, Params, Value };
 use router::Router;
 use std::error::Error;
 use std::fmt::{self, Debug};
-use std::time::{ SystemTime, UNIX_EPOCH };
 
 #[derive(Debug)]
 struct StringError(String);
@@ -23,11 +22,6 @@ impl fmt::Display for StringError {
 
 impl Error for StringError {
     fn description(&self) -> &str { &*self.0 }
-}
-
-fn seconds_from_epoch() -> i64 {
-    let now = SystemTime::now();
-    now.duration_from_earlier(UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
 pub fn create() -> Router {
@@ -48,7 +42,7 @@ pub fn create() -> Router {
         let local_ip = ip_param.unwrap().to_string();
 
         // Get the current number of seconds since epoch.
-        let now = seconds_from_epoch();
+        let now = Db::seconds_from_epoch();
 
         info!("GET /register public_ip={} local_ip={} time is {}",
               public_ip, local_ip, now);
@@ -116,7 +110,6 @@ pub fn create() -> Router {
 
         serialized.push_str("]");
         let mut response = Response::with(serialized);
-        //let mut response = Response::with("ok");
         response.status = Some(Status::Ok);
         response.headers.set(AccessControlAllowOrigin::Any);
         response.headers.set(ContentType::json());

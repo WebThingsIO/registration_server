@@ -4,18 +4,11 @@
 
 extern crate rusqlite;
 use self::rusqlite::Connection;
-#[cfg(test)]
 use std::time::{ SystemTime, UNIX_EPOCH };
 
 #[cfg(test)]
 fn get_db_environment() -> String {
     "./boxes_test.sqlite".to_string()
-}
-
-#[cfg(test)]
-fn seconds_from_epoch() -> i64 {
-    let now = SystemTime::now();
-    now.duration_from_earlier(UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
 #[cfg(not(test))]
@@ -69,6 +62,11 @@ impl Db {
         }
     }
 
+    pub fn seconds_from_epoch() -> i64 {
+        let now = SystemTime::now();
+        now.duration_from_earlier(UNIX_EPOCH).unwrap().as_secs() as i64
+    }
+
     #[cfg(test)]
     pub fn clear(&self) -> self::rusqlite::Result<()> {
         self.connection.execute_batch(
@@ -120,6 +118,10 @@ impl Db {
             (public_ip, local_ip, timestamp) VALUES ($1, $2, $3)",
             &[&record.public_ip, &record.local_ip, &record.timestamp])
     }
+
+    pub fn delete_older_than(&self, timestamp: i64) -> self::rusqlite::Result<i32> {
+        self.connection.execute("DELETE FROM boxes WHERE timestamp < $1", &[&timestamp])
+    }
 }
 
 #[test]
@@ -132,7 +134,7 @@ fn test_db() {
         Err(err) => { println!("Unexecpted error: {}", err); assert!(false); }
     }
 
-    let now = seconds_from_epoch();
+    let now = Db::seconds_from_epoch();
 
     let mut r = Record {
         public_ip: "127.0.0.1".to_owned(),
@@ -176,5 +178,10 @@ fn test_db() {
         Err(err) => { println!("Unexecpted error: {}", err); assert!(false); }
     }
 
+    // Fake travelling in the future, and evict both records.
+    match db.delete_older_than(now + 2) {
+        Ok(count) => assert_eq!(count, 2),
+        Err(err) => { println!("Unexecpted error: {}", err); assert!(false); }
+    }
     db.clear().unwrap();
 }

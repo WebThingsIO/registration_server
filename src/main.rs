@@ -26,15 +26,19 @@ use mount::Mount;
 
 mod db;
 mod routes;
+mod eviction;
 
 fn main() {
     env_logger::init().unwrap();
 
     Db::new();
 
+    eviction::start();
+
     let mut mount = Mount::new();
     mount.mount("/", routes::create());
 
+    // TODO: add a command line flag to set host:port.
     info!("Starting server on 0.0.0.0:4242");
     Iron::new(mount).http("0.0.0.0:4242").unwrap();
 }
