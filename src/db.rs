@@ -64,7 +64,7 @@ impl Db {
 
     pub fn seconds_from_epoch() -> i64 {
         let now = SystemTime::now();
-        now.duration_from_earlier(UNIX_EPOCH).unwrap().as_secs() as i64
+        now.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
     }
 
     #[cfg(test)]
