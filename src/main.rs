@@ -4,8 +4,9 @@
 
 /// Simple server that manages foxbox registrations.
 /// Two end points are available:
-/// /register?ip=$local_ip to register a public IP with a local one.
-/// /ping to get the list of local ip matching the current public one.
+/// POST /register => to register a match between public IP, local IP
+///                   and tunnel URL.
+/// GET /ping => to get the list of public IP matches.
 ///
 /// Boxes are supposed to register themselves at regular intervals so we
 /// discard data which is too old periodically.
@@ -18,6 +19,7 @@ extern crate log;
 extern crate mount;
 extern crate params;
 extern crate router;
+extern crate rusqlite;
 extern crate rustc_serialize;
 
 use db::Db;
@@ -25,9 +27,10 @@ use docopt::Docopt;
 use iron::Iron;
 use mount::Mount;
 
+mod errors;
+mod eviction;
 mod db;
 mod routes;
-mod eviction;
 
 const USAGE: &'static str = "
 Usage: registration_server [-h <hostname>] [-p <port>]

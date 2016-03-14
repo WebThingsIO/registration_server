@@ -13,4 +13,3 @@ mount = "0.0.10"
 router = "0.1.0"
 rusqlite = "0.6.0"
 rustc-serialize = "0.3"
-
