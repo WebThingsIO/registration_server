@@ -14,6 +14,7 @@
 extern crate docopt;
 extern crate env_logger;
 extern crate iron;
+extern crate iron_cors;
 #[macro_use]
 extern crate log;
 extern crate mount;
@@ -24,7 +25,9 @@ extern crate rustc_serialize;
 
 use db::Db;
 use docopt::Docopt;
-use iron::Iron;
+use iron::{ Chain, Iron };
+use iron::method::Method;
+use iron_cors::CORS;
 use mount::Mount;
 
 mod errors;
@@ -61,10 +64,17 @@ fn main() {
     let mut mount = Mount::new();
     mount.mount("/", routes::create());
 
+    let mut chain = Chain::new(mount);
+    let cors = CORS::new(vec![
+        (vec![Method::Get], "ping".to_owned()),
+        (vec![Method::Post], "register".to_owned()),
+    ]);
+    chain.link_after(cors);
+
     let host = args.flag_host.unwrap_or("0.0.0.0".to_string());
     let port = args.flag_port.unwrap_or(4242);
     info!("Starting server on {}:{}", host, port);
-    Iron::new(mount).http(format!("{}:{}", host, port).as_ref() as &str)
+    Iron::new(chain).http(format!("{}:{}", host, port).as_ref() as &str)
         .unwrap();
 }
 
