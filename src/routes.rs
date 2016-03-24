@@ -30,8 +30,7 @@ fn register(req: &mut Request) -> IronResult<Response> {
    // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
     struct RegisterBody {
-        local_ip: String,
-        tunnel_url: Option<String>,
+        message: String,
     }
 
     let mut payload = String::new();
@@ -44,31 +43,30 @@ fn register(req: &mut Request) -> IronResult<Response> {
         }
     };
 
-    let local_ip = body.local_ip;
-    let tunnel_url = body.tunnel_url;
+    let message   = body.message;
+
     // And the public IP from the socket.
     let public_ip = format!("{}", req.remote_addr.ip());
 
     // Get the current number of seconds since epoch.
     let now = Db::seconds_from_epoch();
 
-    info!("POST /register public_ip={} local_ip={} tunnel_url={} time is {}",
-          public_ip, local_ip, tunnel_url.clone().unwrap(), now);
+    info!("POST /register public_ip={} message={} time is {}",
+          public_ip, message, now);
 
     // Save this registration in the database.
     // If we already have the same (local, tunnel, public) match, update it,
     // if not create a new match.
     let db = Db::new();
     match db.find(
-        FindFilter::PublicAndLocalIp(public_ip.clone(), local_ip.clone())
+        FindFilter::PublicIpAndMessage(public_ip.clone(), message.clone())
     ) {
         Ok(rvect) => {
             // If the vector is empty, create a new record, if not update
             // the existing one with the new timestamp.
             let record = Record {
                 public_ip: public_ip,
-                local_ip: local_ip,
-                tunnel_url: tunnel_url,
+                message: message,
                 timestamp: now,
             };
 
@@ -85,8 +83,7 @@ fn register(req: &mut Request) -> IronResult<Response> {
         Err(_) => {
             let record = Record {
                 public_ip: public_ip,
-                local_ip: local_ip,
-                tunnel_url: tunnel_url,
+                message: message,
                 timestamp: now,
             };
             if let Err(_) = db.add(record) {
