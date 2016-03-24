@@ -30,6 +30,7 @@ fn register(req: &mut Request) -> IronResult<Response> {
    // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
     struct RegisterBody {
+        client:  String,
         message: String,
     }
 
@@ -44,6 +45,7 @@ fn register(req: &mut Request) -> IronResult<Response> {
     };
 
     let message   = body.message;
+    let client_id = body.client;
 
     // And the public IP from the socket.
     let public_ip = format!("{}", req.remote_addr.ip());
@@ -51,21 +53,22 @@ fn register(req: &mut Request) -> IronResult<Response> {
     // Get the current number of seconds since epoch.
     let now = Db::seconds_from_epoch();
 
-    info!("POST /register public_ip={} message={} time is {}",
-          public_ip, message, now);
+    info!("POST /register public_ip={} client={} message={} time is {}",
+          public_ip, client_id, message, now);
 
     // Save this registration in the database.
     // If we already have the same (local, tunnel, public) match, update it,
     // if not create a new match.
     let db = Db::new();
     match db.find(
-        FindFilter::PublicIpAndMessage(public_ip.clone(), message.clone())
+        FindFilter::PublicIpAndClient(public_ip.clone(), client_id.clone())
     ) {
         Ok(rvect) => {
             // If the vector is empty, create a new record, if not update
             // the existing one with the new timestamp.
             let record = Record {
                 public_ip: public_ip,
+                client:  client_id,
                 message: message,
                 timestamp: now,
             };
@@ -83,10 +86,12 @@ fn register(req: &mut Request) -> IronResult<Response> {
         Err(_) => {
             let record = Record {
                 public_ip: public_ip,
+                client: client_id,
                 message: message,
                 timestamp: now,
             };
-            if let Err(_) = db.add(record) {
+            if let Err(e) = db.add(record) {
+                error!("Error {}", e);
                 return EndpointError::with(status::InternalServerError, 501)
             }
         }

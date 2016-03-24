@@ -18,7 +18,8 @@ fn get_db_environment() -> String {
 #[derive(RustcEncodable, Debug)]
 pub struct Record {
     pub public_ip: String,
-    pub message:    String,
+    pub client:    String,
+    pub message:   String,
     pub timestamp: i64 // i64 because of the database type.
 }
 
@@ -29,7 +30,7 @@ fn escape(string: &str) -> String {
 
 pub enum FindFilter {
     PublicIp(String),
-    PublicIpAndMessage(String, String)
+    PublicIpAndClient(String, String)
 }
 
 pub struct Db {
@@ -45,6 +46,7 @@ impl Db {
         let connection = Connection::open(get_db_environment()).unwrap();
         connection.execute("CREATE TABLE IF NOT EXISTS boxes (
                 public_ip TEXT NOT NULL,
+                client TEXT NOT NULL,
                 message TEXT,
                 timestamp INTEGER
             )", &[]).unwrap();
@@ -78,11 +80,11 @@ impl Db {
                 );
                 try!(stmt.query(&[&escape(&public_ip)]))
             },
-            FindFilter::PublicIpAndMessage(public_ip, message) => {
+            FindFilter::PublicIpAndClient(public_ip, client_id) => {
                 stmt = try!(
-                    self.connection.prepare("SELECT * FROM boxes WHERE (public_ip=$1 and message=$2)")
+                    self.connection.prepare("SELECT * FROM boxes WHERE (public_ip=$1 and client=$2)")
                 );
-                try!(stmt.query(&[&escape(&public_ip), &escape(&message)]))
+                try!(stmt.query(&[&escape(&public_ip), &escape(&client_id)]))
             }
         };
 
@@ -91,8 +93,9 @@ impl Db {
             let row = try!(result_row);
             records.push(Record {
                 public_ip: row.get(0),
-                message: row.get(1),
-                timestamp: row.get(2)
+                client: row.get(1),
+                message: row.get(2),
+                timestamp: row.get(3)
             });
         }
         Ok(records)
@@ -100,18 +103,18 @@ impl Db {
 
     pub fn update(&self, record: Record) -> rusqlite::Result<i32> {
         self.connection.execute("UPDATE boxes
-            SET public_ip=$1, message=$2, timestamp=$3
-            WHERE (public_ip=$4 AND message=$5)",
-            &[&record.public_ip, &record.message,
-              &record.public_ip, &record.message])
+            SET public_ip=$1, message=$2, client=$3, timestamp=$4
+            WHERE (public_ip=$5 AND client=$6)",
+            &[&record.public_ip, &record.message, &record.client,
+              &record.timestamp, &record.public_ip, &record.client])
     }
 
     pub fn add(&self, record: Record) -> rusqlite::Result<i32> {
         self.connection.execute("INSERT INTO boxes
-            (public_ip, message, timestamp)
-            VALUES ($1, $2, $3)",
-            &[&record.public_ip, &record.message,
-            &record.timestamp])
+            (public_ip, client, message, timestamp)
+            VALUES ($1, $2, $3, $4)",
+            &[&record.public_ip, &record.client, &record.message,
+              &record.timestamp])
     }
 
     pub fn delete_older_than(&self, timestamp: i64) -> rusqlite::Result<i32> {
@@ -124,7 +127,7 @@ fn test_db() {
     let db = Db::new();
 
     // Look for a record, but the db is empty.
-    match db.find(FindFilter::PublicIpAndMessage("127.0.0.1".to_owned(), "<fingerprint>.knilxof.org".to_owned())) {
+    match db.find(FindFilter::PublicIpAndClient("127.0.0.1".to_owned(), "<fingerprint>".to_owned())) {
         Ok(vec) => { assert!(vec.is_empty()); },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
@@ -132,7 +135,8 @@ fn test_db() {
 
     let mut r = Record {
         public_ip: "127.0.0.1".to_owned(),
-        message: "<fingerprint>.knilxof.org".to_owned(),
+        message: "<message>".to_owned(),
+        client: "<fingerprint>".to_owned(),
         timestamp: now
     };
 
@@ -142,7 +146,7 @@ fn test_db() {
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
     // Check that we find it.
-    match db.find(FindFilter::PublicIpAndMessage("127.0.0.1".to_owned(), "<fingerprint>.knilxof.org".to_owned())) {
+    match db.find(FindFilter::PublicIpAndClient("127.0.0.1".to_owned(), "<fingerprint>".to_owned())) {
         Ok(records) => {
             assert_eq!(records.len(), 1);
             assert_eq!(records[0].timestamp, now);
@@ -153,7 +157,8 @@ fn test_db() {
     // Add another record with the same public IP, but a different local one.
     r = Record {
         public_ip: "127.0.0.1".to_owned(),
-        message: "<another_fingerprint>.knilxof.org".to_owned(),
+        message: "<another_message>".to_owned(),
+        client:  "<another_fingerprint>".to_owned(),
         timestamp: now
     };
     match db.add(r) {
@@ -165,8 +170,11 @@ fn test_db() {
     match db.find(FindFilter::PublicIp("127.0.0.1".to_owned())) {
         Ok(records) => {
             assert_eq!(records.len(), 2);
-            assert_eq!(records[0].message, "<fingerprint>.knilxof.org");
-            assert_eq!(records[1].message, "<another_fingerprint>.knilxof.org");
+            assert_eq!(records[0].message, "<message>");
+            assert_eq!(records[1].message, "<another_message>");
+
+            assert_eq!(records[0].client,  "<fingerprint>");
+            assert_eq!(records[1].client,  "<another_fingerprint>");
         },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
