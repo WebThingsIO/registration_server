@@ -6,8 +6,7 @@
 
 /// Simple server that manages foxbox registrations.
 /// Two end points are available:
-/// POST /register => to register a match between public IP, local IP
-///                   and tunnel URL.
+/// POST /register => to register a match between public IP and mesage.
 /// GET /ping => to get the list of public IP matches.
 ///
 /// Boxes are supposed to register themselves at regular intervals so we
