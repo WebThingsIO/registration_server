@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use db::{ Db, FindFilter, Record };
+use db::{ Db, Record};
 use errors::*;
-use iron::headers::{ AccessControlAllowOrigin, ContentType };
+use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{ self, Status };
 use router::Router;
@@ -26,7 +26,10 @@ impl Error for StringError {
     fn description(&self) -> &str { &*self.0 }
 }
 
-fn register(req: &mut Request) -> IronResult<Response> {
+fn register(req: &mut Request,
+            db_host: String,
+            db_port: u16,
+            db_password: Option<String>) -> IronResult<Response> {
    // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
     struct RegisterBody {
@@ -50,70 +53,45 @@ fn register(req: &mut Request) -> IronResult<Response> {
     // And the public IP from the socket.
     let public_ip = format!("{}", req.remote_addr.ip());
 
-    // Get the current number of seconds since epoch.
-    let now = Db::seconds_from_epoch();
-
-    info!("POST /register public_ip={} client={} message={} time is {}",
-          public_ip, client_id, message, now);
+    info!("POST /register public_ip={} client={} message={}",
+          public_ip, client_id, message);
 
     // Save this registration in the database.
     // If we already have the same (local, tunnel, public) match, update it,
     // if not create a new match.
-    let db = Db::new();
-    match db.find(
-        FindFilter::PublicIpAndClient(public_ip.clone(), client_id.clone())
-    ) {
-        Ok(rvect) => {
-            // If the vector is empty, create a new record, if not update
-            // the existing one with the new timestamp.
-            let record = Record {
-                public_ip: public_ip,
-                client:  client_id,
-                message: message,
-                timestamp: now,
-            };
+    let db = Db::new(db_host, db_port, db_password);
 
-            let result = if rvect.is_empty() {
-                db.add(record)
-            } else {
-                db.update(record)
-            };
+    let record = Record {
+        public_ip: public_ip.clone(),
+        client:  client_id.clone(),
+        message: message.clone()
+    };
 
-            if let Err(_) = result {
-                return EndpointError::with(status::InternalServerError, 501)
-            }
-        },
-        Err(_) => {
-            let record = Record {
-                public_ip: public_ip,
-                client: client_id,
-                message: message,
-                timestamp: now,
-            };
-            if let Err(e) = db.add(record) {
-                error!("Error {}", e);
-                return EndpointError::with(status::InternalServerError, 501)
-            }
-        }
+    if let Err(e) = db.set(record) {
+        error!("{}", e);
+        return EndpointError::with(status::InternalServerError, 501)
     }
 
     let mut response = Response::with("{\"status\" : \"registered\"}");
     response.status = Some(Status::Ok);
-    response.headers.set(AccessControlAllowOrigin::Any);
     response.headers.set(ContentType::json());
 
     Ok(response)
 }
 
-fn ping(req: &mut Request) -> IronResult<Response> {
+fn ping(req: &mut Request,
+        db_host: String,
+        db_port: u16,
+        db_password: Option<String>) -> IronResult<Response> {
     info!("GET /ping");
     let public_ip = format!("{}", req.remote_addr.ip());
 
     let mut serialized = String::from("[");
 
-    let db = Db::new();
-    match db.find(FindFilter::PublicIp(public_ip)) {
+    let db = Db::new(db_host, db_port, db_password);
+    match db.get(public_ip.clone()) {
         Ok(rvect) => {
+            info!("Registrations {:?}", rvect);
             // Serialize the vector.
             let max = rvect.len();
             let mut index = 0;
@@ -131,23 +109,33 @@ fn ping(req: &mut Request) -> IronResult<Response> {
                 }
             }
         },
-        Err(_) => { }
-    }
+        Err(_) => {}
+    };
 
     serialized.push_str("]");
     let mut response = Response::with(serialized);
     response.status = Some(Status::Ok);
-    response.headers.set(AccessControlAllowOrigin::Any);
     response.headers.set(ContentType::json());
 
     Ok(response)
 }
 
-pub fn create() -> Router {
+pub fn create(db_host: String,
+              db_port: u16,
+              db_password: Option<String>) -> Router {
     let mut router = Router::new();
 
-    router.post("register", register);
-    router.get("ping", ping);
+    let host = db_host.clone();
+    let pass = db_password.clone();
+    router.post("register", move |req: &mut Request| -> IronResult<Response> {
+        register(req, host.clone(), db_port, pass.clone())
+    });
+
+    let host = db_host.clone();
+    let pass = db_password.clone();
+    router.get("ping", move |req: &mut Request| -> IronResult<Response> {
+        ping(req, host.clone(), db_port, pass.clone())
+    });
 
     router
 }

@@ -2,154 +2,217 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use rusqlite::{ self, Connection };
-use std::time::{ SystemTime, UNIX_EPOCH };
+use redis::{ Client, cmd, Connection, ConnectionAddr, ConnectionInfo,
+             pipe, RedisResult };
+use std::time::Duration;
+use std::thread::sleep;
 
-#[cfg(test)]
-fn get_db_environment() -> String {
-    "./boxes_test.sqlite".to_string()
-}
-
-#[cfg(not(test))]
-fn get_db_environment() -> String {
-    "./boxes.sqlite".to_string()
-}
+static RECORD_TTL: i32 = 2 * 60; // 2 minutes
 
 #[derive(RustcEncodable, Debug)]
 pub struct Record {
     pub public_ip: String,
     pub client:    String,
     pub message:   String,
-    pub timestamp: i64 // i64 because of the database type.
-}
-
-fn escape(string: &str) -> String {
-    // http://www.sqlite.org/faq.html#q14
-    string.replace("'", "''")
-}
-
-pub enum FindFilter {
-    PublicIp(String),
-    PublicIpAndClient(String, String)
 }
 
 pub struct Db {
-    // rusqlite::Connection already implements the Drop trait for the
-    // inner connection so we don't need to manually close it. It will
-    // be closed when the UsersDb instances go out of scope.
     connection: Connection
 }
 
 impl Db {
-    pub fn new() -> Db {
-        // TODO: manage errors.
-        let connection = Connection::open(get_db_environment()).unwrap();
-        connection.execute("CREATE TABLE IF NOT EXISTS boxes (
-                public_ip TEXT NOT NULL,
-                client TEXT NOT NULL,
-                message TEXT,
-                timestamp INTEGER
-            )", &[]).unwrap();
+    pub fn new(db_host: String,
+               db_port: u16,
+               db_password: Option<String>) -> Db {
+        let client = Client::open(ConnectionInfo {
+            addr: Box::new(ConnectionAddr::Tcp(db_host.clone(), db_port)),
+            db: 0,
+            passwd: db_password.clone()
+        }).unwrap();
 
-        Db {
-            connection: connection
+        loop {
+            match client.get_connection() {
+                Err(err) => {
+                    if err.is_connection_refusal() {
+                        warn!("Could not connect: {} (Will retry)", err);
+                        sleep(Duration::from_millis(1));
+                    } else {
+                        panic!("Could not connect: {}", err);
+                    }
+                },
+                Ok(connection) => {
+                    return Db {
+                        connection: connection
+                    }
+                },
+            }
         }
     }
 
-    pub fn seconds_from_epoch() -> i64 {
-        let now = SystemTime::now();
-        now.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
+    ///
+    /// Add or update a DB record.
+    /// We keep a set with the record's public IP as key containing the list
+    /// of client IDs registered for this public IP and we store a message
+    /// per each "publicIP:clientID" tuple.
+    /// For example:
+    ///
+    /// "88.22.170.96": [
+    ///     "e7ce02eaa73da35bddea00c82124c7fbbe49b731",
+    ///     "2b3e83cca3ee12c8b41d86bfeca6034ea8cb9056"
+    /// ]
+    ///
+    /// "88.22.170.96:e7ce02eaa73da35bddea00c82124c7fbbe49b731": "message1"
+    /// "88.22.170.96:2b3e83cca3ee12c8b41d86bfeca6034ea8cb9056": "message2"
+    ///
+    /// Each "publicIP:clientID" tuple has a ttl of 2 minutes.
+    ///
+    pub fn set(&self, record: Record) -> RedisResult<()> {
+        let key = format!("{}:{}", record.public_ip, record.client);
+
+        // We need to start watching the keys we care about (public_ip and
+        // public_ip:client) so that our exec fails if the key changes.
+        let _: () = try!(
+            cmd("WATCH").arg(key.clone())
+                        .arg(record.public_ip.clone())
+                        .query(&self.connection)
+        );
+
+        // We check if there's already an entry for this public IP.
+        let is_member: isize = try!(
+            cmd("SISMEMBER").arg(record.public_ip.clone())
+                            .arg(record.client.clone())
+                            .query(&self.connection)
+        );
+
+        if is_member == 0 {
+            // If there is no previous entry for this public IP, we add one
+            // and add the message corresponding to this key (IP:user tuple)
+            info!("{} is not a member of {} yet",
+                  record.client.clone(), record.public_ip.clone());
+            let _: () = try!(
+                pipe().atomic()
+                      .cmd("SADD").arg(record.public_ip.clone())
+                                  .arg(record.client.clone())
+                                  .ignore()
+                      .cmd("SET").arg(key.clone())
+                                 .arg(record.message.clone())
+                                 .query(&self.connection)
+            );
+        } else {
+            // Otherwise, we just update the message from the existing
+            // entry.
+            info!("{} is already a member of {}",
+                  record.client.clone(), record.public_ip.clone());
+            let _: () = try!(
+                cmd("SET").arg(key.clone())
+                          .arg(record.message.clone())
+                          .query(&self.connection)
+            );
+        }
+
+        // And set the TTL of the message.
+        // The entry in the list of clients for this public IP will be
+        // cleaned up during the .get call. It does no harm to keep it
+        // around until that point.
+        let _: () = try!(
+            cmd("EXPIRE").arg(key.clone())
+                         .arg(RECORD_TTL) // 2 min.
+                         .query(&self.connection)
+        );
+
+        Ok(())
+    }
+
+    ///
+    /// Get the registration entries for a given public IP.
+    ///
+    pub fn get(&self, public_ip: String) -> RedisResult<Vec<Record>> {
+        let _: () = try!(
+            cmd("WATCH").arg(public_ip.clone())
+                        .query(&self.connection)
+        );
+
+        // Get the clients for the given public IP.
+        let members: Vec<String> = try!(
+            cmd("SMEMBERS").arg(public_ip.clone())
+                           .query(&self.connection)
+        );
+
+        info!("Members of {}: {:?}", public_ip.clone(), members.clone());
+
+        let mut result = Vec::new();
+
+        // For each client we get the associated message.
+        for member in members {
+            let key = format!("{}:{}", public_ip.clone(), member);
+            info!("Key {}", key.clone());
+            match cmd("GET").arg(key.clone())
+                                    .query(&self.connection) {
+                Ok(message) => {
+                    info!("Message for {}: {}", key.clone(), message);
+
+                    result.push(Record {
+                        public_ip: public_ip.clone(),
+                        client: member.clone(),
+                        message: message
+                    });
+                },
+                Err(_) => {
+                    // Remove the client id from the list of clients of this public
+                    // IP that has no associated message.
+                    info!("Removing {} from {}", member.clone(), public_ip.clone());
+                    let _: () = try!(
+                        cmd("SREM").arg(public_ip.clone())
+                                   .arg(member.clone())
+                                   .query(&self.connection)
+                    );
+                }
+            };
+        }
+
+        Ok(result)
     }
 
     #[cfg(test)]
-    pub fn clear(&self) -> rusqlite::Result<()> {
-        self.connection.execute_batch(
-            "DELETE FROM boxes;
-             VACUUM;"
-        )
-    }
+    pub fn flush(&self) -> RedisResult<()> {
+        let _: () = try!(
+            cmd("FLUSHDB").query(&self.connection)
+        );
 
-    // Looks for records for a given constraint.
-    pub fn find(&self, filter: FindFilter) -> rusqlite::Result<Vec<Record>> {
-        let mut stmt: rusqlite::Statement;
-
-        let rows = match filter {
-            FindFilter::PublicIp(public_ip) => {
-                stmt = try!(
-                    self.connection.prepare("SELECT * FROM boxes WHERE public_ip=$1")
-                );
-                try!(stmt.query(&[&escape(&public_ip)]))
-            },
-            FindFilter::PublicIpAndClient(public_ip, client_id) => {
-                stmt = try!(
-                    self.connection.prepare("SELECT * FROM boxes WHERE (public_ip=$1 and client=$2)")
-                );
-                try!(stmt.query(&[&escape(&public_ip), &escape(&client_id)]))
-            }
-        };
-
-        let mut records = Vec::new();
-        for result_row in rows {
-            let row = try!(result_row);
-            records.push(Record {
-                public_ip: row.get(0),
-                client: row.get(1),
-                message: row.get(2),
-                timestamp: row.get(3)
-            });
-        }
-        Ok(records)
-    }
-
-    pub fn update(&self, record: Record) -> rusqlite::Result<i32> {
-        self.connection.execute("UPDATE boxes
-            SET public_ip=$1, message=$2, client=$3, timestamp=$4
-            WHERE (public_ip=$5 AND client=$6)",
-            &[&record.public_ip, &record.message, &record.client,
-              &record.timestamp, &record.public_ip, &record.client])
-    }
-
-    pub fn add(&self, record: Record) -> rusqlite::Result<i32> {
-        self.connection.execute("INSERT INTO boxes
-            (public_ip, client, message, timestamp)
-            VALUES ($1, $2, $3, $4)",
-            &[&record.public_ip, &record.client, &record.message,
-              &record.timestamp])
-    }
-
-    pub fn delete_older_than(&self, timestamp: i64) -> rusqlite::Result<i32> {
-        self.connection.execute("DELETE FROM boxes WHERE timestamp < $1", &[&timestamp])
+        Ok(())
     }
 }
 
 #[test]
 fn test_db() {
-    let db = Db::new();
+    use super::db_test_context::TestContext;
+
+    let ctx = TestContext::new();
+    let db = ctx.db;
 
     // Look for a record, but the db is empty.
-    match db.find(FindFilter::PublicIpAndClient("127.0.0.1".to_owned(), "<fingerprint>".to_owned())) {
+    match db.get("127.0.0.1".to_owned()) {
         Ok(vec) => { assert!(vec.is_empty()); },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
-    }
-    let now = Db::seconds_from_epoch();
+    };
 
     let mut r = Record {
         public_ip: "127.0.0.1".to_owned(),
         message: "<message>".to_owned(),
-        client: "<fingerprint>".to_owned(),
-        timestamp: now
+        client: "<fingerprint>".to_owned()
     };
 
     // Add this new record.
-    match db.add(r) {
-        Ok(n) => { assert_eq!(n, 1); }, // We expect one row to change.
+    match db.set(r) {
+        Ok(_) => { assert!(true); },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
+
     // Check that we find it.
-    match db.find(FindFilter::PublicIpAndClient("127.0.0.1".to_owned(), "<fingerprint>".to_owned())) {
+    match db.get("127.0.0.1".to_owned()) {
         Ok(records) => {
             assert_eq!(records.len(), 1);
-            assert_eq!(records[0].timestamp, now);
+            assert_eq!(records[0].message, "<message>");
         },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
@@ -158,31 +221,30 @@ fn test_db() {
     r = Record {
         public_ip: "127.0.0.1".to_owned(),
         message: "<another_message>".to_owned(),
-        client:  "<another_fingerprint>".to_owned(),
-        timestamp: now
+        client:  "<another_fingerprint>".to_owned()
     };
-    match db.add(r) {
-        Ok(n) => { assert!(n == 1); }, // We expect one row to change.
+
+    match db.set(r) {
+        Ok(_) => { assert!(true); },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
 
     // Now search for all the records with this public IP. Will find 2.
-    match db.find(FindFilter::PublicIp("127.0.0.1".to_owned())) {
+    match db.get("127.0.0.1".to_owned()) {
         Ok(records) => {
             assert_eq!(records.len(), 2);
-            assert_eq!(records[0].message, "<message>");
-            assert_eq!(records[1].message, "<another_message>");
-
-            assert_eq!(records[0].client,  "<fingerprint>");
-            assert_eq!(records[1].client,  "<another_fingerprint>");
+            assert!(records[0].message == "<another_message>" ||
+                    records[0].message == "<message>");
+            assert!(records[1].message == "<another_message>" ||
+                    records[1].message == "<message>");
+            assert!(records[0].client ==  "<another_fingerprint>" ||
+                    records[0].client == "<fingerprint>");
+            assert!(records[1].client ==  "<another_fingerprint>" ||
+                    records[1].client == "<fingerprint>");
         },
         Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
     }
 
     // Fake travelling in the future, and evict both records.
-    match db.delete_older_than(now + 2) {
-        Ok(count) => assert_eq!(count, 2),
-        Err(err) => { println!("Unexpected error: {}", err); assert!(false); }
-    }
-    db.clear().unwrap();
+    db.flush().unwrap();
 }
