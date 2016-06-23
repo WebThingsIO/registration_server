@@ -7,7 +7,7 @@ This server exposes a http(s) API that lets you post messages from your home net
 Usage:
 
 ```bash
-cargo run -- -host 0.0.0.0 --port 4242 --cert-dir /etc/letsencrypt/live/knilxof.org
+cargo run -- -h 0.0.0.0 -p 4242 --cert-dir /etc/letsencrypt/live/knilxof.org
 
 ## Urls
 
