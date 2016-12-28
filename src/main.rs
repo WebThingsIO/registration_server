@@ -24,7 +24,7 @@ extern crate rusqlite;
 extern crate rustc_serialize;
 
 use docopt::Docopt;
-use iron::{ Chain, Iron };
+use iron::{ Chain, Iron, Protocol };
 use iron::method::Method;
 use iron_cors::CORS;
 use mount::Mount;
@@ -106,7 +106,11 @@ fn main() {
 
         info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
 
-        iron.https(addr.as_ref() as &str, cert, private_key).unwrap();
+        let protocol = Protocol::Https {
+            certificate: cert,
+            key: private_key,
+        };
+        iron.listen_with(addr.as_ref() as &str, 8, protocol, None).unwrap();
     }
 }
 
