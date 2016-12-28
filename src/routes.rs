@@ -129,13 +129,13 @@ pub fn create(db_host: String,
     let pass = db_password.clone();
     router.post("register", move |req: &mut Request| -> IronResult<Response> {
         register(req, host.clone(), db_port, pass.clone())
-    });
+    }, "post_message");
 
     let host = db_host.clone();
     let pass = db_password.clone();
     router.get("ping", move |req: &mut Request| -> IronResult<Response> {
         ping(req, host.clone(), db_port, pass.clone())
-    });
+    }, "ping");
 
     router
 }

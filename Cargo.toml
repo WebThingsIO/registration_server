@@ -7,15 +7,18 @@ authors = ["fabrice <fabrice@desre.org>"]
 ssl = []
 
 [dependencies]
-docopt = "0.6.78"
-env_logger = "0.3.2"
-iron = "0.2.6"
-iron-cors = { git = "https://github.com/fxbox/iron-cors.git", rev = "137d42f" }
+docopt = "0.6.83"
+env_logger = "0.3.5"
+iron-cors = { git = "https://github.com/fxbox/iron-cors.git", rev = "a58fa6d7" }
 log = "0.3"
-params = "0.0.3"
-mount = "0.0.10"
-redis = "0.5.2"
-router = "0.1.0"
-rusqlite = "0.6.0"
+params = "0.4.0"
+mount = "0.2.1"
+redis = "0.7.0"
+router = "0.4.0"
+rusqlite = "0.7.3"
 rustc-serialize = "0.3"
 
+[dependencies.iron]
+version = "0.4.0"
+default-features = true
+features = ["ssl"]
