@@ -4,10 +4,11 @@
 
 This server exposes a http(s) API that lets you post messages from your home network and discover them later on.
 
-Usage:
+## Usage
 
 ```bash
 cargo run -- -h 0.0.0.0 -p 4242 --cert-dir /etc/letsencrypt/live/knilxof.org
+```
 
 ## Urls
 
