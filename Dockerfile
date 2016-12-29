@@ -28,4 +28,6 @@ ENV PATH=/home/user/.cargo/bin:/home/user/bin:$PATH
 
 COPY . /home/user
 RUN cargo build --release
-CMD service redis-server start && RUST_LOG=info ./target/release/registration_server -h 0.0.0.0 -p 4443 --cert-directory /certdir
+
+USER root
+CMD service redis-server start > /certdir/registration_server.log && RUST_LOG=info ./target/release/registration_server -h 0.0.0.0 -p 4443 --cert-directory /certdir
