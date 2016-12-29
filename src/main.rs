@@ -102,7 +102,7 @@ fn main() {
         private_key.push("privkey.pem");
 
         let mut cert = certificate_directory.clone();
-        cert.push("cert.pem");
+        cert.push("fullchain.pem");
 
         info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
 
