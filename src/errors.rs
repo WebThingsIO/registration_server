@@ -1,12 +1,12 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use iron::status;
 use iron::prelude::*;
 use rustc_serialize::json;
 use std::error::Error;
-use std::fmt::{ self, Debug };
+use std::fmt::{self, Debug};
 
 #[derive(Debug)]
 struct StringError(pub String);
@@ -27,25 +27,21 @@ impl Error for StringError {
 pub struct ErrorBody {
     pub code: u16,
     pub errno: u16,
-    pub error: String
+    pub error: String,
 }
 
 pub struct EndpointError;
 
 impl EndpointError {
-    pub fn with(status: status::Status, errno: u16)
-        -> IronResult<Response> {
+    pub fn with(status: status::Status, errno: u16) -> IronResult<Response> {
         let error = status.canonical_reason().unwrap().to_owned();
         let body = ErrorBody {
             code: status.to_u16(),
             errno: errno,
-            error: error.clone()
+            error: error.clone(),
         };
 
-        Err(
-            IronError::new(StringError(error),
-            (status, json::encode(&body).unwrap()))
-        )
+        Err(IronError::new(StringError(error), (status, json::encode(&body).unwrap())))
     }
 }
 
@@ -55,10 +51,10 @@ pub fn from_decoder_error(error: json::DecoderError) -> IronResult<Response> {
             let errno = match field.as_ref() {
                 "local_ip" => 100,
                 "tunnel_url" => 101,
-                _ => 400
+                _ => 400,
             };
             EndpointError::with(status::BadRequest, errno)
-        },
-        _ => EndpointError::with(status::BadRequest, 400)
+        }
+        _ => EndpointError::with(status::BadRequest, 400),
     }
 }

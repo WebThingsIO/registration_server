@@ -1,6 +1,6 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 /// Simple server that manages foxbox registrations.
 /// Two end points are available:
@@ -20,11 +20,10 @@ extern crate mount;
 extern crate params;
 extern crate redis;
 extern crate router;
-extern crate rusqlite;
 extern crate rustc_serialize;
 
 use docopt::Docopt;
-use iron::{ Chain, Iron, Protocol };
+use iron::{Chain, Iron, Protocol};
 use iron::method::Method;
 use iron_cors::CORS;
 use mount::Mount;
@@ -37,15 +36,21 @@ mod routes;
 #[cfg(test)]
 mod db_test_context;
 
-const USAGE: &'static str = "
-Usage: registration_server [-d <db-hostname>] [--db-port <db-port>] [--db-pass <db-pass>] [-h <hostname>] [-p <port>] [--cert-directory <dir>]
+const USAGE: &'static str =
+    "
+Usage: registration_server [-d <db-hostname>] [--db-port <db-port>] [--db-pass <db-pass>] \
+     [-h <hostname>] [-p <port>] [--cert-directory <dir>]
 
 Options:
-    -d, --db-host <host>          Set Redis database hostname.
+    -d, --db-host <host>          \
+     Set Redis database hostname.
         --db-port <db-port>       Set Redis database port.
-        --db-pass <db-pass>       Set Redis database password.
-    -h, --host <host>             Set local hostname.
-    -p, --port <port>             Set port to listen on for http connections.
+        \
+     --db-pass <db-pass>       Set Redis database password.
+    -h, --host <host>             Set \
+     local hostname.
+    -p, --port <port>             Set port to listen on for http \
+     connections.
         --cert-directory <dir>    Certificate directory.
 ";
 
@@ -64,7 +69,8 @@ struct Args {
 fn main() {
     env_logger::init().unwrap();
 
-    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode())
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
 
     let port = args.flag_port.unwrap_or(4242);
@@ -77,7 +83,8 @@ fn main() {
     info!("Redis server on {}:{}", db_host, db_port);
 
     let mut mount = Mount::new();
-    mount.mount("/", routes::create(db_host.clone(), db_port, db_pass.clone()));
+    mount.mount("/",
+                routes::create(db_host.clone(), db_port, db_pass.clone()));
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![

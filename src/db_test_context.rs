@@ -1,6 +1,6 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::process;
 use super::db::Db;
@@ -13,14 +13,14 @@ pub struct RedisServer {
 }
 
 impl RedisServer {
-
     pub fn new() -> RedisServer {
         let mut cmd = process::Command::new("redis-server");
-        cmd
-            .stdout(process::Stdio::null())
+        cmd.stdout(process::Stdio::null())
             .stderr(process::Stdio::null())
-            .arg("--port").arg(SERVER_PORT.to_string())
-            .arg("--bind").arg(SERVER_HOST.to_string());
+            .arg("--port")
+            .arg(SERVER_PORT.to_string())
+            .arg("--bind")
+            .arg(SERVER_HOST.to_string());
 
         let process = cmd.spawn().unwrap();
         RedisServer { process: process }
@@ -36,7 +36,7 @@ impl Drop for RedisServer {
 
 pub struct TestContext {
     pub server: RedisServer,
-    pub db: Db
+    pub db: Db,
 }
 
 impl TestContext {
