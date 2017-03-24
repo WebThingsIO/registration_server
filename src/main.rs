@@ -12,6 +12,7 @@
 
 extern crate docopt;
 extern crate env_logger;
+extern crate hyper_openssl;
 extern crate iron;
 extern crate iron_cors;
 #[macro_use]
@@ -23,7 +24,8 @@ extern crate router;
 extern crate rustc_serialize;
 
 use docopt::Docopt;
-use iron::{Chain, Iron, Protocol};
+use hyper_openssl::OpensslServer;
+use iron::{Chain, Iron};
 use iron::method::Method;
 use iron_cors::CORS;
 use mount::Mount;
@@ -112,12 +114,8 @@ fn main() {
         cert.push("fullchain.pem");
 
         info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
-
-        let protocol = Protocol::Https {
-            certificate: cert,
-            key: private_key,
-        };
-        iron.listen_with(addr.as_ref() as &str, 8, protocol, None).unwrap();
+        let ssl = OpensslServer::from_files(private_key, cert).unwrap();
+        iron.https(addr.as_ref() as &str, ssl).unwrap();
     }
 }
 
