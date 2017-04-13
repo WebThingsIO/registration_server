@@ -2,7 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use db::{Db, Record};
+use config::Config;
+use transient_store::{Db, Record};
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -12,9 +13,7 @@ use rustc_serialize::json;
 use std::io::Read;
 
 fn register(req: &mut Request,
-            db_host: String,
-            db_port: u16,
-            db_password: Option<String>)
+            config: Config)
             -> IronResult<Response> {
     // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
@@ -47,7 +46,7 @@ fn register(req: &mut Request,
     // Save this registration in the database.
     // If we already have the same (local, tunnel, public) match, update it,
     // if not create a new match.
-    let db = Db::new(db_host, db_port, db_password);
+    let db = Db::new(config.redis_host, config.redis_port, config.redis_pass);
 
     let record = Record {
         public_ip: public_ip.clone(),
@@ -68,16 +67,14 @@ fn register(req: &mut Request,
 }
 
 fn ping(req: &mut Request,
-        db_host: String,
-        db_port: u16,
-        db_password: Option<String>)
+        config: Config)
         -> IronResult<Response> {
     info!("GET /ping");
     let public_ip = format!("{}", req.remote_addr.ip());
 
     let mut serialized = String::from("[");
 
-    let db = Db::new(db_host, db_port, db_password);
+    let db = Db::new(config.redis_host, config.redis_port, config.redis_pass);
     match db.get(public_ip.clone()) {
         Ok(rvect) => {
             info!("Registrations {:?}", rvect);
@@ -107,22 +104,20 @@ fn ping(req: &mut Request,
     Ok(response)
 }
 
-pub fn create(db_host: String, db_port: u16, db_password: Option<String>) -> Router {
+pub fn create(config: Config) -> Router {
     let mut router = Router::new();
 
-    let host = db_host.clone();
-    let pass = db_password.clone();
+    let config1 = config.clone();
     router.post("register",
                 move |req: &mut Request| -> IronResult<Response> {
-                    register(req, host.clone(), db_port, pass.clone())
+                    register(req, config1.clone())
                 },
                 "post_message");
 
-    let host = db_host.clone();
-    let pass = db_password.clone();
+    let config1 = config.clone();
     router.get("ping",
                move |req: &mut Request| -> IronResult<Response> {
-                   ping(req, host.clone(), db_port, pass.clone())
+                   ping(req, config1.clone())
                },
                "ping");
 

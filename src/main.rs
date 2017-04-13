@@ -19,6 +19,8 @@ extern crate iron_cors;
 extern crate log;
 extern crate mount;
 extern crate params;
+extern crate r2d2;
+extern crate r2d2_sqlite;
 extern crate redis;
 extern crate router;
 extern crate rustc_serialize;
@@ -31,8 +33,9 @@ use iron_cors::CORS;
 use mount::Mount;
 use std::path::PathBuf;
 
+mod config;
 mod errors;
-mod db;
+mod transient_store;
 mod routes;
 
 #[cfg(test)]
@@ -40,15 +43,15 @@ mod db_test_context;
 
 const USAGE: &'static str =
     "
-Usage: registration_server [-d <db-hostname>] [--db-port <db-port>] [--db-pass <db-pass>] \
+Usage: registration_server [-d <redis-hostname>] [--reids-port <redis-port>] [--redis-pass <redis-pass>] \
      [-h <hostname>] [-p <port>] [--cert-directory <dir>]
 
 Options:
-    -d, --db-host <host>          \
+    -d, --redis-host <host>          \
      Set Redis database hostname.
-        --db-port <db-port>       Set Redis database port.
+        --redis-port <db-port>       Set Redis database port.
         \
-     --db-pass <db-pass>       Set Redis database password.
+     --redis-pass <db-pass>       Set Redis database password.
     -h, --host <host>             Set \
      local hostname.
     -p, --port <port>             Set port to listen on for http \
@@ -59,9 +62,9 @@ Options:
 
 #[derive(RustcDecodable)]
 struct Args {
-    flag_db_host: Option<String>,
-    flag_db_port: Option<u16>,
-    flag_db_pass: Option<String>,
+    flag_redis_host: Option<String>,
+    flag_redis_port: Option<u16>,
+    flag_redis_pass: Option<String>,
     flag_host: Option<String>,
     flag_port: Option<u16>,
     flag_cert_directory: Option<String>,
@@ -78,15 +81,21 @@ fn main() {
     let port = args.flag_port.unwrap_or(4242);
     let host = args.flag_host.unwrap_or("0.0.0.0".to_string());
     let using_tls = args.flag_cert_directory.is_some();
-    let db_host = args.flag_db_host.unwrap_or("localhost".to_string());
-    let db_port = args.flag_db_port.unwrap_or(6379);
-    let db_pass = args.flag_db_pass;
+    let redis_host = args.flag_redis_host.unwrap_or("localhost".to_string());
+    let redis_port = args.flag_redis_port.unwrap_or(6379);
+    let redis_pass = args.flag_redis_pass;
 
-    info!("Redis server on {}:{}", db_host, db_port);
+    info!("Redis server on {}:{}", redis_host, redis_port);
+
+    let config = config::Config {
+        redis_host: redis_host,
+        redis_port: redis_port,
+        redis_pass: redis_pass,
+    };
 
     let mut mount = Mount::new();
     mount.mount("/",
-                routes::create(db_host.clone(), db_port, db_pass.clone()));
+                routes::create(config));
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![
