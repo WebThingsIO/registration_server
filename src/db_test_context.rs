@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::process;
-use super::db::Db;
+use super::transient_store::Db;
 
 static SERVER_PORT: u16 = 38991;
 static SERVER_HOST: &'static str = "127.0.0.1";
