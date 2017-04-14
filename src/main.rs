@@ -25,6 +25,7 @@ extern crate redis;
 extern crate router;
 extern crate rusqlite;
 extern crate rustc_serialize;
+extern crate uuid;
 
 use docopt::Docopt;
 use hyper_openssl::OpensslServer;
@@ -40,6 +41,8 @@ mod errors;
 mod transient_store;
 mod routes;
 
+use domain_store::DomainDb;
+
 #[cfg(test)]
 mod redis_test_context;
 
@@ -48,16 +51,13 @@ Usage: registration_server [-d <redis-hostname>] [--reids-port <redis-port>] [--
      [-h <hostname>] [-p <port>] [--cert-directory <dir>]
 
 Options:
-    -d, --redis-host <host>          \
-     Set Redis database hostname.
-        --redis-port <db-port>       Set Redis database port.
-        \
-     --redis-pass <db-pass>       Set Redis database password.
-    -h, --host <host>             Set \
-     local hostname.
-    -p, --port <port>             Set port to listen on for http \
-     connections.
-        --cert-directory <dir>    Certificate directory.
+    -d, --redis-host <host>     Set Redis database hostname.
+        --redis-port <db-port>  Set Redis database port.
+        --redis-pass <db-pass>  Set Redis database password.
+    -h, --host <host>           Set local hostname.
+    -p, --port <port>           Set port to listen on for http connections.
+        --cert-directory <dir>  Certificate directory.
+        --domain                The domain that will be tied to this registration server.
 ";
 
 
@@ -69,6 +69,7 @@ struct Args {
     flag_host: Option<String>,
     flag_port: Option<u16>,
     flag_cert_directory: Option<String>,
+    flag_domain: Option<String>,
 }
 
 
@@ -80,18 +81,22 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     let port = args.flag_port.unwrap_or(4242);
-    let host = args.flag_host.unwrap_or("0.0.0.0".to_string());
+    let host = args.flag_host.unwrap_or("0.0.0.0".to_owned());
     let using_tls = args.flag_cert_directory.is_some();
-    let redis_host = args.flag_redis_host.unwrap_or("localhost".to_string());
+    let redis_host = args.flag_redis_host.unwrap_or("localhost".to_owned());
     let redis_port = args.flag_redis_port.unwrap_or(6379);
     let redis_pass = args.flag_redis_pass;
+    let domain = args.flag_domain.unwrap_or("knilxof.org".to_owned());
 
+    info!("Managing the domain {}", domain);
     info!("Redis server on {}:{}", redis_host, redis_port);
 
     let config = config::Config {
         redis_host: redis_host,
         redis_port: redis_port,
         redis_pass: redis_pass,
+        domain_db: DomainDb::new("domains.sqlite"),
+        domain: domain,
     };
 
     let mut mount = Mount::new();
@@ -99,6 +104,7 @@ fn main() {
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![(vec![Method::Get], "ping".to_owned()),
+                              (vec![Method::Get], "reserve".to_owned()),
                               (vec![Method::Post], "register".to_owned())]);
     chain.link_after(cors);
 
@@ -137,7 +143,7 @@ fn options_are_good() {
             .and_then(|d| d.argv(argv().into_iter()).decode())
             .unwrap();
 
-        assert_eq!(args.flag_host, Some("foobar".to_string()));
+        assert_eq!(args.flag_host, Some("foobar".to_owned()));
         assert_eq!(args.flag_port, Some(1234));
     }
 }

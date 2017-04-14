@@ -3,16 +3,19 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use config::Config;
+use domain_store::{DomainError, DomainRecord};
 use transient_store::{Db, Record};
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
+use params::{Params, Value};
 use router::Router;
 use rustc_serialize::json;
 use std::io::Read;
+use uuid::Uuid;
 
-fn register(req: &mut Request, config: Config) -> IronResult<Response> {
+fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
     struct RegisterBody {
@@ -44,7 +47,9 @@ fn register(req: &mut Request, config: Config) -> IronResult<Response> {
     // Save this registration in the database.
     // If we already have the same (local, tunnel, public) match, update it,
     // if not create a new match.
-    let db = Db::new(config.redis_host, config.redis_port, config.redis_pass);
+    let db = Db::new(config.redis_host.clone(),
+                     config.redis_port,
+                     config.redis_pass.clone());
 
     let record = Record {
         public_ip: public_ip.clone(),
@@ -64,13 +69,15 @@ fn register(req: &mut Request, config: Config) -> IronResult<Response> {
     Ok(response)
 }
 
-fn ping(req: &mut Request, config: Config) -> IronResult<Response> {
+fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /ping");
     let public_ip = format!("{}", req.remote_addr.ip());
 
     let mut serialized = String::from("[");
 
-    let db = Db::new(config.redis_host, config.redis_port, config.redis_pass);
+    let db = Db::new(config.redis_host.clone(),
+                     config.redis_port,
+                     config.redis_pass.clone());
     match db.get(public_ip.clone()) {
         Ok(rvect) => {
             info!("Registrations {:?}", rvect);
@@ -100,20 +107,70 @@ fn ping(req: &mut Request, config: Config) -> IronResult<Response> {
     Ok(response)
 }
 
+fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /reserve");
+
+    // Extract the name parameter.
+    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    match map.find(&["name"]) {
+        Some(&Value::String(ref name)) => {
+            let name = format!("{}.{}", name, config.domain);
+            info!("trying to register {}", name);
+
+            let record = config
+                .domain_db
+                .get_record_by_name(&name)
+                .recv()
+                .unwrap();
+            match record {
+                Ok(_) => {
+                    // We already have a record for this name, return an error.
+                    let mut response = Response::with("{\"error\": \"UnavailableName\"}");
+                    response.status = Some(Status::Ok);
+                    response.headers.set(ContentType::json());
+                    Ok(response)
+                }
+                Err(DomainError::NoRecord) => {
+                    // Create a token, create and store a record and finally return the token.
+                    let token = format!("{}", Uuid::new_v4());
+                    let record = DomainRecord::new(&name, &token, None);
+                    match config.domain_db.add_record(record).recv().unwrap() {
+                        Ok(()) => {
+                            let mut response = Response::with(format!("{{\"token\": \"{}\"}}", token));
+                            response.status = Some(Status::Ok);
+                            response.headers.set(ContentType::json());
+
+                            Ok(response)
+                        }
+                        Err(_) => EndpointError::with(status::InternalServerError, 501),
+                    }
+                }
+                // Other error, like a db issue.
+                Err(_) => EndpointError::with(status::InternalServerError, 501),
+            }
+        }
+        // Missing `name` parameter.
+        _ => EndpointError::with(status::BadRequest, 400),
+    }
+}
+
 pub fn create(config: Config) -> Router {
     let mut router = Router::new();
 
-    let config1 = config.clone();
+    let config_ = config.clone();
     router.post("register",
-                move |req: &mut Request| -> IronResult<Response> {
-                    register(req, config1.clone())
-                },
+                move |req: &mut Request| -> IronResult<Response> { register(req, &config_) },
                 "post_message");
 
-    let config1 = config.clone();
+    let config_ = config.clone();
     router.get("ping",
-               move |req: &mut Request| -> IronResult<Response> { ping(req, config1.clone()) },
+               move |req: &mut Request| -> IronResult<Response> { ping(req, &config_) },
                "ping");
+
+    let config_ = config.clone();
+    router.get("reserve",
+               move |req: &mut Request| -> IronResult<Response> { reserve(req, &config_) },
+               "reserve");
 
     router
 }

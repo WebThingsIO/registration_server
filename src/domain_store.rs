@@ -35,7 +35,7 @@ impl DomainRecord {
         }
     }
 
-    fn new(name: &str, token: &str, challenge: Option<&str>) -> Self {
+    pub fn new(name: &str, token: &str, challenge: Option<&str>) -> Self {
         let dns_challenge = match challenge {
             Some(val) => Some(val.to_owned()),
             None => None,
@@ -59,6 +59,7 @@ pub enum DomainError {
     NoRecord,
 }
 
+#[derive(Clone)]
 pub struct DomainDb {
     pool: r2d2::Pool<SqliteConnectionManager>,
 }
