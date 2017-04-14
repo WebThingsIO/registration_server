@@ -177,35 +177,27 @@ impl DomainDb {
         rx
     }
 
-    pub fn delete_record_by_name(&self, name: &str) -> Receiver<Result<(), DomainError>> {
+    fn execute_1param_sql(&self, request: &str, value: &str) -> Receiver<Result<(), DomainError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
-        let name = name.to_owned();
+        let value = value.to_owned();
+        let request = request.to_owned();
         thread::spawn(move || {
                           let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-                          sqltry!(conn.execute("DELETE FROM domains WHERE name=$1", &[&name]),
-                                  tx,
-                                  DomainError::SQLError);
+                          sqltry!(conn.execute(&request, &[&value]), tx, DomainError::SQLError);
                           tx.send(Ok(())).unwrap();
                       });
 
         rx
     }
 
-    pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<(), DomainError>> {
-        let (tx, rx) = channel();
+    pub fn delete_record_by_name(&self, name: &str) -> Receiver<Result<(), DomainError>> {
+        self.execute_1param_sql("DELETE FROM domains WHERE name=$1", name)
+    }
 
-        let pool = self.pool.clone();
-        let token = token.to_owned();
-        thread::spawn(move || {
-                          let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-                          sqltry!(conn.execute("DELETE FROM domains WHERE token=$1", &[&token]),
-                                  tx,
-                                  DomainError::SQLError);
-                          tx.send(Ok(())).unwrap();
-                      });
-        rx
+    pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<(), DomainError>> {
+        self.execute_1param_sql("DELETE FROM domains WHERE token=$1", token)
     }
 
     pub fn flush(&self) -> Receiver<Result<(), DomainError>> {
