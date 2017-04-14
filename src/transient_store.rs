@@ -22,11 +22,11 @@ pub struct Db {
 impl Db {
     pub fn new(db_host: String, db_port: u16, db_password: Option<String>) -> Db {
         let client = Client::open(ConnectionInfo {
-                addr: Box::new(ConnectionAddr::Tcp(db_host.clone(), db_port)),
-                db: 0,
-                passwd: db_password.clone(),
-            })
-            .unwrap();
+                                      addr: Box::new(ConnectionAddr::Tcp(db_host.clone(), db_port)),
+                                      db: 0,
+                                      passwd: db_password.clone(),
+                                  })
+                .unwrap();
 
         loop {
             match client.get_connection() {
@@ -66,15 +66,15 @@ impl Db {
         // We need to start watching the keys we care about (public_ip and
         // public_ip:client) so that our exec fails if the key changes.
         let _: () = try!(cmd("WATCH")
-            .arg(key.clone())
-            .arg(record.public_ip.clone())
-            .query(&self.connection));
+                             .arg(key.clone())
+                             .arg(record.public_ip.clone())
+                             .query(&self.connection));
 
         // We check if there's already an entry for this public IP.
         let is_member: isize = try!(cmd("SISMEMBER")
-            .arg(record.public_ip.clone())
-            .arg(record.client.clone())
-            .query(&self.connection));
+                                        .arg(record.public_ip.clone())
+                                        .arg(record.client.clone())
+                                        .query(&self.connection));
 
         if is_member == 0 {
             // If there is no previous entry for this public IP, we add one
@@ -83,15 +83,15 @@ impl Db {
                   record.client.clone(),
                   record.public_ip.clone());
             let _: () = try!(pipe()
-                .atomic()
-                .cmd("SADD")
-                .arg(record.public_ip.clone())
-                .arg(record.client.clone())
-                .ignore()
-                .cmd("SET")
-                .arg(key.clone())
-                .arg(record.message.clone())
-                .query(&self.connection));
+                                 .atomic()
+                                 .cmd("SADD")
+                                 .arg(record.public_ip.clone())
+                                 .arg(record.client.clone())
+                                 .ignore()
+                                 .cmd("SET")
+                                 .arg(key.clone())
+                                 .arg(record.message.clone())
+                                 .query(&self.connection));
         } else {
             // Otherwise, we just update the message from the existing
             // entry.
@@ -99,9 +99,9 @@ impl Db {
                   record.client.clone(),
                   record.public_ip.clone());
             let _: () = try!(cmd("SET")
-                .arg(key.clone())
-                .arg(record.message.clone())
-                .query(&self.connection));
+                                 .arg(key.clone())
+                                 .arg(record.message.clone())
+                                 .query(&self.connection));
         }
 
         // And set the TTL of the message.
@@ -120,13 +120,13 @@ impl Db {
     ///
     pub fn get(&self, public_ip: String) -> RedisResult<Vec<Record>> {
         let _: () = try!(cmd("WATCH")
-            .arg(public_ip.clone())
-            .query(&self.connection));
+                             .arg(public_ip.clone())
+                             .query(&self.connection));
 
         // Get the clients for the given public IP.
         let members: Vec<String> = try!(cmd("SMEMBERS")
-            .arg(public_ip.clone())
-            .query(&self.connection));
+                                            .arg(public_ip.clone())
+                                            .query(&self.connection));
 
         info!("Members of {}: {:?}", public_ip.clone(), members.clone());
 
@@ -136,26 +136,24 @@ impl Db {
         for member in members {
             let key = format!("{}:{}", public_ip.clone(), member);
             info!("Key {}", key.clone());
-            match cmd("GET")
-                .arg(key.clone())
-                .query(&self.connection) {
+            match cmd("GET").arg(key.clone()).query(&self.connection) {
                 Ok(message) => {
                     info!("Message for {}: {}", key.clone(), message);
 
                     result.push(Record {
-                        public_ip: public_ip.clone(),
-                        client: member.clone(),
-                        message: message,
-                    });
+                                    public_ip: public_ip.clone(),
+                                    client: member.clone(),
+                                    message: message,
+                                });
                 }
                 Err(_) => {
                     // Remove the client id from the list of clients of this public
                     // IP that has no associated message.
                     info!("Removing {} from {}", member.clone(), public_ip.clone());
                     let _: () = try!(cmd("SREM")
-                        .arg(public_ip.clone())
-                        .arg(member.clone())
-                        .query(&self.connection));
+                                         .arg(public_ip.clone())
+                                         .arg(member.clone())
+                                         .query(&self.connection));
                 }
             };
         }
@@ -173,7 +171,7 @@ impl Db {
 
 #[test]
 fn test_db() {
-    use super::db_test_context::TestContext;
+    use super::redis_test_context::TestContext;
 
     let ctx = TestContext::new();
     let db = ctx.db;

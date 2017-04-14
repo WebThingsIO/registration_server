@@ -23,6 +23,7 @@ extern crate r2d2;
 extern crate r2d2_sqlite;
 extern crate redis;
 extern crate router;
+extern crate rusqlite;
 extern crate rustc_serialize;
 
 use docopt::Docopt;
@@ -34,15 +35,15 @@ use mount::Mount;
 use std::path::PathBuf;
 
 mod config;
+mod domain_store;
 mod errors;
 mod transient_store;
 mod routes;
 
 #[cfg(test)]
-mod db_test_context;
+mod redis_test_context;
 
-const USAGE: &'static str =
-    "
+const USAGE: &'static str = "
 Usage: registration_server [-d <redis-hostname>] [--reids-port <redis-port>] [--redis-pass <redis-pass>] \
      [-h <hostname>] [-p <port>] [--cert-directory <dir>]
 
@@ -94,14 +95,11 @@ fn main() {
     };
 
     let mut mount = Mount::new();
-    mount.mount("/",
-                routes::create(config));
+    mount.mount("/", routes::create(config));
 
     let mut chain = Chain::new(mount);
-    let cors = CORS::new(vec![
-        (vec![Method::Get], "ping".to_owned()),
-        (vec![Method::Post], "register".to_owned()),
-    ]);
+    let cors = CORS::new(vec![(vec![Method::Get], "ping".to_owned()),
+                              (vec![Method::Post], "register".to_owned())]);
     chain.link_after(cors);
 
     let iron = Iron::new(chain);
@@ -109,8 +107,7 @@ fn main() {
     let addr = format!("{}:{}", host, port);
 
     if !using_tls {
-        iron.http(addr.as_ref() as &str)
-            .unwrap();
+        iron.http(addr.as_ref() as &str).unwrap();
     } else {
         info!("Starting TLS server");
         let certificate_directory = args.flag_cert_directory.unwrap();

@@ -12,9 +12,7 @@ use router::Router;
 use rustc_serialize::json;
 use std::io::Read;
 
-fn register(req: &mut Request,
-            config: Config)
-            -> IronResult<Response> {
+fn register(req: &mut Request, config: Config) -> IronResult<Response> {
     // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
     struct RegisterBody {
@@ -66,9 +64,7 @@ fn register(req: &mut Request,
     Ok(response)
 }
 
-fn ping(req: &mut Request,
-        config: Config)
-        -> IronResult<Response> {
+fn ping(req: &mut Request, config: Config) -> IronResult<Response> {
     info!("GET /ping");
     let public_ip = format!("{}", req.remote_addr.ip());
 
@@ -116,9 +112,7 @@ pub fn create(config: Config) -> Router {
 
     let config1 = config.clone();
     router.get("ping",
-               move |req: &mut Request| -> IronResult<Response> {
-                   ping(req, config1.clone())
-               },
+               move |req: &mut Request| -> IronResult<Response> { ping(req, config1.clone()) },
                "ping");
 
     router
