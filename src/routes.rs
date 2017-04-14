@@ -15,6 +15,10 @@ use rustc_serialize::json;
 use std::io::Read;
 use uuid::Uuid;
 
+fn domain_for_name(name: &str, config: &Config) -> String {
+    format!("{}.box.{}", name, config.domain)
+}
+
 fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Get the local IP and optional tunnel url from the body,
     #[derive(RustcDecodable, Debug)]
@@ -114,12 +118,12 @@ fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     match map.find(&["name"]) {
         Some(&Value::String(ref name)) => {
-            let name = format!("{}.{}", name, config.domain);
-            info!("trying to register {}", name);
+            let full_name = domain_for_name(name, config);
+            info!("trying to register {}", full_name);
 
             let record = config
                 .domain_db
-                .get_record_by_name(&name)
+                .get_record_by_name(&full_name)
                 .recv()
                 .unwrap();
             match record {
@@ -133,14 +137,30 @@ fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Err(DomainError::NoRecord) => {
                     // Create a token, create and store a record and finally return the token.
                     let token = format!("{}", Uuid::new_v4());
-                    let record = DomainRecord::new(&name, &token, None);
+                    let record = DomainRecord::new(&full_name, &token, None);
                     match config.domain_db.add_record(record).recv().unwrap() {
                         Ok(()) => {
-                            let mut response = Response::with(format!("{{\"token\": \"{}\"}}", token));
-                            response.status = Some(Status::Ok);
-                            response.headers.set(ContentType::json());
+                            // We don't want the full domain name or the dns challenge in the response
+                            // so we create a local struct.
+                            #[derive(RustcEncodable)]
+                            struct NameAndToken {
+                                name: String,
+                                token: String,
+                            }
+                            let n_and_t = NameAndToken {
+                                name: name.to_owned(),
+                                token: token,
+                            };
+                            match json::encode(&n_and_t) {
+                                Ok(serialized) => {
+                                    let mut response = Response::with(serialized);
+                                    response.status = Some(Status::Ok);
+                                    response.headers.set(ContentType::json());
 
-                            Ok(response)
+                                    Ok(response)
+                                }
+                                Err(_) => EndpointError::with(status::InternalServerError, 501)
+                            }
                         }
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
