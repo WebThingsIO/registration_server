@@ -100,7 +100,7 @@ fn main() {
     };
 
     let mut mount = Mount::new();
-    mount.mount("/", routes::create(config));
+    mount.mount("/", routes::create(&config));
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![(vec![Method::Get], "ping".to_owned()),

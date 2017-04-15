@@ -82,26 +82,23 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     let db = Db::new(config.redis_host.clone(),
                      config.redis_port,
                      config.redis_pass.clone());
-    match db.get(public_ip.clone()) {
-        Ok(rvect) => {
-            info!("Registrations {:?}", rvect);
-            // Serialize the vector.
-            let max = rvect.len();
-            let mut index = 0;
-            for record in rvect {
-                match json::encode(&record) {
-                    Ok(ref record) => serialized.push_str(record),
-                    Err(_) => return EndpointError::with(status::InternalServerError, 501),
-                }
+    if let Ok(rvect) = db.get(public_ip.clone()) {
+        info!("Registrations {:?}", rvect);
+        // Serialize the vector.
+        let max = rvect.len();
+        let mut index = 0;
+        for record in rvect {
+            match json::encode(&record) {
+                Ok(ref record) => serialized.push_str(record),
+                Err(_) => return EndpointError::with(status::InternalServerError, 501),
+            }
 
-                index += 1;
-                if index < max {
-                    serialized.push_str(",");
-                }
+            index += 1;
+            if index < max {
+                serialized.push_str(",");
             }
         }
-        Err(_) => {}
-    };
+    }
 
     serialized.push_str("]");
     let mut response = Response::with(serialized);
@@ -174,7 +171,7 @@ fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-pub fn create(config: Config) -> Router {
+pub fn create(config: &Config) -> Router {
     let mut router = Router::new();
 
     let config_ = config.clone();
