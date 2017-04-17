@@ -15,8 +15,8 @@ use rusqlite::Row;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DomainRecord {
-    name: String,
-    token: String,
+    pub name: String,
+    pub token: String,
     dns_challenge: Option<String>,
 }
 

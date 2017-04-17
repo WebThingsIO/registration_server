@@ -171,6 +171,51 @@ fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
+fn dns_config(req: &mut Request, config: &Config) -> IronResult<Response> {
+    use params::FromValue;
+
+    info!("GET /dnsconfig");
+
+    // Extract the challenge and token parameter.
+    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let challenge = map.find(&["challenge"]);
+    let token = map.find(&["token"]);
+
+    // Both parameters are mandatory.
+    if challenge.is_none() || token.is_none() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    let challenge = String::from_value(challenge.unwrap()).unwrap();
+    let token = String::from_value(token.unwrap()).unwrap();
+
+    // Check if we have a record with this token, bail out if not.
+    match config.domain_db.get_record_by_token(&token).recv().unwrap() {
+        Ok(record) => {
+            // Update the record with the challenge.
+            let new_record = DomainRecord::new(&record.name, &record.token, Some(&challenge));
+            match config.domain_db.update_record(new_record).recv().unwrap() {
+                Ok(()) => {
+                    // Everything went fine, return an empty 200 OK for now.
+                    let mut response = Response::new();
+                    response.status = Some(Status::Ok);
+
+                    Ok(response)
+                },
+                Err(_) => {
+                    EndpointError::with(status::InternalServerError, 501)
+                }
+            }
+        },
+        Err(DomainError::NoRecord) => {
+            EndpointError::with(status::BadRequest, 400)
+        }
+        Err(_) => {
+            EndpointError::with(status::InternalServerError, 501)
+        }
+    }
+}
+
 pub fn create(config: &Config) -> Router {
     let mut router = Router::new();
 
@@ -188,6 +233,11 @@ pub fn create(config: &Config) -> Router {
     router.get("reserve",
                move |req: &mut Request| -> IronResult<Response> { reserve(req, &config_) },
                "reserve");
+
+    let config_ = config.clone();
+    router.get("dnsconfig",
+               move |req: &mut Request| -> IronResult<Response> { dns_config(req, &config_) },
+               "dnsconfig");
 
     router
 }
