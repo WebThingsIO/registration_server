@@ -12,7 +12,7 @@ cargo run -- -h 0.0.0.0 -p 4242 --cert-dir /etc/letsencrypt/live/knilxof.org
 
 ## Urls
 
-Two endpoints are provided:
+Five endpoints are provided:
 
 1. /register?message=XXX will publish `message` to other clients who also connect from the same outgoing IP address as you.
 2. /ping will return a json representation of the messages that are published from the same outgoing IP address.

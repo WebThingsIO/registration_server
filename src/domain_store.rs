@@ -18,20 +18,31 @@ pub struct DomainRecord {
     pub name: String,
     pub token: String,
     dns_challenge: Option<String>,
+    local_ip: Option<String>,
+    public_ip: Option<String>,
+}
+
+macro_rules! sqlstr {
+    ($row:ident, $index:expr) => (
+        {
+            let raw = $row.get::<i32, String>($index);
+            if raw.is_empty() {
+                None
+            } else {
+                Some(raw)
+            }
+        }
+    )
 }
 
 impl DomainRecord {
     fn from_sql(row: Row) -> Self {
-        let challenge = row.get::<i32, String>(2);
-        let dns_challenge = if challenge.is_empty() {
-            None
-        } else {
-            Some(challenge)
-        };
         DomainRecord {
             name: row.get(0),
             token: row.get(1),
-            dns_challenge: dns_challenge,
+            dns_challenge: sqlstr!(row, 2),
+            local_ip: sqlstr!(row, 3),
+            public_ip: sqlstr!(row, 4),
         }
     }
 
@@ -45,6 +56,8 @@ impl DomainRecord {
             name: name.to_owned(),
             token: token.to_owned(),
             dns_challenge: dns_challenge,
+            local_ip: None,
+            public_ip: None,
         }
     }
 }
