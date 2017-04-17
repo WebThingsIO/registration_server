@@ -10,6 +10,7 @@ use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use params::{Params, Value};
+use pdns::pdns_endpoint;
 use router::Router;
 use rustc_serialize::json;
 use std::io::Read;
@@ -239,5 +240,10 @@ pub fn create(config: &Config) -> Router {
                move |req: &mut Request| -> IronResult<Response> { dns_config(req, &config_) },
                "dnsconfig");
 
+    let config_ = config.clone();
+    router.post("pdns",
+               move |req: &mut Request| -> IronResult<Response> { pdns_endpoint(req, &config_) },
+               "pdns");
+    
     router
 }

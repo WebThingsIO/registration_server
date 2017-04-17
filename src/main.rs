@@ -13,6 +13,7 @@
 extern crate docopt;
 extern crate env_logger;
 extern crate hyper_openssl;
+#[macro_use]
 extern crate iron;
 extern crate iron_cors;
 #[macro_use]
@@ -25,6 +26,10 @@ extern crate redis;
 extern crate router;
 extern crate rusqlite;
 extern crate rustc_serialize;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 extern crate uuid;
 
 use docopt::Docopt;
@@ -38,6 +43,7 @@ use std::path::PathBuf;
 mod config;
 mod domain_store;
 mod errors;
+mod pdns;
 mod transient_store;
 mod routes;
 

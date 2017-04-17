@@ -21,4 +21,7 @@ rusqlite = "0.11"
 redis = "0.8"
 router = "0.5"
 rustc-serialize = "0.3"
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
 uuid = { version = "0.4", features = ["v4"] }
