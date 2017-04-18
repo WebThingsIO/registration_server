@@ -135,7 +135,7 @@ fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Err(DomainError::NoRecord) => {
                     // Create a token, create and store a record and finally return the token.
                     let token = format!("{}", Uuid::new_v4());
-                    let record = DomainRecord::new(&full_name, &token, None);
+                    let record = DomainRecord::new(&full_name, &token, None, None, None, 0);
                     match config.domain_db.add_record(record).recv().unwrap() {
                         Ok(()) => {
                             // We don't want the full domain name or the dns challenge in the response
@@ -191,29 +191,45 @@ fn dns_config(req: &mut Request, config: &Config) -> IronResult<Response> {
     let token = String::from_value(token.unwrap()).unwrap();
 
     // Check if we have a record with this token, bail out if not.
-    match config.domain_db.get_record_by_token(&token).recv().unwrap() {
+    match config
+              .domain_db
+              .get_record_by_token(&token)
+              .recv()
+              .unwrap() {
         Ok(record) => {
             // Update the record with the challenge.
-            let new_record = DomainRecord::new(&record.name, &record.token, Some(&challenge));
-            match config.domain_db.update_record(new_record).recv().unwrap() {
+            let local_ip = match record.local_ip {
+                Some(ref ip) => Some(ip.as_str()),
+                None => None,
+            };
+            let public_ip = match record.public_ip {
+                Some(ref ip) => Some(ip.as_str()),
+                None => None,
+            };
+
+            let new_record = DomainRecord::new(&record.name,
+                                               &record.token,
+                                               Some(&challenge),
+                                               local_ip,
+                                               public_ip,
+                                               record.timestamp);
+            match config
+                      .domain_db
+                      .update_record(new_record)
+                      .recv()
+                      .unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
                     let mut response = Response::new();
                     response.status = Some(Status::Ok);
 
                     Ok(response)
-                },
-                Err(_) => {
-                    EndpointError::with(status::InternalServerError, 501)
                 }
+                Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
-        },
-        Err(DomainError::NoRecord) => {
-            EndpointError::with(status::BadRequest, 400)
         }
-        Err(_) => {
-            EndpointError::with(status::InternalServerError, 501)
-        }
+        Err(DomainError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
 
@@ -242,8 +258,8 @@ pub fn create(config: &Config) -> Router {
 
     let config_ = config.clone();
     router.post("pdns",
-               move |req: &mut Request| -> IronResult<Response> { pdns_endpoint(req, &config_) },
-               "pdns");
-    
+                move |req: &mut Request| -> IronResult<Response> { pdns_endpoint(req, &config_) },
+                "pdns");
+
     router
 }

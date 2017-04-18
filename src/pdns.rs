@@ -4,7 +4,7 @@
 
 // Communication with the PowerDNS server happens through the http
 // server.
-// See https://doc.powerdns.com/md/authoritative/backend-remote/ for 
+// See https://doc.powerdns.com/md/authoritative/backend-remote/ for
 // details about the various requests and response.
 
 use config::Config;
@@ -51,7 +51,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         Ok(value) => value,
         Err(err) => {
             error!("Bad request: {}", err);
-            return EndpointError::with(status::BadRequest, 400)
+            return EndpointError::with(status::BadRequest, 400);
         }
     };
 

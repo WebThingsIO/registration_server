@@ -17,9 +17,10 @@ use rusqlite::Row;
 pub struct DomainRecord {
     pub name: String,
     pub token: String,
-    dns_challenge: Option<String>,
-    local_ip: Option<String>,
-    public_ip: Option<String>,
+    pub dns_challenge: Option<String>,
+    pub local_ip: Option<String>,
+    pub public_ip: Option<String>,
+    pub timestamp: i64,
 }
 
 macro_rules! sqlstr {
@@ -43,21 +44,34 @@ impl DomainRecord {
             dns_challenge: sqlstr!(row, 2),
             local_ip: sqlstr!(row, 3),
             public_ip: sqlstr!(row, 4),
+            timestamp: row.get(5),
         }
     }
 
-    pub fn new(name: &str, token: &str, challenge: Option<&str>) -> Self {
-        let dns_challenge = match challenge {
-            Some(val) => Some(val.to_owned()),
-            None => None,
-        };
+    pub fn new(name: &str,
+               token: &str,
+               dns_challenge: Option<&str>,
+               local_ip: Option<&str>,
+               public_ip: Option<&str>,
+               timestamp: i64)
+               -> Self {
+        macro_rules! str2sql {
+            ($val:expr) => (
+                if $val.is_some() {
+                    Some($val.unwrap().to_owned())
+                } else {
+                    None
+                }
+            )
+        }
 
         DomainRecord {
             name: name.to_owned(),
             token: token.to_owned(),
-            dns_challenge: dns_challenge,
-            local_ip: None,
-            public_ip: None,
+            dns_challenge: str2sql!(dns_challenge),
+            local_ip: str2sql!(local_ip),
+            public_ip: str2sql!(public_ip),
+            timestamp: timestamp,
         }
     }
 }
@@ -68,7 +82,7 @@ unsafe impl Sync for DomainRecord {}
 #[derive(Debug)]
 pub enum DomainError {
     DbUnavailable,
-    SQLError,
+    SQLError(String),
     NoRecord,
 }
 
@@ -88,7 +102,17 @@ macro_rules! sqltry {
             }
             Ok(value) => value,
         }
-    )
+    );
+
+    ($sql:expr, $tx:ident) => (
+        match $sql {
+            Err(err) => {
+                $tx.send(Err(DomainError::SQLError(format!("{}", err)))).unwrap();
+                return;
+            }
+            Ok(value) => value,
+        }
+    );
 }
 
 impl DomainDb {
@@ -102,7 +126,10 @@ impl DomainDb {
         conn.execute("CREATE TABLE IF NOT EXISTS domains (
                       name          TEXT NOT NULL PRIMARY KEY,
                       token         TEXT NOT NULL,
-                      dns_challenge TEXT NOT NULL)",
+                      dns_challenge TEXT NOT NULL,
+                      local_ip      TEXT NOT NULL,
+                      public_ip     TEXT NOT NULL,
+                      timestamp     INTEGER)",
                      &[])
             .unwrap_or_else(|err| {
                                 panic!("Unable to create the domains database: {}", err);
@@ -112,6 +139,12 @@ impl DomainDb {
                      &[])
             .unwrap_or_else(|err| {
                                 panic!("Unable to create the domains.token index: {}", err);
+                            });
+
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_timestamp ON domains(timestamp)",
+                     &[])
+            .unwrap_or_else(|err| {
+                                panic!("Unable to create the domains.timestamp index: {}", err);
                             });
 
         DomainDb { pool: pool }
@@ -129,10 +162,10 @@ impl DomainDb {
         let request = request.to_owned();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-            let mut stmt = sqltry!(conn.prepare(&request), tx, DomainError::SQLError);
-            let mut rows = sqltry!(stmt.query(&[&value]), tx, DomainError::SQLError);
+            let mut stmt = sqltry!(conn.prepare(&request), tx);
+            let mut rows = sqltry!(stmt.query(&[&value]), tx);
             if let Some(result_row) = rows.next() {
-                let row = sqltry!(result_row, tx, DomainError::SQLError);
+                let row = sqltry!(result_row, tx);
                 tx.send(Ok(DomainRecord::from_sql(row))).unwrap();
             } else {
                 tx.send(Err(DomainError::NoRecord)).unwrap();
@@ -143,12 +176,14 @@ impl DomainDb {
     }
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {
-        self.select_record("SELECT name, token, dns_challenge FROM domains WHERE name=$1",
+        self.select_record("SELECT name, token, dns_challenge, local_ip, public_ip, timestamp \
+                            FROM domains WHERE name=$1",
                            name)
     }
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<DomainRecord, DomainError>> {
-        self.select_record("SELECT name, token, dns_challenge FROM domains WHERE token=$1",
+        self.select_record("SELECT name, token, dns_challenge, local_ip, public_ip, timestamp \
+                            FROM domains WHERE token=$1",
                            token)
     }
 
@@ -159,12 +194,14 @@ impl DomainDb {
         let record = record.clone();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3)",
+            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6)",
                                  &[&record.name,
                                    &record.token,
-                                   &record.dns_challenge.unwrap_or("".to_owned())]),
-                    tx,
-                    DomainError::SQLError);
+                                   &record.dns_challenge.unwrap_or("".to_owned()),
+                                   &record.local_ip.unwrap_or("".to_owned()),
+                                   &record.public_ip.unwrap_or("".to_owned()),
+                                   &record.timestamp]),
+                    tx);
             tx.send(Ok(())).unwrap();
         });
 
@@ -179,12 +216,15 @@ impl DomainDb {
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
 
-            sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1 WHERE name=$2 AND token=$3",
+            sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, local_ip=$2, public_ip=$3, timestamp=$4 \
+                                  WHERE name=$5 AND token=$6",
                                  &[&record.dns_challenge.unwrap_or("".to_owned()),
+                                   &record.local_ip.unwrap_or("".to_owned()),
+                                   &record.public_ip.unwrap_or("".to_owned()),
+                                   &record.timestamp,
                                    &record.name,
                                    &record.token]),
-                    tx,
-                    DomainError::SQLError);
+                    tx);
             tx.send(Ok(())).unwrap();
         });
 
@@ -199,7 +239,7 @@ impl DomainDb {
         let request = request.to_owned();
         thread::spawn(move || {
                           let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-                          sqltry!(conn.execute(&request, &[&value]), tx, DomainError::SQLError);
+                          sqltry!(conn.execute(&request, &[&value]), tx);
                           tx.send(Ok(())).unwrap();
                       });
 
@@ -220,9 +260,7 @@ impl DomainDb {
         let pool = self.pool.clone();
         thread::spawn(move || {
                           let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-                          sqltry!(conn.execute("DELETE FROM domains", &[]),
-                                  tx,
-                                  DomainError::SQLError);
+                          sqltry!(conn.execute("DELETE FROM domains", &[]), tx);
                           tx.send(Ok(())).unwrap();
                       });
         rx
@@ -241,6 +279,7 @@ fn test_domain_store() {
               .recv()
               .unwrap() {
         Err(DomainError::NoRecord) => {}
+        Err(err) => panic!("Should not find a record by name in an empty db. {:?}", err),
         _ => panic!("Should not find a record by name in an empty db."),
     }
 
@@ -250,7 +289,8 @@ fn test_domain_store() {
     }
 
     // Add a record without a dns challenge.
-    let no_challenge_record = DomainRecord::new("test.example.org", "test-token", None);
+    let no_challenge_record =
+        DomainRecord::new("test.example.org", "test-token", None, None, None, 0);
     db.add_record(no_challenge_record.clone())
         .recv()
         .unwrap()
@@ -270,8 +310,12 @@ fn test_domain_store() {
     }
 
     // Update the record to have challenge.
-    let challenge_record =
-        DomainRecord::new("test.example.org", "test-token", Some("dns-challenge"));
+    let challenge_record = DomainRecord::new("test.example.org",
+                                             "test-token",
+                                             Some("dns-challenge"),
+                                             None,
+                                             None,
+                                             0);
     db.update_record(challenge_record.clone())
         .recv()
         .unwrap()
