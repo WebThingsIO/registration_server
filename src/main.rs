@@ -10,7 +10,8 @@
 /// Boxes are supposed to register themselves at regular intervals so we
 /// discard data which is too old periodically.
 
-extern crate docopt;
+#[macro_use]
+extern crate clap;
 extern crate env_logger;
 extern crate hyper_openssl;
 #[macro_use]
@@ -25,14 +26,13 @@ extern crate r2d2_sqlite;
 extern crate redis;
 extern crate router;
 extern crate rusqlite;
-extern crate rustc_serialize;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 extern crate uuid;
 
-use docopt::Docopt;
+use clap::{App, ArgMatches};
 use hyper_openssl::OpensslServer;
 use iron::{Chain, Iron};
 use iron::method::Method;
@@ -48,43 +48,70 @@ mod routes;
 
 use domain_store::DomainDb;
 
-const USAGE: &'static str = "
-Usage: registration_server [-h <hostname>] [-p <port>] [--cert-directory <dir>]
+// const USAGE: &'static str = "
+// Usage: registration_server [-h <hostname>] [-p <port>] [--cert-directory <dir>]
 
-Options:
-    -h, --host <host>           Set local hostname.
-    -p, --port <port>           Set port to listen on for http connections.
-        --cert-directory <dir>  Certificate directory.
-        --domain                The domain that will be tied to this registration server.
-";
+// Options:
+//     -h, --host <host>           Set local hostname.
+//     -p, --port <port>           Set port to listen on for http connections.
+//         --cert-directory <dir>  Certificate directory.
+//         --domain                The domain that will be tied to this registration server.
+// ";
 
+const USAGE: &'static str =
+"--host=[host]           'Set local hostname.'
+--port=[port]           'Set port to listen on for http connections.'
+--cert-directory=[dir]  'Certificate directory.'
+--domain=[domain]       'The domain that will be tied to this registration server.'";
 
-#[derive(RustcDecodable)]
 struct Args {
-    flag_host: Option<String>,
-    flag_port: Option<u16>,
-    flag_cert_directory: Option<String>,
-    flag_domain: Option<String>,
+    host: String,
+    port: u16,
+    cert_directory: Option<PathBuf>,
+    domain: String,
 }
 
+impl Args {
+    fn from_matches(matches: ArgMatches) -> Self {
+        let cert_directory = if matches.is_present("cert-directory") {
+            Some(PathBuf::from(matches.value_of("cert-directory").unwrap()))
+        } else {
+            None
+        };
+
+        Args {
+            host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
+            port: value_t!(matches, "port", u16).unwrap_or(4242),
+            cert_directory: cert_directory,
+            domain: matches.value_of("domain").unwrap_or("knilxof.org").to_owned(),
+        }
+    }
+
+    // Gets the args from the default command line.
+    fn new() -> Self {
+        Args::from_matches(App::new("registration_server")
+              .args_from_usage(USAGE)
+              .get_matches())
+    }
+
+    // Gets the args from a string array.
+    fn from(params: Vec<&str>) -> Self {
+        Args::from_matches(App::new("registration_server")
+              .args_from_usage(USAGE)
+              .get_matches_from(params))
+    }
+}
 
 fn main() {
     env_logger::init().unwrap();
 
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
-        .unwrap_or_else(|e| e.exit());
+    let args = Args::new();
 
-    let port = args.flag_port.unwrap_or(4242);
-    let host = args.flag_host.unwrap_or("0.0.0.0".to_owned());
-    let using_tls = args.flag_cert_directory.is_some();
-    let domain = args.flag_domain.unwrap_or("knilxof.org".to_owned());
-
-    info!("Managing the domain {}", domain);
+    info!("Managing the domain {}", args.domain);
 
     let config = config::Config {
         domain_db: DomainDb::new("domains.sqlite"),
-        domain: domain,
+        domain: args.domain,
     };
 
     let mut mount = Mount::new();
@@ -97,15 +124,14 @@ fn main() {
     chain.link_after(cors);
 
     let iron = Iron::new(chain);
-    info!("Starting server on {}:{}", host, port);
-    let addr = format!("{}:{}", host, port);
+    info!("Starting server on {}:{}", args.host, args.port);
+    let addr = format!("{}:{}", args.host, args.port);
 
-    if !using_tls {
+    if args.cert_directory.is_none() {
         iron.http(addr.as_ref() as &str).unwrap();
     } else {
         info!("Starting TLS server");
-        let certificate_directory = args.flag_cert_directory.unwrap();
-        let certificate_directory = PathBuf::from(certificate_directory);
+        let certificate_directory = args.cert_directory.unwrap();
 
         let mut private_key = certificate_directory.clone();
         private_key.push("privkey.pem");
@@ -123,15 +149,21 @@ fn main() {
 
 #[test]
 fn options_are_good() {
-    // short form options
-    {
-        let argv = || vec!["registration_server", "-p", "1234", "-h", "foobar"];
+    let args = Args::from(vec!["registration_server"]);
 
-        let args: Args = Docopt::new(USAGE)
-            .and_then(|d| d.argv(argv().into_iter()).decode())
-            .unwrap();
+    assert_eq!(args.port, 4242);
+    assert_eq!(args.host, "0.0.0.0");
+    assert_eq!(args.domain, "knilxof.org");
+    assert_eq!(args.cert_directory, None);
 
-        assert_eq!(args.flag_host, Some("foobar".to_owned()));
-        assert_eq!(args.flag_port, Some(1234));
-    }
+    let args = Args::from(vec!["registration_server",
+                               "--host=127.0.1.1",
+                               "--port=4343",
+                               "--domain=example.com",
+                               "--cert-directory=/tmp/certs"]);
+
+    assert_eq!(args.port, 4343);
+    assert_eq!(args.host, "127.0.1.1");
+    assert_eq!(args.domain, "example.com");
+    assert_eq!(args.cert_directory, Some(PathBuf::from("/tmp/certs")));
 }

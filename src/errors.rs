@@ -4,7 +4,7 @@
 
 use iron::status;
 use iron::prelude::*;
-use rustc_serialize::json;
+use serde_json;
 use std::error::Error;
 use std::fmt::{self, Debug};
 
@@ -23,7 +23,7 @@ impl Error for StringError {
     }
 }
 
-#[derive(Debug, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorBody {
     pub code: u16,
     pub errno: u16,
@@ -41,20 +41,10 @@ impl EndpointError {
             error: error.clone(),
         };
 
-        Err(IronError::new(StringError(error), (status, json::encode(&body).unwrap())))
+        Err(IronError::new(StringError(error), (status, serde_json::to_string(&body).unwrap())))
     }
 }
 
-pub fn from_decoder_error(error: json::DecoderError) -> IronResult<Response> {
-    match error {
-        json::DecoderError::MissingFieldError(field) => {
-            let errno = match field.as_ref() {
-                "local_ip" => 100,
-                "tunnel_url" => 101,
-                _ => 400,
-            };
-            EndpointError::with(status::BadRequest, errno)
-        }
-        _ => EndpointError::with(status::BadRequest, 400),
-    }
+pub fn from_decoder_error(error: serde_json::Error) -> IronResult<Response> {
+    EndpointError::with(status::BadRequest, 400)
 }

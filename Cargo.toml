@@ -7,7 +7,7 @@ authors = ["fabrice <fabrice@desre.org>"]
 ssl = []
 
 [dependencies]
-docopt = "0.7"
+clap = "2"
 env_logger = "0.3"
 hyper-openssl = "0.2"
 iron = "0.5"
@@ -20,7 +20,6 @@ r2d2_sqlite = "0.2"
 rusqlite = "0.11"
 redis = "0.8"
 router = "0.5"
-rustc-serialize = "0.3"
 serde = "0.9"
 serde_derive = "0.9"
 serde_json = "0.9"
