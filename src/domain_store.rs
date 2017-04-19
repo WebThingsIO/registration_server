@@ -13,7 +13,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use r2d2;
 use rusqlite::Row;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DomainRecord {
     pub name: String,
     pub token: String,

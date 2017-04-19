@@ -44,22 +44,14 @@ mod config;
 mod domain_store;
 mod errors;
 mod pdns;
-mod transient_store;
 mod routes;
 
 use domain_store::DomainDb;
 
-#[cfg(test)]
-mod redis_test_context;
-
 const USAGE: &'static str = "
-Usage: registration_server [-d <redis-hostname>] [--reids-port <redis-port>] [--redis-pass <redis-pass>] \
-     [-h <hostname>] [-p <port>] [--cert-directory <dir>]
+Usage: registration_server [-h <hostname>] [-p <port>] [--cert-directory <dir>]
 
 Options:
-    -d, --redis-host <host>     Set Redis database hostname.
-        --redis-port <db-port>  Set Redis database port.
-        --redis-pass <db-pass>  Set Redis database password.
     -h, --host <host>           Set local hostname.
     -p, --port <port>           Set port to listen on for http connections.
         --cert-directory <dir>  Certificate directory.
@@ -69,9 +61,6 @@ Options:
 
 #[derive(RustcDecodable)]
 struct Args {
-    flag_redis_host: Option<String>,
-    flag_redis_port: Option<u16>,
-    flag_redis_pass: Option<String>,
     flag_host: Option<String>,
     flag_port: Option<u16>,
     flag_cert_directory: Option<String>,
@@ -89,18 +78,11 @@ fn main() {
     let port = args.flag_port.unwrap_or(4242);
     let host = args.flag_host.unwrap_or("0.0.0.0".to_owned());
     let using_tls = args.flag_cert_directory.is_some();
-    let redis_host = args.flag_redis_host.unwrap_or("localhost".to_owned());
-    let redis_port = args.flag_redis_port.unwrap_or(6379);
-    let redis_pass = args.flag_redis_pass;
     let domain = args.flag_domain.unwrap_or("knilxof.org".to_owned());
 
     info!("Managing the domain {}", domain);
-    info!("Redis server on {}:{}", redis_host, redis_port);
 
     let config = config::Config {
-        redis_host: redis_host,
-        redis_port: redis_port,
-        redis_pass: redis_pass,
         domain_db: DomainDb::new("domains.sqlite"),
         domain: domain,
     };
@@ -111,7 +93,7 @@ fn main() {
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![(vec![Method::Get], "ping".to_owned()),
                               (vec![Method::Get], "reserve".to_owned()),
-                              (vec![Method::Post], "register".to_owned())]);
+                              (vec![Method::Get], "register".to_owned())]);
     chain.link_after(cors);
 
     let iron = Iron::new(chain);
