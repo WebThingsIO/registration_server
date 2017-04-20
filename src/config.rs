@@ -8,4 +8,6 @@ use domain_store::DomainDb;
 pub struct Config {
     pub domain_db: DomainDb,
     pub domain: String,
+    pub tunnel_ip: String,
+    pub dns_ttl: u32,
 }

@@ -62,13 +62,17 @@ const USAGE: &'static str =
 "--host=[host]           'Set local hostname.'
 --port=[port]           'Set port to listen on for http connections.'
 --cert-directory=[dir]  'Certificate directory.'
---domain=[domain]       'The domain that will be tied to this registration server.'";
+--domain=[domain]       'The domain that will be tied to this registration server.'
+--dns-ttl=[ttl]         'TTL of the DNS records, in seconds.'
+--tunnel-ip=<ip>        'The ip address of the tunnel endpoint'";
 
 struct Args {
     host: String,
     port: u16,
     cert_directory: Option<PathBuf>,
     domain: String,
+    tunnel_ip: String,
+    dns_ttl: u32,
 }
 
 impl Args {
@@ -84,6 +88,8 @@ impl Args {
             port: value_t!(matches, "port", u16).unwrap_or(4242),
             cert_directory: cert_directory,
             domain: matches.value_of("domain").unwrap_or("knilxof.org").to_owned(),
+            tunnel_ip: matches.value_of("tunnel-ip").unwrap_or("0.0.0.0").to_owned(),
+            dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
         }
     }
 
@@ -112,6 +118,8 @@ fn main() {
     let config = config::Config {
         domain_db: DomainDb::new("domains.sqlite"),
         domain: args.domain,
+        tunnel_ip: args.tunnel_ip,
+        dns_ttl: args.dns_ttl,
     };
 
     let mut mount = Mount::new();
@@ -149,21 +157,27 @@ fn main() {
 
 #[test]
 fn options_are_good() {
-    let args = Args::from(vec!["registration_server"]);
+    let args = Args::from(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
 
     assert_eq!(args.port, 4242);
     assert_eq!(args.host, "0.0.0.0");
     assert_eq!(args.domain, "knilxof.org");
     assert_eq!(args.cert_directory, None);
+    assert_eq!(args.tunnel_ip, "1.2.3.4");
+    assert_eq!(args.dns_ttl, 60);
 
     let args = Args::from(vec!["registration_server",
                                "--host=127.0.1.1",
                                "--port=4343",
                                "--domain=example.com",
-                               "--cert-directory=/tmp/certs"]);
+                               "--cert-directory=/tmp/certs",
+                               "--dns-ttl=120",
+                               "--tunnel-ip=1.2.3.4"]);
 
     assert_eq!(args.port, 4343);
     assert_eq!(args.host, "127.0.1.1");
     assert_eq!(args.domain, "example.com");
     assert_eq!(args.cert_directory, Some(PathBuf::from("/tmp/certs")));
+    assert_eq!(args.tunnel_ip, "1.2.3.4");
+    assert_eq!(args.dns_ttl, 120);
 }

@@ -16,7 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 fn domain_for_name(name: &str, config: &Config) -> String {
-    format!("{}.box.{}", name, config.domain)
+    format!("{}.box.{}.", name, config.domain)
 }
 
 fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
