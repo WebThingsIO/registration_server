@@ -77,7 +77,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
     let mut s = String::new();
     itry!(req.body.read_to_string(&mut s));
 
-    println!("Body is: {}", s);
+    debug!("Body is: {}", s);
 
     let input: PdnsRequest = match serde_json::from_str(&s) {
         Ok(value) => value,
@@ -87,12 +87,12 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         }
     };
 
-    println!("pdns request is {}", input.method);
+    debug!("pdns request is {}", input.method);
 
     if input.method == "lookup" {
         let mut qname = input.parameters.qname.unwrap();
         let qtype = input.parameters.qtype.unwrap();
-        println!("lookup for qtype={} qname={}", qtype, qname);
+        debug!("lookup for qtype={} qname={}", qtype, qname);
 
         // Example payload:
         //
@@ -110,7 +110,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         if qname.starts_with("_acme-challenge.") {
             qname = qname[16..].to_owned();
         }
-        println!("final qname={}", qname);
+        debug!("final qname={}", qname);
 
         // Look for a record with for the qname.
         match config
@@ -188,7 +188,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
 
                 match serde_json::to_string(&pdns_response) {
                     Ok(serialized) => {
-                        println!("{}", serialized);
+                        debug!("{}", serialized);
                         let mut response = Response::with(serialized);
                         response.status = Some(Status::Ok);
                         response.headers.set(ContentType::json());

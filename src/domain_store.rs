@@ -12,6 +12,8 @@ use std::thread;
 use r2d2_sqlite::SqliteConnectionManager;
 use r2d2;
 use rusqlite::Row;
+use rusqlite::Result as SqlResult;
+use rusqlite::types::{ToSql, ToSqlOutput};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DomainRecord {
@@ -113,6 +115,21 @@ macro_rules! sqltry {
             Ok(value) => value,
         }
     );
+}
+
+#[derive(Clone)]
+pub enum SqlParam {
+    Text(String),
+    Integer(i64),
+}
+
+impl ToSql for SqlParam {
+    fn to_sql(&self) -> SqlResult<ToSqlOutput> {
+        match *self {
+            SqlParam::Text(ref text) => text.to_sql(),
+            SqlParam::Integer(ref number) => number.to_sql(),
+        }
+    }
 }
 
 impl DomainDb {
@@ -231,7 +248,11 @@ impl DomainDb {
         rx
     }
 
-    fn execute_1param_sql(&self, request: &str, value: &str) -> Receiver<Result<(), DomainError>> {
+    // Returns the number of rows affected.
+    pub fn execute_1param_sql(&self,
+                              request: &str,
+                              value: SqlParam)
+                              -> Receiver<Result<i32, DomainError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
@@ -239,19 +260,21 @@ impl DomainDb {
         let request = request.to_owned();
         thread::spawn(move || {
                           let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-                          sqltry!(conn.execute(&request, &[&value]), tx);
-                          tx.send(Ok(())).unwrap();
+                          let res = sqltry!(conn.execute(&request, &[&value]), tx);
+                          tx.send(Ok(res)).unwrap();
                       });
 
         rx
     }
 
-    pub fn delete_record_by_name(&self, name: &str) -> Receiver<Result<(), DomainError>> {
-        self.execute_1param_sql("DELETE FROM domains WHERE name=$1", name)
+    pub fn delete_record_by_name(&self, name: &str) -> Receiver<Result<i32, DomainError>> {
+        self.execute_1param_sql("DELETE FROM domains WHERE name=$1",
+                                SqlParam::Text(name.to_owned()))
     }
 
-    pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<(), DomainError>> {
-        self.execute_1param_sql("DELETE FROM domains WHERE token=$1", token)
+    pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<i32, DomainError>> {
+        self.execute_1param_sql("DELETE FROM domains WHERE token=$1",
+                                SqlParam::Text(token.to_owned()))
     }
 
     pub fn flush(&self) -> Receiver<Result<(), DomainError>> {

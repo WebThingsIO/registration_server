@@ -42,27 +42,21 @@ use std::path::PathBuf;
 mod config;
 mod domain_store;
 mod errors;
+mod eviction;
 mod pdns;
 mod routes;
 
 use domain_store::DomainDb;
-
-// const USAGE: &'static str = "
-// Usage: registration_server [-h <hostname>] [-p <port>] [--cert-directory <dir>]
-
-// Options:
-//     -h, --host <host>           Set local hostname.
-//     -p, --port <port>           Set port to listen on for http connections.
-//         --cert-directory <dir>  Certificate directory.
-//         --domain                The domain that will be tied to this registration server.
-// ";
 
 const USAGE: &'static str = "--host=[host]           'Set local hostname.'
 --port=[port]           'Set port to listen on for http connections.'
 --cert-directory=[dir]  'Certificate directory.'
 --domain=[domain]       'The domain that will be tied to this registration server.'
 --dns-ttl=[ttl]         'TTL of the DNS records, in seconds.'
+--eviction-delay=[secs] 'How often we purge old records.'
 --tunnel-ip=<ip>        'The ip address of the tunnel endpoint'";
+
+const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
 struct Args {
     host: String,
@@ -71,6 +65,7 @@ struct Args {
     domain: String,
     tunnel_ip: String,
     dns_ttl: u32,
+    eviction_delay: u32,
 }
 
 impl Args {
@@ -94,6 +89,8 @@ impl Args {
                 .unwrap_or("0.0.0.0")
                 .to_owned(),
             dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
+            eviction_delay: value_t!(matches, "eviction-delay", u32)
+                .unwrap_or(DEFAULT_EVICTION_DELAY),
         }
     }
 
@@ -124,7 +121,10 @@ fn main() {
         domain: args.domain,
         tunnel_ip: args.tunnel_ip,
         dns_ttl: args.dns_ttl,
+        eviction_delay: args.eviction_delay,
     };
+
+    eviction::evict_old_entries(&config);
 
     let mut mount = Mount::new();
     mount.mount("/", routes::create(&config));
@@ -169,6 +169,7 @@ fn options_are_good() {
     assert_eq!(args.cert_directory, None);
     assert_eq!(args.tunnel_ip, "1.2.3.4");
     assert_eq!(args.dns_ttl, 60);
+    assert_eq!(args.eviction_delay, DEFAULT_EVICTION_DELAY);
 
     let args = Args::from(vec!["registration_server",
                                "--host=127.0.1.1",
@@ -176,7 +177,8 @@ fn options_are_good() {
                                "--domain=example.com",
                                "--cert-directory=/tmp/certs",
                                "--dns-ttl=120",
-                               "--tunnel-ip=1.2.3.4"]);
+                               "--tunnel-ip=1.2.3.4",
+                               "--eviction-delay=60"]);
 
     assert_eq!(args.port, 4343);
     assert_eq!(args.host, "127.0.1.1");
@@ -184,4 +186,6 @@ fn options_are_good() {
     assert_eq!(args.cert_directory, Some(PathBuf::from("/tmp/certs")));
     assert_eq!(args.tunnel_ip, "1.2.3.4");
     assert_eq!(args.dns_ttl, 120);
+    assert_eq!(args.eviction_delay, 60);
+
 }

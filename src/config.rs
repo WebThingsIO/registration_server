@@ -10,4 +10,5 @@ pub struct Config {
     pub domain: String,
     pub tunnel_ip: String,
     pub dns_ttl: u32,
+    pub eviction_delay: u32,
 }
