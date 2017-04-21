@@ -200,5 +200,5 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
             }
     }
 
-    EndpointError::with(status::InternalServerError, 501)
+    pdns_failure()
 }
