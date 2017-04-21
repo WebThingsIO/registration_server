@@ -41,10 +41,7 @@ impl EndpointError {
             error: error.clone(),
         };
 
-        Err(IronError::new(StringError(error), (status, serde_json::to_string(&body).unwrap())))
+        Err(IronError::new(StringError(error),
+                           (status, serde_json::to_string(&body).unwrap())))
     }
-}
-
-pub fn from_decoder_error(error: serde_json::Error) -> IronResult<Response> {
-    EndpointError::with(status::BadRequest, 400)
 }

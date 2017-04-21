@@ -55,7 +55,10 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                 None => None,
             };
             // Update the timestamp to be current.
-            let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
 
             let new_record = DomainRecord::new(&record.name,
                                                &record.token,
@@ -92,7 +95,7 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
         return EndpointError::with(status::BadRequest, 400);
     }
     let token = String::from_value(token.unwrap()).unwrap();
-    
+
     match config
               .domain_db
               .get_record_by_token(&token)
@@ -235,8 +238,8 @@ pub fn create(config: &Config) -> Router {
 
     let config_ = config.clone();
     router.get("register",
-                move |req: &mut Request| -> IronResult<Response> { register(req, &config_) },
-                "post_message");
+               move |req: &mut Request| -> IronResult<Response> { register(req, &config_) },
+               "post_message");
 
     let config_ = config.clone();
     router.get("ping",

@@ -8,10 +8,8 @@
 // details about the various requests and response.
 
 use config::Config;
-use domain_store::{DomainError, DomainRecord};
 use errors::*;
 use iron::headers::ContentType;
-use iron::method::Method;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use serde_json;
@@ -115,89 +113,96 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         println!("final qname={}", qname);
 
         // Look for a record with for the qname.
-        match config.domain_db
-            .get_record_by_name(&qname)
-            .recv()
-            .unwrap() {
-                Ok(record) => {
-                    if record.local_ip.is_none() {
-                        // No info on this domain, bail out.
-                        return pdns_failure();
-                    }
-
-                    // Choose either the local or public ip based on the parameters.remote one.
-                    let a_record = if record.public_ip.is_some() && input.parameters.remote.unwrap() == record.public_ip.unwrap() {
-                        // We are inside of the home network, return the local ip for the A record.
-                        record.local_ip.unwrap()
-                    } else {
-                        // We are outside of the home network, return the ip of the tunnel for the A record.
-                        config.tunnel_ip.to_owned()
-                    };
-
-                    let mut pdns_response = PdnsResponse {
-                        result: Vec::new(),
-                    };
-
-                    if qtype == "SOA" {
-                        // Add a "SOA" record.
-                        // TODO: don't hardcode the content of this record!
-                        let ns_record = PdnsLookupResponse {
-                            qtype: "SOA".to_owned(),
-                            qname: qname.to_owned(),
-                            content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800".to_owned(),
-                            ttl: config.dns_ttl,
-                            domain_id: None,
-                            scope_mask: None,
-                            auth: None,
-                        };
-                        pdns_response.result.push(PdnsResponseParams::Lookup(ns_record));
-                    }
-
-                    if qtype == "ANY" || qtype == "A" {
-                        // Add an "A" record.
-                        let ns_record = PdnsLookupResponse {
-                            qtype: "A".to_owned(),
-                            qname: qname.to_owned(),
-                            content: a_record,
-                            ttl: config.dns_ttl,
-                            domain_id: None,
-                            scope_mask: None,
-                            auth: None,
-                        };
-                        pdns_response.result.push(PdnsResponseParams::Lookup(ns_record));
-                    }
-
-                    if (qtype == "ANY" || qtype == "TXT") && record.dns_challenge.is_some() {
-                        // Add a "TXT" record with the dns challenge content.
-                        let ns_record = PdnsLookupResponse {
-                            qtype: "A".to_owned(),
-                            qname: qname.to_owned(),
-                            content: record.dns_challenge.unwrap(),
-                            ttl: config.dns_ttl,
-                            domain_id: None,
-                            scope_mask: None,
-                            auth: None,
-                        };
-                        pdns_response.result.push(PdnsResponseParams::Lookup(ns_record));
-                    }
-
-                    match serde_json::to_string(&pdns_response) {
-                        Ok(serialized) => {
-                            println!("{}", serialized);
-                            let mut response = Response::with(serialized);
-                            response.status = Some(Status::Ok);
-                            response.headers.set(ContentType::json());
-
-                            return Ok(response);
-                        }
-                        Err(_) => return EndpointError::with(status::InternalServerError, 501)
-                    }
-                },
-                Err(_) => {
-                    // No such domain, return a `false` result to PowerDNS.
+        match config
+                  .domain_db
+                  .get_record_by_name(&qname)
+                  .recv()
+                  .unwrap() {
+            Ok(record) => {
+                if record.local_ip.is_none() {
+                    // No info on this domain, bail out.
                     return pdns_failure();
                 }
+
+                // Choose either the local or public ip based on the parameters.remote one.
+                let a_record = if record.public_ip.is_some() &&
+                                  input.parameters.remote.unwrap() == record.public_ip.unwrap() {
+                    // We are inside of the home network, return the local ip for the A record.
+                    record.local_ip.unwrap()
+                } else {
+                    // We are outside of the home network, return the ip of the tunnel for the A record.
+                    config.tunnel_ip.to_owned()
+                };
+
+                let mut pdns_response = PdnsResponse { result: Vec::new() };
+
+                if qtype == "SOA" {
+                    // Add a "SOA" record.
+                    // TODO: don't hardcode the content of this record!
+                    let ns_record = PdnsLookupResponse {
+                        qtype: "SOA".to_owned(),
+                        qname: qname.to_owned(),
+                        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+                            .to_owned(),
+                        ttl: config.dns_ttl,
+                        domain_id: None,
+                        scope_mask: None,
+                        auth: None,
+                    };
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(ns_record));
+                }
+
+                if qtype == "ANY" || qtype == "A" {
+                    // Add an "A" record.
+                    let ns_record = PdnsLookupResponse {
+                        qtype: "A".to_owned(),
+                        qname: qname.to_owned(),
+                        content: a_record,
+                        ttl: config.dns_ttl,
+                        domain_id: None,
+                        scope_mask: None,
+                        auth: None,
+                    };
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(ns_record));
+                }
+
+                if (qtype == "ANY" || qtype == "TXT") && record.dns_challenge.is_some() {
+                    // Add a "TXT" record with the dns challenge content.
+                    let ns_record = PdnsLookupResponse {
+                        qtype: "A".to_owned(),
+                        qname: qname.to_owned(),
+                        content: record.dns_challenge.unwrap(),
+                        ttl: config.dns_ttl,
+                        domain_id: None,
+                        scope_mask: None,
+                        auth: None,
+                    };
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(ns_record));
+                }
+
+                match serde_json::to_string(&pdns_response) {
+                    Ok(serialized) => {
+                        println!("{}", serialized);
+                        let mut response = Response::with(serialized);
+                        response.status = Some(Status::Ok);
+                        response.headers.set(ContentType::json());
+
+                        return Ok(response);
+                    }
+                    Err(_) => return EndpointError::with(status::InternalServerError, 501),
+                }
             }
+            Err(_) => {
+                // No such domain, return a `false` result to PowerDNS.
+                return pdns_failure();
+            }
+        }
     }
 
     pdns_failure()

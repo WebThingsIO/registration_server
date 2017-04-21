@@ -9,7 +9,6 @@
 ///
 /// Boxes are supposed to register themselves at regular intervals so we
 /// discard data which is too old periodically.
-
 #[macro_use]
 extern crate clap;
 extern crate env_logger;
@@ -58,8 +57,7 @@ use domain_store::DomainDb;
 //         --domain                The domain that will be tied to this registration server.
 // ";
 
-const USAGE: &'static str =
-"--host=[host]           'Set local hostname.'
+const USAGE: &'static str = "--host=[host]           'Set local hostname.'
 --port=[port]           'Set port to listen on for http connections.'
 --cert-directory=[dir]  'Certificate directory.'
 --domain=[domain]       'The domain that will be tied to this registration server.'
@@ -87,8 +85,14 @@ impl Args {
             host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
             port: value_t!(matches, "port", u16).unwrap_or(4242),
             cert_directory: cert_directory,
-            domain: matches.value_of("domain").unwrap_or("knilxof.org").to_owned(),
-            tunnel_ip: matches.value_of("tunnel-ip").unwrap_or("0.0.0.0").to_owned(),
+            domain: matches
+                .value_of("domain")
+                .unwrap_or("knilxof.org")
+                .to_owned(),
+            tunnel_ip: matches
+                .value_of("tunnel-ip")
+                .unwrap_or("0.0.0.0")
+                .to_owned(),
             dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
         }
     }
@@ -96,15 +100,15 @@ impl Args {
     // Gets the args from the default command line.
     fn new() -> Self {
         Args::from_matches(App::new("registration_server")
-              .args_from_usage(USAGE)
-              .get_matches())
+                               .args_from_usage(USAGE)
+                               .get_matches())
     }
 
     // Gets the args from a string array.
     fn from(params: Vec<&str>) -> Self {
         Args::from_matches(App::new("registration_server")
-              .args_from_usage(USAGE)
-              .get_matches_from(params))
+                               .args_from_usage(USAGE)
+                               .get_matches_from(params))
     }
 }
 
