@@ -31,5 +31,5 @@ pub fn evict_old_entries(config: &Config) {
                     Ok(count) => info!("Evicted {} records.", count),
                 }
             }
-        });
+        }).expect("Failed to start eviction thread!");
 }
