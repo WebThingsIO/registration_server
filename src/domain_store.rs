@@ -19,8 +19,11 @@ use rusqlite::types::{ToSql, ToSqlOutput};
 pub struct DomainRecord {
     pub name: String,
     pub token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_challenge: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub local_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub public_ip: Option<String>,
     pub timestamp: i64,
 }
