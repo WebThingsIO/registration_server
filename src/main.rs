@@ -131,7 +131,7 @@ fn main() {
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![(vec![Method::Get], "ping".to_owned()),
-                              (vec![Method::Get], "reserve".to_owned()),
+                              (vec![Method::Get], "subscribe".to_owned()),
                               (vec![Method::Get], "register".to_owned())]);
     chain.link_after(cors);
 

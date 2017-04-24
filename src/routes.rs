@@ -111,8 +111,8 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-fn reserve(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /reserve");
+fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /subscribe");
 
     // Extract the name parameter.
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
@@ -247,9 +247,9 @@ pub fn create(config: &Config) -> Router {
                "ping");
 
     let config_ = config.clone();
-    router.get("reserve",
-               move |req: &mut Request| -> IronResult<Response> { reserve(req, &config_) },
-               "reserve");
+    router.get("subscribe",
+               move |req: &mut Request| -> IronResult<Response> { subscribe(req, &config_) },
+               "subscribe");
 
     let config_ = config.clone();
     router.get("dnsconfig",
