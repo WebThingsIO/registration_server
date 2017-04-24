@@ -16,6 +16,7 @@ Five endpoints are provided:
 
 1. /register?token=YYY&local_ip=XXX will publish `message` to other clients who also connect from the same outgoing IP address as you.
 2. /ping?token=YYY will return a json representation of the record associated to this token.
-3. /reserve?name=XXX will reserve the name `XXX` if it doesn't exist yet and create a token for it.
+3. /subscribe?name=XXX will reserve the name `XXX` if it doesn't exist yet and create a token for it.
+3. /unsubscribe?token=YYY will delete the record for this token.
 4. /dnsconfig?challenge=XXX&token=YYY configures the dns server for this domain.
 5. /tunnel?action=start|stop&token=YYY configures a tunnel for this domain.

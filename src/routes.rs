@@ -111,6 +111,32 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
+fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /unsubscribe");
+
+    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let token = map.find(&["token"]);
+    if token.is_none() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+    let token = String::from_value(token.unwrap()).unwrap();
+
+    match config
+              .domain_db
+              .delete_record_by_token(&token)
+              .recv()
+              .unwrap() {
+        Ok(0) => EndpointError::with(status::BadRequest, 400), // No record found for this token.
+        Ok(_) => {
+            let mut response = Response::new();
+            response.status = Some(Status::Ok);
+
+            Ok(response)
+        }
+        Err(_) => EndpointError::with(status::InternalServerError, 501),
+    }
+}
+
 fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /subscribe");
 
@@ -250,6 +276,11 @@ pub fn create(config: &Config) -> Router {
     router.get("subscribe",
                move |req: &mut Request| -> IronResult<Response> { subscribe(req, &config_) },
                "subscribe");
+
+    let config_ = config.clone();
+    router.get("unsubscribe",
+               move |req: &mut Request| -> IronResult<Response> { unsubscribe(req, &config_) },
+               "unsubscribe");
 
     let config_ = config.clone();
     router.get("dnsconfig",
