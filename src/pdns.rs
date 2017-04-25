@@ -5,7 +5,7 @@
 // Communication with the PowerDNS server happens through the http
 // server.
 // See https://doc.powerdns.com/md/authoritative/backend-remote/ for
-// details about the various requests and response.
+// details about the various requests and responses.
 
 use config::Config;
 use errors::*;
