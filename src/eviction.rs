@@ -18,7 +18,7 @@ pub fn evict_old_entries(config: &Config) {
         .spawn(move || {
             info!("Starting eviction thread, delay is {}s", delay);
             loop {
-                thread::sleep_ms(delay * 1000);
+                thread::sleep(Duration::new(delay as u64, 0));
                 let max_age = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap() -
                                Duration::new(delay as u64, 0))
                         .as_secs();
