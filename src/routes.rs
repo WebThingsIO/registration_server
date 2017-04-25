@@ -166,8 +166,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     let record = DomainRecord::new(&full_name, &token, None, None, None, 0);
                     match config.domain_db.add_record(record).recv().unwrap() {
                         Ok(()) => {
-                            // We don't want the full domain name or the dns challenge in the response
-                            // so we create a local struct.
+                            // We don't want the full domain name or the dns challenge in the
+                            // response so we create a local struct.
                             #[derive(Serialize)]
                             struct NameAndToken {
                                 name: String,

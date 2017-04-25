@@ -130,7 +130,8 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     // We are inside of the home network, return the local ip for the A record.
                     record.local_ip.unwrap()
                 } else {
-                    // We are outside of the home network, return the ip of the tunnel for the A record.
+                    // We are outside of the home network, return the ip of the tunnel
+                    // for the A record.
                     config.tunnel_ip.to_owned()
                 };
 
@@ -142,8 +143,9 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     let ns_record = PdnsLookupResponse {
                         qtype: "SOA".to_owned(),
                         qname: qname.to_owned(),
-                        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
-                            .to_owned(),
+                        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 \
+                                  10800 3600 604800 10800"
+                                .to_owned(),
                         ttl: config.dns_ttl,
                         domain_id: None,
                         scope_mask: None,

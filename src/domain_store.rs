@@ -236,7 +236,8 @@ impl DomainDb {
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
 
-            sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, local_ip=$2, public_ip=$3, timestamp=$4 \
+            sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, local_ip=$2, \
+                                  public_ip=$3, timestamp=$4 \
                                   WHERE name=$5 AND token=$6",
                                  &[&record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.local_ip.unwrap_or("".to_owned()),

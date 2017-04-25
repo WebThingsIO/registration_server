@@ -10,6 +10,7 @@ use std::fs::File;
 use std::path::PathBuf;
 
 const USAGE: &'static str = "--config-file=[path]    'Path to a json configuration file.'
+--data-directory        'The directory where the persistent data will be saved.'
 --host=[host]           'Set local hostname.'
 --port=[port]           'Set port to listen on for http connections.'
 --cert-directory=[dir]  'Certificate directory.'
@@ -24,6 +25,7 @@ const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 pub struct Args {
     pub host: String,
     pub port: u16,
+    pub data_directory: String,
     pub cert_directory: Option<PathBuf>,
     pub domain: String,
     tunnel_ip: String,
@@ -35,8 +37,7 @@ impl Args {
     fn from_file(path: &PathBuf) -> Self {
         let file = File::open(path).expect("Can't open config file");
 
-        let args: Args = serde_json::from_reader(file).expect("Invalid config file");
-        args
+        serde_json::from_reader(file).expect("Invalid config file")
     }
 
     fn from_matches(matches: ArgMatches) -> Self {
@@ -54,6 +55,7 @@ impl Args {
             host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
             port: value_t!(matches, "port", u16).unwrap_or(4242),
             cert_directory: cert_directory,
+            data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
             domain: matches
                 .value_of("domain")
                 .unwrap_or("knilxof.org")
@@ -84,7 +86,7 @@ impl Args {
 
     pub fn to_config(&self) -> Config {
         Config {
-            domain_db: DomainDb::new("domains.sqlite"),
+            domain_db: DomainDb::new(&format!("{}/domains.sqlite", self.data_directory)),
             domain: self.domain.clone(),
             tunnel_ip: self.tunnel_ip.clone(),
             dns_ttl: self.dns_ttl,
