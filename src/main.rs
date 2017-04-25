@@ -22,7 +22,6 @@ extern crate mount;
 extern crate params;
 extern crate r2d2;
 extern crate r2d2_sqlite;
-extern crate redis;
 extern crate router;
 extern crate rusqlite;
 extern crate serde;
