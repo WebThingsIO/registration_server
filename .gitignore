@@ -2,4 +2,3 @@ target
 *.bk
 *.rdb
 *.sqlite
-*.conf
