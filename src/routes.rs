@@ -156,7 +156,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Ok(_) => {
                     // We already have a record for this name, return an error.
                     let mut response = Response::with("{\"error\": \"UnavailableName\"}");
-                    response.status = Some(Status::Ok);
+                    response.status = Some(Status::BadRequest);
                     response.headers.set(ContentType::json());
                     Ok(response)
                 }
