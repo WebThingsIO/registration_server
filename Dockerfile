@@ -5,6 +5,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 ENV SHELL=/bin/bash
 
+# Add PageKite repository to /etc/apt/sources.list
+RUN echo "deb http://pagekite.net/pk/deb/ pagekite main" | tee -a /etc/apt/sources.list
+
+# Add the PageKite packaging key to the key-ring
+RUN apt-key adv --recv-keys --keyserver keys.gnupg.net AED248B1C7B2CAC3
+
 RUN apt-get update && \
     apt-get dist-upgrade -qqy && \
     apt-get install \
@@ -14,6 +20,7 @@ RUN apt-get update && \
        libc6-dev \
        libssl-dev \
        libsqlite3-dev \
+       pagekite \
        pkgconf \
        pdns-server \
        pdns-backend-remote \
@@ -22,7 +29,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pagekite
-RUN curl -s https://pagekite.net/pk/ | bash
+# RUN curl -s https://pagekite.net/pk/ | bash
 
 # Create a non privileged user to build the Rust code.
 RUN useradd -m -d /home/user -p user user
