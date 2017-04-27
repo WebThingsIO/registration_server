@@ -162,7 +162,7 @@ impl DomainDb {
                                 panic!("Unable to create the domains.token index: {}", err);
                             });
 
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_timestamp ON domains(timestamp)",
+        conn.execute("CREATE INDEX IF NOT EXISTS domains_timestamp ON domains(timestamp)",
                      &[])
             .unwrap_or_else(|err| {
                                 panic!("Unable to create the domains.timestamp index: {}", err);
