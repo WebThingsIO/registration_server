@@ -177,8 +177,8 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                 if (qtype == "ANY" || qtype == "TXT") && record.dns_challenge.is_some() {
                     // Add a "TXT" record with the dns challenge content.
                     let ns_record = PdnsLookupResponse {
-                        qtype: "A".to_owned(),
-                        qname: qname.to_owned(),
+                        qtype: "TXT".to_owned(),
+                        qname: format!("_acme-challenge.{}", qname),
                         content: record.dns_challenge.unwrap(),
                         ttl: config.dns_ttl,
                         domain_id: None,
