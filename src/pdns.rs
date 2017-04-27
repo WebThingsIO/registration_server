@@ -63,7 +63,8 @@ struct PdnsResponse {
     result: Vec<PdnsResponseParams>,
 }
 
-fn pdns_failure() -> IronResult<Response> {
+fn pdns_failure(reason: &str) -> IronResult<Response> {
+    debug!("pdns_failure: {}", reason);
     let mut response = Response::with("{\"result\":false}");
     response.status = Some(Status::Ok);
     response.headers.set(ContentType::json());
@@ -72,6 +73,8 @@ fn pdns_failure() -> IronResult<Response> {
 
 pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
     // TODO: check where the request is coming from and only allow from pdns.
+
+    info!("GET /pdns");
 
     // Read the request from the json body.
     let mut s = String::new();
@@ -121,7 +124,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
             Ok(record) => {
                 if record.local_ip.is_none() {
                     // No info on this domain, bail out.
-                    return pdns_failure();
+                    return pdns_failure("No local_ip");
                 }
 
                 // Choose either the local or public ip based on the parameters.remote one.
@@ -143,8 +146,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     let ns_record = PdnsLookupResponse {
                         qtype: "SOA".to_owned(),
                         qname: qname.to_owned(),
-                        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 \
-                                  10800 3600 604800 10800"
+                        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
                                 .to_owned(),
                         ttl: config.dns_ttl,
                         domain_id: None,
@@ -190,22 +192,25 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
 
                 match serde_json::to_string(&pdns_response) {
                     Ok(serialized) => {
-                        debug!("{}", serialized);
+                        debug!("Response is: {}", serialized);
                         let mut response = Response::with(serialized);
                         response.status = Some(Status::Ok);
                         response.headers.set(ContentType::json());
 
                         return Ok(response);
                     }
-                    Err(_) => return EndpointError::with(status::InternalServerError, 501),
+                    Err(err) => {
+                        error!("{}", err);
+                        return EndpointError::with(status::InternalServerError, 501)
+                    }
                 }
             }
             Err(_) => {
                 // No such domain, return a `false` result to PowerDNS.
-                return pdns_failure();
+                return pdns_failure("No record for this name.");
             }
         }
     }
 
-    pdns_failure()
+    pdns_failure(&format!("Unsupported method: {}", input.method))
 }
