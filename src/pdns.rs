@@ -122,7 +122,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                   .recv()
                   .unwrap() {
             Ok(record) => {
-                if record.local_ip.is_none() {
+                if record.local_ip.is_none() && qtype == "A" {
                     // No info on this domain, bail out.
                     return pdns_failure("No local_ip");
                 }
