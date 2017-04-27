@@ -93,7 +93,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
     debug!("pdns request is {}", input.method);
 
     if input.method == "lookup" {
-        let mut qname = input.parameters.qname.unwrap();
+        let mut qname = input.parameters.qname.unwrap().to_lowercase();
         let qtype = input.parameters.qtype.unwrap();
         debug!("lookup for qtype={} qname={}", qtype, qname);
 
