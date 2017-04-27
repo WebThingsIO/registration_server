@@ -17,6 +17,7 @@ RUN apt-get update && \
        pkgconf \
        pdns-server \
        pdns-backend-remote \
+       sqlite \
        -qqy \
        --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
