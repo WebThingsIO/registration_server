@@ -23,8 +23,8 @@ pub fn evict_old_entries(config: &Config) {
                                Duration::new(delay as u64, 0))
                         .as_secs();
                 info!("Checking for records older than {}", max_age);
-                match db.execute_1param_sql("DELETE FROM domains WHERE timestamp<$1",
-                                            SqlParam::Integer(max_age as i64))
+                // Eviction a record means resetting the IP fields to be empty.
+                match db.evict_records(SqlParam::Integer(max_age as i64))
                           .recv()
                           .unwrap() {
                     Err(err) => error!("Error evicting old records: {:?}", err),

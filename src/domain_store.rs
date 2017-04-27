@@ -14,6 +14,7 @@ use r2d2;
 use rusqlite::Row;
 use rusqlite::Result as SqlResult;
 use rusqlite::types::{ToSql, ToSqlOutput};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DomainRecord {
@@ -247,6 +248,28 @@ impl DomainDb {
                                    &record.token]),
                     tx);
             tx.send(Ok(())).unwrap();
+        });
+
+        rx
+    }
+
+    // Evict records older than a given timestamp.
+    // Returns the number of evicted records.
+    pub fn evict_records(&self, timestamp: SqlParam) -> Receiver<Result<i32, DomainError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            let res = sqltry!(conn.execute("UPDATE domains SET local_ip=$1, \
+                    public_ip=$2, timestamp=$3 where timestamp<$4",
+                                           &[&"", &"", &now, &timestamp]),
+                              tx);
+            tx.send(Ok(res)).unwrap();
         });
 
         rx

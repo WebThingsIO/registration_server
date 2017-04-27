@@ -145,7 +145,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     match map.find(&["name"]) {
         Some(&Value::String(ref name)) => {
             let full_name = domain_for_name(name, config);
-            info!("trying to register {}", full_name);
+            info!("trying to subscribe {}", full_name);
 
             let record = config
                 .domain_db

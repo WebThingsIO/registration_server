@@ -147,7 +147,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                         qtype: "SOA".to_owned(),
                         qname: qname.to_owned(),
                         content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
-                                .to_owned(),
+                            .to_owned(),
                         ttl: config.dns_ttl,
                         domain_id: None,
                         scope_mask: None,
@@ -201,7 +201,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     }
                     Err(err) => {
                         error!("{}", err);
-                        return EndpointError::with(status::InternalServerError, 501)
+                        return EndpointError::with(status::InternalServerError, 501);
                     }
                 }
             }
