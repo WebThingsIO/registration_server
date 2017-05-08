@@ -140,7 +140,7 @@ impl DomainDb {
     pub fn new(path: &str) -> Self {
         let config = r2d2::Config::default();
         let manager = SqliteConnectionManager::new(path);
-        let pool = r2d2::Pool::new(config, manager).expect("Unable to open database!");
+        let pool = r2d2::Pool::new(config, manager).expect(&format!("Unable to open database at {}", path));
 
         // Create the database table if needed.
         let conn = pool.get().unwrap();
