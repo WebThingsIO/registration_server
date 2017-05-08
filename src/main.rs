@@ -11,6 +11,7 @@
 /// discard data which is too old periodically.
 #[macro_use]
 extern crate clap;
+extern crate crypto;
 extern crate env_logger;
 extern crate hyper_openssl;
 #[macro_use]

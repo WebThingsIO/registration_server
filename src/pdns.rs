@@ -8,6 +8,8 @@
 // details about the various requests and responses.
 
 use config::Config;
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -38,7 +40,7 @@ struct PdnsRequest {
 }
 
 #[derive(Serialize)]
-struct PdnsLookupResponse {
+pub struct PdnsLookupResponse {
     qtype: String,
     qname: String,
     content: String,
@@ -54,12 +56,12 @@ struct PdnsLookupResponse {
 
 #[derive(Serialize)]
 #[serde(untagged)]
-enum PdnsResponseParams {
+pub enum PdnsResponseParams {
     Lookup(PdnsLookupResponse),
 }
 
 #[derive(Serialize)]
-struct PdnsResponse {
+pub struct PdnsResponse {
     result: Vec<PdnsResponseParams>,
 }
 
@@ -69,6 +71,93 @@ fn pdns_failure(reason: &str) -> IronResult<Response> {
     response.status = Some(Status::Ok);
     response.headers.set(ContentType::json());
     Ok(response)
+}
+
+pub fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
+    match serde_json::to_string(response) {
+        Ok(serialized) => {
+            debug!("Response is: {}", serialized);
+            let mut response = Response::with(serialized);
+            response.status = Some(Status::Ok);
+            response.headers.set(ContentType::json());
+
+            Ok(response)
+        }
+        Err(err) => {
+            error!("{}", err);
+            EndpointError::with(status::InternalServerError, 501)
+        }
+    }
+}
+
+pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<Response> {
+    // Pagekite sends dns requests like:
+    // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
+    // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
+    debug!("PageKite query for {} {}", qtype, qname);
+
+    if qtype != "A" && qtype != "ANY" {
+        return pdns_failure(&format!("Unsupported PageKite request type: {}", qtype));
+    }
+
+    // Split up the qname.
+    let parts: Vec<&str> = qname.split('.').collect();
+    let subdomain = format!("{}.box.{}.", parts[4], config.domain);
+    let ip = match config
+              .domain_db
+              .get_record_by_name(&subdomain)
+              .recv()
+              .unwrap() {
+        Ok(record) => {
+            let srand = parts[0];
+            let token = parts[1];
+            let sign = parts[2];
+            let proto = parts[3];
+            let kite_domain = format!("{}.box.{}", parts[4], config.domain);
+            let payload = format!("{}:{}:{}:{}", proto, kite_domain, srand, token);
+            let salt = sign[..8].to_owned();
+
+            debug!("{} {} {} {} {}", srand, token, sign, proto, kite_domain);
+
+            // my $calc = sha1_hex($code . $payload . $salt);
+            let mut hasher = Sha1::new();
+            hasher.input_str(&format!("{}{}{}", record.token, payload, salt));
+            let calc = hasher.result_str();
+
+            // $result = (substr($calc, 0, 28) eq substr($sign, 8, 28)) ? '255.255.254.255' : '255.255.255.1';
+            let calc_sub = calc[..28].to_owned();
+            let sign_sub = sign[8..36].to_owned();
+
+            debug!("Signatures: {} {}", calc_sub, sign_sub);
+
+            if calc_sub == sign_sub {
+                "255.255.254.255"
+            } else {
+                "255.255.255.1"
+            }
+        }
+        Err(_) => {
+            // Return 255.255.255.0 to PageKite to indicate failure.
+            "255.255.255.0"
+        }
+    };
+
+    let mut pdns_response = PdnsResponse { result: Vec::new() };
+
+    let ns_record = PdnsLookupResponse {
+        qtype: "A".to_owned(),
+        qname: qname.to_owned(),
+        content: ip.to_owned(),
+        ttl: config.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    };
+    pdns_response
+        .result
+        .push(PdnsResponseParams::Lookup(ns_record));
+
+    pdns_response_as_iron(&pdns_response)
 }
 
 pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
@@ -93,9 +182,10 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
     debug!("pdns request is {}", input.method);
 
     if input.method == "lookup" {
-        let mut qname = input.parameters.qname.unwrap().to_lowercase();
+        let original_qname = input.parameters.qname.unwrap().to_lowercase();
+        let mut qname = original_qname.clone();
         let qtype = input.parameters.qtype.unwrap();
-        debug!("lookup for qtype={} qname={}", qtype, qname);
+        debug!("lookup for qtype={} qname={}", qtype, original_qname);
 
         // Example payload:
         //
@@ -107,12 +197,19 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         //                 "remote": "63.245.221.198",
         //                 "zone-id": -1}}
 
+        // If the qname ends up with .box.$domain.box.$domain we consider that it's a PageKite request.
+        // When finding such a request, treat it separately.
+        if qname.ends_with(&format!(".box.{}.box.{}", config.domain, config.domain)) {
+            return pakegite_query(&qname, &qtype, config);
+        }
+
         // If the qname starts with `_acme-challenge.` this is a DNS-01 challenge verification,
         // so remove that part of the domain to retrieve our record.
         // See https://tools.ietf.org/html/draft-ietf-acme-acme-06#section-8.4
         if qname.starts_with("_acme-challenge.") {
             qname = qname[16..].to_owned();
         }
+
         debug!("final qname={}", qname);
 
         // Look for a record with for the qname.
@@ -145,7 +242,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     // TODO: don't hardcode the content of this record!
                     let ns_record = PdnsLookupResponse {
                         qtype: "SOA".to_owned(),
-                        qname: qname.to_owned(),
+                        qname: original_qname.to_owned(),
                         content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
                             .to_owned(),
                         ttl: config.dns_ttl,
@@ -162,7 +259,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     // Add an "A" record.
                     let ns_record = PdnsLookupResponse {
                         qtype: "A".to_owned(),
-                        qname: qname.to_owned(),
+                        qname: original_qname.to_owned(),
                         content: a_record,
                         ttl: config.dns_ttl,
                         domain_id: None,
@@ -178,7 +275,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                     // Add a "TXT" record with the dns challenge content.
                     let ns_record = PdnsLookupResponse {
                         qtype: "TXT".to_owned(),
-                        qname: format!("_acme-challenge.{}", qname),
+                        qname: original_qname.to_owned(),
                         content: record.dns_challenge.unwrap(),
                         ttl: config.dns_ttl,
                         domain_id: None,
@@ -190,20 +287,7 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                         .push(PdnsResponseParams::Lookup(ns_record));
                 }
 
-                match serde_json::to_string(&pdns_response) {
-                    Ok(serialized) => {
-                        debug!("Response is: {}", serialized);
-                        let mut response = Response::with(serialized);
-                        response.status = Some(Status::Ok);
-                        response.headers.set(ContentType::json());
-
-                        return Ok(response);
-                    }
-                    Err(err) => {
-                        error!("{}", err);
-                        return EndpointError::with(status::InternalServerError, 501);
-                    }
-                }
+                return pdns_response_as_iron(&pdns_response);
             }
             Err(_) => {
                 // No such domain, return a `false` result to PowerDNS.
