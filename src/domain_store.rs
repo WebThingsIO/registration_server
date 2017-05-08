@@ -138,6 +138,7 @@ impl ToSql for SqlParam {
 
 impl DomainDb {
     pub fn new(path: &str) -> Self {
+        debug!("Opening database at {}", path);
         let config = r2d2::Config::default();
         let manager = SqliteConnectionManager::new(path);
         let pool = r2d2::Pool::new(config, manager).expect(&format!("Unable to open database at {}", path));
