@@ -65,7 +65,7 @@ pub struct PdnsResponse {
     result: Vec<PdnsResponseParams>,
 }
 
-fn pdns_failure(reason: &str) -> IronResult<Response> {
+fn pdns_failure_as_iron(reason: &str) -> IronResult<Response> {
     debug!("pdns_failure: {}", reason);
     let mut response = Response::with("{\"result\":false}");
     response.status = Some(Status::Ok);
@@ -103,7 +103,7 @@ pub fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     }
 }
 
-pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<Response> {
+pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
     // Pagekite sends dns requests to qnames like:
     // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
@@ -115,11 +115,11 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
         pdns_response
             .result
             .push(PdnsResponseParams::Lookup(soa_response(qname, config)));
-        return pdns_response_as_iron(&pdns_response);
+        return Ok(pdns_response);
     }
 
     if qtype != "A" && qtype != "ANY" {
-        return pdns_failure(&format!("Unsupported PageKite request type: {}", qtype));
+        return Err(format!("Unsupported PageKite request type: {}", qtype));
     }
 
     // Split up the qname.
@@ -175,44 +175,16 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
         .result
         .push(PdnsResponseParams::Lookup(ns_record));
 
-    pdns_response_as_iron(&pdns_response)
+    Ok(pdns_response)
 }
 
-pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
-    use std::net::SocketAddr::V4;
-    use std::net::Ipv4Addr;
+fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, String> {
+    debug!("pdns request is {}", req.method);
 
-    info!("GET /pdns");
-    // Only allow clients from localhost.
-    match req.remote_addr {
-        V4(addr) => {
-            if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
-                return EndpointError::with(status::BadRequest, 400);
-            }
-        }
-        _ => return EndpointError::with(status::BadRequest, 400),
-    }
-
-    // Read the request from the json body.
-    let mut s = String::new();
-    itry!(req.body.read_to_string(&mut s));
-
-    debug!("Body is: {}", s);
-
-    let input: PdnsRequest = match serde_json::from_str(&s) {
-        Ok(value) => value,
-        Err(err) => {
-            error!("Bad request: {}", err);
-            return EndpointError::with(status::BadRequest, 400);
-        }
-    };
-
-    debug!("pdns request is {}", input.method);
-
-    if input.method == "lookup" {
-        let original_qname = input.parameters.qname.unwrap().to_lowercase();
+    if req.method == "lookup" {
+        let original_qname = req.parameters.qname.unwrap().to_lowercase();
         let mut qname = original_qname.clone();
-        let qtype = input.parameters.qtype.unwrap();
+        let qtype = req.parameters.qtype.unwrap();
         debug!("lookup for qtype={} qname={}", qtype, original_qname);
 
         // Example payload:
@@ -249,12 +221,12 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
             Ok(record) => {
                 if record.local_ip.is_none() && qtype == "A" {
                     // No info on this domain, bail out.
-                    return pdns_failure("No local_ip");
+                    return Err("No local_ip".to_owned());
                 }
 
                 // Choose either the local or public ip based on the parameters.remote one.
                 let a_record = if record.public_ip.is_some() &&
-                                  input.parameters.remote.unwrap() == record.public_ip.unwrap() {
+                                  req.parameters.remote.unwrap() == record.public_ip.unwrap() {
                     // We are inside of the home network, return the local ip for the A record.
                     record.local_ip.unwrap()
                 } else {
@@ -303,14 +275,50 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                         .push(PdnsResponseParams::Lookup(ns_record));
                 }
 
-                return pdns_response_as_iron(&pdns_response);
+                return Ok(pdns_response);
             }
             Err(_) => {
                 // No such domain, return a `false` result to PowerDNS.
-                return pdns_failure("No record for this name.");
+                return Err("No record for this name.".to_owned());
             }
         }
     }
 
-    pdns_failure(&format!("Unsupported method: {}", input.method))
+    Err(format!("Unsupported method: {}", req.method))
+}
+
+pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
+    use std::net::SocketAddr::V4;
+    use std::net::Ipv4Addr;
+
+    info!("GET /pdns");
+    // Only allow clients from localhost.
+    match req.remote_addr {
+        V4(addr) => {
+            if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
+                return EndpointError::with(status::BadRequest, 400);
+            }
+        }
+        _ => return EndpointError::with(status::BadRequest, 400),
+    }
+
+    // Read the request from the json body.
+    let mut s = String::new();
+    itry!(req.body.read_to_string(&mut s));
+
+    debug!("Body is: {}", s);
+
+    let input: PdnsRequest = match serde_json::from_str(&s) {
+        Ok(value) => value,
+        Err(err) => {
+            error!("Bad request: {}", err);
+            return EndpointError::with(status::BadRequest, 400);
+        }
+    };
+
+    match process_request(input, config) {
+        Ok(ref response) => pdns_response_as_iron(response),
+        Err(err) => pdns_failure_as_iron(&err),
+    }
+
 }
