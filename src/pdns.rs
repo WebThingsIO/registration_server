@@ -197,9 +197,9 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         //                 "remote": "63.245.221.198",
         //                 "zone-id": -1}}
 
-        // If the qname ends up with .box.$domain.box.$domain we consider that it's a PageKite request.
+        // If the qname ends up with .box.$domain.box.$domain. we consider that it's a PageKite request.
         // When finding such a request, treat it separately.
-        if qname.ends_with(&format!(".box.{}.box.{}", config.domain, config.domain)) {
+        if qname.ends_with(&format!(".box.{}.box.{}.", config.domain, config.domain)) {
             return pakegite_query(&qname, &qtype, config);
         }
 
