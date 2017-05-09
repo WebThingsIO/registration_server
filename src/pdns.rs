@@ -96,6 +96,27 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
     debug!("PageKite query for {} {}", qtype, qname);
 
+    let mut pdns_response = PdnsResponse { result: Vec::new() };
+
+    if qtype == "SOA" {
+        // Add a "SOA" record.
+        // TODO: don't hardcode the content of this record!
+        let ns_record = PdnsLookupResponse {
+            qtype: "SOA".to_owned(),
+            qname: qname.to_owned(),
+            content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+                .to_owned(),
+            ttl: config.dns_ttl,
+            domain_id: None,
+            scope_mask: None,
+            auth: None,
+        };
+        pdns_response
+            .result
+            .push(PdnsResponseParams::Lookup(ns_record));
+        return pdns_response_as_iron(&pdns_response);
+    }
+
     if qtype != "A" && qtype != "ANY" {
         return pdns_failure(&format!("Unsupported PageKite request type: {}", qtype));
     }
@@ -141,8 +162,6 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
             "255.255.255.0"
         }
     };
-
-    let mut pdns_response = PdnsResponse { result: Vec::new() };
 
     let ns_record = PdnsLookupResponse {
         qtype: "A".to_owned(),
