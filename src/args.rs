@@ -10,14 +10,15 @@ use std::fs::File;
 use std::path::PathBuf;
 
 const USAGE: &'static str = "--config-file=[path]    'Path to a json configuration file.'
---data-directory        'The directory where the persistent data will be saved.'
+--data-directory=[dir]  'The directory where the persistent data will be saved.'
 --host=[host]           'Set local hostname.'
 --port=[port]           'Set port to listen on for http connections.'
 --cert-directory=[dir]  'Certificate directory.'
 --domain=[domain]       'The domain that will be tied to this registration server.'
 --dns-ttl=[ttl]         'TTL of the DNS records, in seconds.'
 --eviction-delay=[secs] 'How often we purge old records.'
---tunnel-ip=[ip]        'The ip address of the tunnel endpoint'";
+--tunnel-ip=[ip]        'The ip address of the tunnel endpoint.'
+--soa-content=[dns]     'The content of the SOA record for this tunnel.'";
 
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
@@ -29,6 +30,7 @@ pub struct Args {
     pub cert_directory: Option<PathBuf>,
     pub domain: String,
     tunnel_ip: String,
+    soa_content: String,
     dns_ttl: u32,
     eviction_delay: u32,
 }
@@ -64,6 +66,10 @@ impl Args {
                 .value_of("tunnel-ip")
                 .unwrap_or("0.0.0.0")
                 .to_owned(),
+            soa_content: matches
+                .value_of("soa-content")
+                .unwrap_or("_soa_not_configured_")
+                .to_owned(),
             dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
             eviction_delay: value_t!(matches, "eviction-delay", u32)
                 .unwrap_or(DEFAULT_EVICTION_DELAY),
@@ -91,6 +97,7 @@ impl Args {
             tunnel_ip: self.tunnel_ip.clone(),
             dns_ttl: self.dns_ttl,
             eviction_delay: self.eviction_delay,
+            soa_content: self.soa_content.clone(),
         }
     }
 }
@@ -124,6 +131,7 @@ fn test_args() {
     assert_eq!(args.dns_ttl, 120);
     assert_eq!(args.eviction_delay, 60);
 
+    let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
     let args = Args::from(vec!["registration_server", "--config-file=./config.json.sample"]);
     assert_eq!(args.port, 4141);
     assert_eq!(args.host, "127.0.1.1");
@@ -132,4 +140,5 @@ fn test_args() {
     assert_eq!(args.tunnel_ip, "1.2.3.4");
     assert_eq!(args.dns_ttl, 89);
     assert_eq!(args.eviction_delay, 123);
+    assert_eq!(args.soa_content, soa);
 }

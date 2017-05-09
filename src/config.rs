@@ -11,4 +11,5 @@ pub struct Config {
     pub tunnel_ip: String,
     pub dns_ttl: u32,
     pub eviction_delay: u32,
+    pub soa_content: String,
 }

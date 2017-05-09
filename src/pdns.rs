@@ -91,13 +91,11 @@ pub fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
 }
 
 // Returns a SOA record for a given qname.
-// TODO: Don't hardcode the content of this record!
 pub fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "SOA".to_owned(),
         qname: qname.to_owned(),
-        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
-            .to_owned(),
+        content: config.soa_content.to_owned(),
         ttl: config.dns_ttl,
         domain_id: None,
         scope_mask: None,
