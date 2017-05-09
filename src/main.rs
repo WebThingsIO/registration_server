@@ -72,6 +72,8 @@ fn main() {
     info!("Starting server on {}:{}", args.host, args.port);
     let addr = format!("{}:{}", args.host, args.port);
 
+    pdns::start_socket_endpoint(&config);
+
     if args.cert_directory.is_none() {
         iron.http(addr.as_ref() as &str).unwrap();
     } else {

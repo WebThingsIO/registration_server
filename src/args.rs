@@ -18,7 +18,8 @@ const USAGE: &'static str = "--config-file=[path]    'Path to a json configurati
 --dns-ttl=[ttl]         'TTL of the DNS records, in seconds.'
 --eviction-delay=[secs] 'How often we purge old records.'
 --tunnel-ip=[ip]        'The ip address of the tunnel endpoint.'
---soa-content=[dns]     'The content of the SOA record for this tunnel.'";
+--soa-content=[dns]     'The content of the SOA record for this tunnel.'
+--socket-path=[path]    'The path to the socket used to communicate with PowerDNS'";
 
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
@@ -31,6 +32,7 @@ pub struct Args {
     pub domain: String,
     tunnel_ip: String,
     soa_content: String,
+    socket_path: String,
     dns_ttl: u32,
     eviction_delay: u32,
 }
@@ -70,6 +72,10 @@ impl Args {
                 .value_of("soa-content")
                 .unwrap_or("_soa_not_configured_")
                 .to_owned(),
+            socket_path: matches
+                .value_of("soa-content")
+                .unwrap_or("/tmp/pdns_tunnel.sock")
+                .to_owned(),
             dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
             eviction_delay: value_t!(matches, "eviction-delay", u32)
                 .unwrap_or(DEFAULT_EVICTION_DELAY),
@@ -98,6 +104,7 @@ impl Args {
             dns_ttl: self.dns_ttl,
             eviction_delay: self.eviction_delay,
             soa_content: self.soa_content.clone(),
+            socket_path: self.socket_path.clone(),
         }
     }
 }
@@ -113,6 +120,7 @@ fn test_args() {
     assert_eq!(args.tunnel_ip, "1.2.3.4");
     assert_eq!(args.dns_ttl, 60);
     assert_eq!(args.eviction_delay, DEFAULT_EVICTION_DELAY);
+    assert_eq!(args.socket_path, "/tmp/pdns_tunnel.sock");
 
     let args = Args::from(vec!["registration_server",
                                "--host=127.0.1.1",
@@ -130,6 +138,7 @@ fn test_args() {
     assert_eq!(args.tunnel_ip, "1.2.3.4");
     assert_eq!(args.dns_ttl, 120);
     assert_eq!(args.eviction_delay, 60);
+    assert_eq!(args.socket_path, "/tmp/pdns_tunnel.sock");
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
     let args = Args::from(vec!["registration_server", "--config-file=./config.json.sample"]);
@@ -141,4 +150,5 @@ fn test_args() {
     assert_eq!(args.dns_ttl, 89);
     assert_eq!(args.eviction_delay, 123);
     assert_eq!(args.soa_content, soa);
+    assert_eq!(args.socket_path, "/tmp/powerdns_tunnel.sock");
 }

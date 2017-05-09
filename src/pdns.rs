@@ -15,9 +15,13 @@ use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use serde_json;
-use std::io::Read;
+use std::fs;
+use std::io::{Read, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::Path;
+use std::thread;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct PdnsRequestParameters {
     // intialize method
     path: Option<String>,
@@ -33,7 +37,7 @@ struct PdnsRequestParameters {
     real_remote: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct PdnsRequest {
     method: String,
     parameters: PdnsRequestParameters,
@@ -179,7 +183,7 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsR
 }
 
 fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, String> {
-    debug!("pdns request is {}", req.method);
+    debug!("pdns request is {:?}", req);
 
     if req.method == "lookup" {
         let original_qname = req.parameters.qname.unwrap().to_lowercase();
@@ -287,6 +291,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
     Err(format!("Unsupported method: {}", req.method))
 }
 
+// Answers to an HTTP request when using the HTTP remote backend.
 pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
     use std::net::SocketAddr::V4;
     use std::net::Ipv4Addr;
@@ -321,4 +326,130 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         Err(err) => pdns_failure_as_iron(&err),
     }
 
+}
+
+// Custom method to read just enough characters from the stream to
+// build a JSON object.
+// Directly using read_to_string or serde_json::from_reader cause
+// the stream to reach EOF and subsequent write fail with a
+// "Broken Pipe" error.
+fn read_json_from_stream(mut stream: &UnixStream) -> String {
+    let mut buffer = [0; 1];
+    let mut balance_count = 0;
+    let mut result = String::new();
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(_) => {
+                if buffer[0] == b'{' {
+                    balance_count += 1;
+                } else if buffer[0] == b'}' {
+                    balance_count -= 1;
+                }
+                result.push(buffer[0] as char);
+            }
+            Err(err) => {
+                error!("Stream reading error: {}", err);
+            }
+        }
+
+        if balance_count == 0 {
+            break;
+        }
+    }
+
+    // Read the trailing \n
+    #[allow(unused_must_use)]
+    {
+        stream.read(&mut buffer);
+    }
+
+    result
+}
+
+fn handle_socket_request(mut stream: UnixStream, config: &Config) {
+    let error_response = b"{\"result\":false}";
+
+    macro_rules! send {
+        ($content:expr) => (
+            stream.write_all($content).expect("Failed to write answer to the pdns socket");
+        )
+    }
+
+    loop {
+        let mut s = read_json_from_stream(&stream);
+        debug!("JSON String is {}", s);
+        let input: PdnsRequest = match serde_json::from_str(&mut s) {
+            Ok(value) => value,
+            Err(err) => {
+                error!("JSON error: {}", err);
+                break;
+            }
+        };
+
+        // Special case for the `initialize` method which is a no-op that
+        // just returns success.
+        if input.method == "initialize" {
+            debug!("Answering to initialization request");
+            send!(b"{\"result\":true}");
+            continue;
+        }
+
+        match process_request(input, config) {
+            Ok(ref response) => {
+                match serde_json::to_string(response) {
+                    Ok(serialized) => {
+                        debug!("Response is: {}", serialized);
+                        send!(serialized.as_bytes());
+                    }
+                    Err(err) => {
+                        error!("Error serializing JSON: {}", err);
+                        send!(error_response);
+                    }
+                }
+            }
+            Err(err) => {
+                error!("Error processing request: {}", err);
+                send!(error_response);
+            }
+        }
+    }
+}
+
+pub fn start_socket_endpoint(config: &Config) {
+    let path = config.socket_path.clone();
+
+    debug!("Starting the pdns socket endpoint at {}", path);
+
+    if Path::exists(Path::new(&path)) {
+        #[allow(unused_must_use)]
+        {
+            fs::remove_file(path.clone());
+        }
+    }
+
+    let config = config.clone();
+    let path = path.clone();
+    thread::Builder::new()
+        .name("tunnel pdns socket".to_owned())
+        .spawn(move || {
+            let socket = match UnixListener::bind(path) {
+                Ok(sock) => sock,
+                Err(e) => {
+                    error!("Couldn't bind: {:?}", e);
+                    return;
+                }
+            };
+            for stream in socket.incoming() {
+                match stream {
+                    Ok(stream) => {
+                        let config = config.clone();
+                        thread::spawn(move || handle_socket_request(stream, &config));
+                    }
+                    Err(_) => {
+                        break;
+                    }
+                }
+            }
+        })
+        .expect("Failed to start pdns socket thread.");
 }
