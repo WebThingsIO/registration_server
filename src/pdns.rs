@@ -416,7 +416,12 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
 }
 
 pub fn start_socket_endpoint(config: &Config) {
-    let path = config.socket_path.clone();
+    if config.socket_path.is_none() {
+        error!("No socket path configured!");
+        return;
+    }
+
+    let path = &config.socket_path.clone().unwrap();
 
     debug!("Starting the pdns socket endpoint at {}", path);
 

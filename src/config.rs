@@ -12,5 +12,5 @@ pub struct Config {
     pub dns_ttl: u32,
     pub eviction_delay: u32,
     pub soa_content: String,
-    pub socket_path: String,
+    pub socket_path: Option<String>,
 }

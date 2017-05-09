@@ -288,9 +288,13 @@ pub fn create(config: &Config) -> Router {
                "dnsconfig");
 
     let config_ = config.clone();
-    router.post("pdns",
-                move |req: &mut Request| -> IronResult<Response> { pdns_endpoint(req, &config_) },
-                "pdns");
+    if config.socket_path.is_none() {
+        router.post("pdns",
+                    move |req: &mut Request| -> IronResult<Response> {
+                        pdns_endpoint(req, &config_)
+                    },
+                    "pdns");
+    }
 
     router
 }
