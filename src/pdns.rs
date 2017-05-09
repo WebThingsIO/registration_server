@@ -140,12 +140,10 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
 
             debug!("{} {} {} {} {}", srand, token, sign, proto, kite_domain);
 
-            // my $calc = sha1_hex($code . $payload . $salt);
             let mut hasher = Sha1::new();
             hasher.input_str(&format!("{}{}{}", record.token, payload, salt));
             let calc = hasher.result_str();
 
-            // $result = (substr($calc, 0, 28) eq substr($sign, 8, 28)) ? '255.255.254.255' : '255.255.255.1';
             let calc_sub = calc[..28].to_owned();
             let sign_sub = sign[8..36].to_owned();
 
