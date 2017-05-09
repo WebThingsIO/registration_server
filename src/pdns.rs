@@ -90,8 +90,23 @@ pub fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
     }
 }
 
+// Returns a SOA record for a given qname.
+// TODO: Don't hardcode the content of this record!
+pub fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "SOA".to_owned(),
+        qname: qname.to_owned(),
+        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+            .to_owned(),
+        ttl: config.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
 pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<Response> {
-    // Pagekite sends dns requests like:
+    // Pagekite sends dns requests to qnames like:
     // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
     debug!("PageKite query for {} {}", qtype, qname);
@@ -99,21 +114,9 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
     let mut pdns_response = PdnsResponse { result: Vec::new() };
 
     if qtype == "SOA" {
-        // Add a "SOA" record.
-        // TODO: don't hardcode the content of this record!
-        let ns_record = PdnsLookupResponse {
-            qtype: "SOA".to_owned(),
-            qname: qname.to_owned(),
-            content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
-                .to_owned(),
-            ttl: config.dns_ttl,
-            domain_id: None,
-            scope_mask: None,
-            auth: None,
-        };
         pdns_response
             .result
-            .push(PdnsResponseParams::Lookup(ns_record));
+            .push(PdnsResponseParams::Lookup(soa_response(qname, config)));
         return pdns_response_as_iron(&pdns_response);
     }
 
@@ -186,10 +189,10 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
     match req.remote_addr {
         V4(addr) => {
             if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
-                return EndpointError::with(status::BadRequest, 400)
+                return EndpointError::with(status::BadRequest, 400);
             }
-        },
-        _ => return EndpointError::with(status::BadRequest, 400)
+        }
+        _ => return EndpointError::with(status::BadRequest, 400),
     }
 
     // Read the request from the json body.
@@ -224,8 +227,8 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
         //                 "remote": "63.245.221.198",
         //                 "zone-id": -1}}
 
-        // If the qname ends up with .box.$domain.box.$domain. we consider that it's a PageKite request.
-        // When finding such a request, treat it separately.
+        // If the qname ends up with .box.$domain.box.$domain. we consider that it's a
+        // PageKite request and process it separately.
         if qname.ends_with(&format!(".box.{}.box.{}.", config.domain, config.domain)) {
             return pakegite_query(&qname, &qtype, config);
         }
@@ -265,21 +268,9 @@ pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response>
                 let mut pdns_response = PdnsResponse { result: Vec::new() };
 
                 if qtype == "SOA" {
-                    // Add a "SOA" record.
-                    // TODO: don't hardcode the content of this record!
-                    let ns_record = PdnsLookupResponse {
-                        qtype: "SOA".to_owned(),
-                        qname: original_qname.to_owned(),
-                        content: "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
-                            .to_owned(),
-                        ttl: config.dns_ttl,
-                        domain_id: None,
-                        scope_mask: None,
-                        auth: None,
-                    };
                     pdns_response
                         .result
-                        .push(PdnsResponseParams::Lookup(ns_record));
+                        .push(PdnsResponseParams::Lookup(soa_response(&original_qname, config)));
                 }
 
                 if qtype == "ANY" || qtype == "A" {
