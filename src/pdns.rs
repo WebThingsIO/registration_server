@@ -178,9 +178,19 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> IronResult<R
 }
 
 pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
-    // TODO: check where the request is coming from and only allow from pdns.
+    use std::net::SocketAddr::V4;
+    use std::net::Ipv4Addr;
 
     info!("GET /pdns");
+    // Only allow clients from localhost.
+    match req.remote_addr {
+        V4(addr) => {
+            if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
+                return EndpointError::with(status::BadRequest, 400)
+            }
+        },
+        _ => return EndpointError::with(status::BadRequest, 400)
+    }
 
     // Read the request from the json body.
     let mut s = String::new();
