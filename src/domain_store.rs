@@ -181,6 +181,12 @@ impl DomainDb {
                                 panic!("Unable to create the domains_timestamp index: {}", err);
                             });
 
+        conn.execute("CREATE INDEX IF NOT EXISTS domains_public_ip ON domains(public_ip)",
+                     &[])
+            .unwrap_or_else(|err| {
+                                panic!("Unable to create the domains_public_ip index: {}", err);
+                            });
+
         DomainDb { pool: pool }
     }
 
@@ -207,6 +213,38 @@ impl DomainDb {
         });
 
         rx
+    }
+
+    fn select_records(&self,
+                     request: &str,
+                     value: &str)
+                     -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
+        let (tx, rx) = channel();
+
+        // Run the sql command on a pooled thread.
+        let pool = self.pool.clone();
+        let value = value.to_owned();
+        let request = request.to_owned();
+        thread::spawn(move || {
+            let mut result = Vec::new();
+            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let mut stmt = sqltry!(conn.prepare(&request), tx);
+            let mut rows = sqltry!(stmt.query(&[&value]), tx);
+            while let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                result.push(DomainRecord::from_sql(row));
+            } 
+            tx.send(Ok(result)).unwrap();
+        });
+
+        rx
+    }
+
+    pub fn get_records_by_public_ip(&self, public_ip: &str) -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
+        self.select_records("SELECT token, local_name, remote_name, dns_challenge, \
+                            local_ip, public_ip, timestamp \
+                            FROM domains WHERE public_ip=$1",
+                           public_ip)
     }
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {

@@ -112,53 +112,26 @@ fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
+// Public discovery endpoint, returning names of servers on the same
+// local network than the client.
 fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /discovery");
 
     let remote_ip = format!("{}", req.remote_addr.ip());
 
-    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
-    let token = map.find(&["token"]);
-    if token.is_none() {
-        return EndpointError::with(status::BadRequest, 400);
-    }
-    let token = String::from_value(token.unwrap()).unwrap();
-
     match config
               .domain_db
-              .get_record_by_token(&token)
+              .get_records_by_public_ip(&remote_ip)
               .recv()
               .unwrap() {
-        Ok(record) => {
-            if record.public_ip.is_none() {
-                return EndpointError::with(status::BadRequest, 400);
-            }
-
-            #[derive(Serialize)]
-            struct Discovery {
-                href: String,
-                local: bool,
-            }
-
-            // We don't know the local port but we consider that it defaults
-            // to the standard https one.
-            // We need to remove the extra dot at the end of the name...
-            let is_local = record.public_ip.unwrap() == remote_ip;
-
-            let href = if is_local {
+        Ok(records) => {
+            
+            let results: Vec<String> = records.into_iter().map(|item| {
                 format!("https://{}",
-                        record.local_name[..record.local_name.len() - 1].to_owned())
-            } else {
-                format!("https://{}",
-                        record.remote_name[..record.remote_name.len() - 1].to_owned())
-            };
+                        item.local_name[..item.local_name.len() - 1].to_owned())
+            }).collect();
 
-            let answer = Discovery {
-                href: href,
-                local: is_local,
-            };
-
-            let mut response = Response::with(serde_json::to_string(&answer).unwrap());
+            let mut response = Response::with(serde_json::to_string(&results).unwrap());
             response.headers.set(ContentType::json());
             Ok(response)
         }

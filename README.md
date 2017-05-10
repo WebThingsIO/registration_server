@@ -19,4 +19,4 @@ Five endpoints are provided:
 3. /subscribe?name=XXX will reserve the name `XXX` if it doesn't exist yet and create a token for it.
 4. /unsubscribe?token=YYY will delete the record for this token.
 5. /dnsconfig?challenge=XXX&token=YYY configures the dns server for this domain.
-6. /discovery?token=XXX returns the dns name to use and whether this is a local or remote connection.
+6. /discovery returns the dns names of the servers registered from the same network.
