@@ -60,8 +60,9 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                 .unwrap()
                 .as_secs() as i64;
 
-            let new_record = DomainRecord::new(&record.name,
-                                               &record.token,
+            let new_record = DomainRecord::new(&record.token,
+                                               &record.local_name,
+                                               &record.remote_name,
                                                dns_challenge,
                                                Some(&local_ip),
                                                Some(&public_ip),
@@ -142,10 +143,19 @@ fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
             // We don't know the local port but we consider that it defaults
             // to the standard https one.
             // We need to remove the extra dot at the end of the name...
-            let href = format!("https://{}", record.name[..record.name.len() - 1].to_owned());
+            let is_local = record.public_ip.unwrap() == remote_ip;
+
+            let href = if is_local {
+                format!("https://{}",
+                        record.local_name[..record.local_name.len() - 1].to_owned())
+            } else {
+                format!("https://{}",
+                        record.remote_name[..record.remote_name.len() - 1].to_owned())
+            };
+
             let answer = Discovery {
                 href: href,
-                local: record.public_ip.unwrap() == remote_ip,
+                local: is_local,
             };
 
             let mut response = Response::with(serde_json::to_string(&answer).unwrap());
@@ -209,7 +219,9 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Err(DomainError::NoRecord) => {
                     // Create a token, create and store a record and finally return the token.
                     let token = format!("{}", Uuid::new_v4());
-                    let record = DomainRecord::new(&full_name, &token, None, None, None, 0);
+                    let local_name = format!("local.{}", full_name);
+                    let record =
+                        DomainRecord::new(&token, &local_name, &full_name, None, None, None, 0);
                     match config.domain_db.add_record(record).recv().unwrap() {
                         Ok(()) => {
                             // We don't want the full domain name or the dns challenge in the
@@ -279,8 +291,9 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                 None => None,
             };
 
-            let new_record = DomainRecord::new(&record.name,
-                                               &record.token,
+            let new_record = DomainRecord::new(&record.token,
+                                               &record.local_name,
+                                               &record.remote_name,
                                                Some(&challenge),
                                                local_ip,
                                                public_ip,

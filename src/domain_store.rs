@@ -18,8 +18,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DomainRecord {
-    pub name: String,
     pub token: String,
+    pub local_name: String,
+    pub remote_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_challenge: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,17 +46,19 @@ macro_rules! sqlstr {
 impl DomainRecord {
     fn from_sql(row: Row) -> Self {
         DomainRecord {
-            name: row.get(0),
-            token: row.get(1),
-            dns_challenge: sqlstr!(row, 2),
-            local_ip: sqlstr!(row, 3),
-            public_ip: sqlstr!(row, 4),
-            timestamp: row.get(5),
+            token: row.get(0),
+            local_name: row.get(1),
+            remote_name: row.get(2),
+            dns_challenge: sqlstr!(row, 3),
+            local_ip: sqlstr!(row, 4),
+            public_ip: sqlstr!(row, 5),
+            timestamp: row.get(6),
         }
     }
 
-    pub fn new(name: &str,
-               token: &str,
+    pub fn new(token: &str,
+               local_name: &str,
+               remote_name: &str,
                dns_challenge: Option<&str>,
                local_ip: Option<&str>,
                public_ip: Option<&str>,
@@ -72,7 +75,8 @@ impl DomainRecord {
         }
 
         DomainRecord {
-            name: name.to_owned(),
+            local_name: local_name.to_owned(),
+            remote_name: remote_name.to_owned(),
             token: token.to_owned(),
             dns_challenge: str2sql!(dns_challenge),
             local_ip: str2sql!(local_ip),
@@ -147,8 +151,9 @@ impl DomainDb {
         // Create the database table if needed.
         let conn = pool.get().unwrap();
         conn.execute("CREATE TABLE IF NOT EXISTS domains (
-                      name          TEXT NOT NULL PRIMARY KEY,
-                      token         TEXT NOT NULL,
+                      token         TEXT NOT NULL PRIMARY KEY,
+                      local_name    TEXT NOT NULL,
+                      remote_name   TEXT NOT NULL,
                       dns_challenge TEXT NOT NULL,
                       local_ip      TEXT NOT NULL,
                       public_ip     TEXT NOT NULL,
@@ -158,16 +163,22 @@ impl DomainDb {
                                 panic!("Unable to create the domains database: {}", err);
                             });
 
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_token ON domains(token)",
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_local ON domains(local_name)",
                      &[])
             .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains.token index: {}", err);
+                                panic!("Unable to create the domains_local index: {}", err);
+                            });
+
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_remote ON domains(remote_name)",
+                     &[])
+            .unwrap_or_else(|err| {
+                                panic!("Unable to create the domains_remote index: {}", err);
                             });
 
         conn.execute("CREATE INDEX IF NOT EXISTS domains_timestamp ON domains(timestamp)",
                      &[])
             .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains.timestamp index: {}", err);
+                                panic!("Unable to create the domains_timestamp index: {}", err);
                             });
 
         DomainDb { pool: pool }
@@ -199,13 +210,15 @@ impl DomainDb {
     }
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {
-        self.select_record("SELECT name, token, dns_challenge, local_ip, public_ip, timestamp \
-                            FROM domains WHERE name=$1",
+        self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
+                            local_ip, public_ip, timestamp \
+                            FROM domains WHERE local_name=$1 or remote_name=$1",
                            name)
     }
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<DomainRecord, DomainError>> {
-        self.select_record("SELECT name, token, dns_challenge, local_ip, public_ip, timestamp \
+        self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
+                           local_ip, public_ip, timestamp \
                             FROM domains WHERE token=$1",
                            token)
     }
@@ -217,9 +230,10 @@ impl DomainDb {
         let record = record.clone();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6)",
-                                 &[&record.name,
-                                   &record.token,
+            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                                 &[&record.token,
+                                   &record.local_name,
+                                   &record.remote_name,
                                    &record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.local_ip.unwrap_or("".to_owned()),
                                    &record.public_ip.unwrap_or("".to_owned()),
@@ -241,12 +255,13 @@ impl DomainDb {
 
             sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, local_ip=$2, \
                                   public_ip=$3, timestamp=$4 \
-                                  WHERE name=$5 AND token=$6",
+                                  WHERE (local_name=$5 OR remote_name=$6) AND token=$7",
                                  &[&record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.local_ip.unwrap_or("".to_owned()),
                                    &record.public_ip.unwrap_or("".to_owned()),
                                    &record.timestamp,
-                                   &record.name,
+                                   &record.local_name,
+                                   &record.remote_name,
                                    &record.token]),
                     tx);
             tx.send(Ok(())).unwrap();
@@ -296,11 +311,6 @@ impl DomainDb {
         rx
     }
 
-    pub fn delete_record_by_name(&self, name: &str) -> Receiver<Result<i32, DomainError>> {
-        self.execute_1param_sql("DELETE FROM domains WHERE name=$1",
-                                SqlParam::Text(name.to_owned()))
-    }
-
     pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<i32, DomainError>> {
         self.execute_1param_sql("DELETE FROM domains WHERE token=$1",
                                 SqlParam::Text(token.to_owned()))
@@ -341,8 +351,13 @@ fn test_domain_store() {
     }
 
     // Add a record without a dns challenge.
-    let no_challenge_record =
-        DomainRecord::new("test.example.org", "test-token", None, None, None, 0);
+    let no_challenge_record = DomainRecord::new("test-token",
+                                                "local.test.example.org",
+                                                "test.example.org",
+                                                None,
+                                                None,
+                                                None,
+                                                0);
     db.add_record(no_challenge_record.clone())
         .recv()
         .unwrap()
@@ -362,8 +377,9 @@ fn test_domain_store() {
     }
 
     // Update the record to have challenge.
-    let challenge_record = DomainRecord::new("test.example.org",
-                                             "test-token",
+    let challenge_record = DomainRecord::new("test-token",
+                                             "local.test.example.org",
+                                             "test.example.org",
                                              Some("dns-challenge"),
                                              None,
                                              None,
@@ -386,28 +402,12 @@ fn test_domain_store() {
         Err(err) => panic!("Failed to find record by token: {:?}", err),
     }
 
-    // Remove by name.
-    db.delete_record_by_name(&challenge_record.name)
-        .recv()
-        .unwrap()
-        .expect("Should delete record by name");
-    match db.get_record_by_name(&challenge_record.name)
-              .recv()
-              .unwrap() {
-        Err(DomainError::NoRecord) => {}
-        _ => panic!("Should not find this record anymore."),
-    }
-
-    // Add again, and remove by token.
-    db.add_record(challenge_record.clone())
-        .recv()
-        .unwrap()
-        .expect("Adding the challenge record");
+    // Remove by token.
     db.delete_record_by_token(&challenge_record.token)
         .recv()
         .unwrap()
         .expect("Should delete record by token");
-    match db.get_record_by_name(&challenge_record.name)
+    match db.get_record_by_name(&challenge_record.local_name)
               .recv()
               .unwrap() {
         Err(DomainError::NoRecord) => {}
