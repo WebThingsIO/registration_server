@@ -228,9 +228,9 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                     return Err("No local_ip".to_owned());
                 }
 
-                // Choose either the local or public ip based on the parameters.remote one.
-                let a_record = if record.public_ip.is_some() &&
-                                  req.parameters.remote.unwrap() == record.public_ip.unwrap() {
+                // Choose either the local or public ip based on wether the qname matches
+                // the local_name or remote_name.
+                let a_record = if record.local_ip.is_some() && qname == record.local_name {
                     // We are inside of the home network, return the local ip for the A record.
                     record.local_ip.unwrap()
                 } else {
