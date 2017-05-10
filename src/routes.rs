@@ -86,8 +86,8 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /ping");
+fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /info");
 
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     let token = map.find(&["token"]);
@@ -268,9 +268,9 @@ pub fn create(config: &Config) -> Router {
                "post_message");
 
     let config_ = config.clone();
-    router.get("ping",
-               move |req: &mut Request| -> IronResult<Response> { ping(req, &config_) },
-               "ping");
+    router.get("info",
+               move |req: &mut Request| -> IronResult<Response> { info(req, &config_) },
+               "info");
 
     let config_ = config.clone();
     router.get("subscribe",

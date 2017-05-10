@@ -62,10 +62,11 @@ fn main() {
     mount.mount("/", routes::create(&config));
 
     let mut chain = Chain::new(mount);
-    let cors = CORS::new(vec![(vec![Method::Get], "ping".to_owned()),
+    let cors = CORS::new(vec![(vec![Method::Get], "info".to_owned()),
                               (vec![Method::Get], "subscribe".to_owned()),
                               (vec![Method::Get], "unsubscribe".to_owned()),
-                              (vec![Method::Get], "register".to_owned())]);
+                              (vec![Method::Get], "register".to_owned()),
+                              (vec![Method::Get], "dnsconfig".to_owned())]);
     chain.link_after(cors);
 
     let iron = Iron::new(chain);
