@@ -66,7 +66,8 @@ fn main() {
                               (vec![Method::Get], "subscribe".to_owned()),
                               (vec![Method::Get], "unsubscribe".to_owned()),
                               (vec![Method::Get], "register".to_owned()),
-                              (vec![Method::Get], "dnsconfig".to_owned())]);
+                              (vec![Method::Get], "dnsconfig".to_owned()),
+                              (vec![Method::Get], "discovery".to_owned())]);
     chain.link_after(cors);
 
     let iron = Iron::new(chain);

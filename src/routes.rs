@@ -111,6 +111,55 @@ fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
+fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /discovery");
+
+    let remote_ip = format!("{}", req.remote_addr.ip());
+
+    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let token = map.find(&["token"]);
+    if token.is_none() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+    let token = String::from_value(token.unwrap()).unwrap();
+
+    match config
+              .domain_db
+              .get_record_by_token(&token)
+              .recv()
+              .unwrap() {
+        Ok(record) => {
+            if record.public_ip.is_none() {
+                return EndpointError::with(status::BadRequest, 400);
+            }
+
+            #[derive(Serialize)]
+            struct Discovery {
+                href: String,
+                kind: String,
+            }
+            let answer = if record.public_ip.unwrap() == remote_ip {
+                // This is a connection from the same network.
+                Discovery {
+                    href: record.name,
+                    kind: "local".to_owned(),
+                }
+            } else {
+                Discovery {
+                    href: record.name,
+                    kind: "remote".to_owned(),
+                }
+            };
+
+            let mut response = Response::with(serde_json::to_string(&answer).unwrap());
+            response.headers.set(ContentType::json());
+            Ok(response)
+        }
+        Err(DomainError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(_) => EndpointError::with(status::InternalServerError, 501),
+    }
+}
+
 fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /unsubscribe");
 
@@ -277,6 +326,7 @@ pub fn create(config: &Config) -> Router {
     handler!(subscribe);
     handler!(unsubscribe);
     handler!(dnsconfig);
+    handler!(discovery);
 
     if config.socket_path.is_none() {
         handler!(pdns);
