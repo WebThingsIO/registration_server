@@ -292,7 +292,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 }
 
 // Answers to an HTTP request when using the HTTP remote backend.
-pub fn pdns_endpoint(req: &mut Request, config: &Config) -> IronResult<Response> {
+pub fn pdns(req: &mut Request, config: &Config) -> IronResult<Response> {
     use std::net::SocketAddr::V4;
     use std::net::Ipv4Addr;
 

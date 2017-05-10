@@ -9,7 +9,7 @@ use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use params::{FromValue, Params, Value};
-use pdns::pdns_endpoint;
+use pdns::pdns;
 use router::Router;
 use serde_json;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -200,7 +200,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-fn dns_config(req: &mut Request, config: &Config) -> IronResult<Response> {
+fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /dnsconfig");
 
     // Extract the challenge and token parameter.
@@ -262,38 +262,24 @@ fn dns_config(req: &mut Request, config: &Config) -> IronResult<Response> {
 pub fn create(config: &Config) -> Router {
     let mut router = Router::new();
 
-    let config_ = config.clone();
-    router.get("register",
-               move |req: &mut Request| -> IronResult<Response> { register(req, &config_) },
-               "post_message");
+    macro_rules! handler {
+        ($name:ident) => (
+            let config_ = config.clone();
+            router.get(stringify!($name),
+                       move |req: &mut Request| -> IronResult<Response> {
+                $name(req, &config_)
+            }, stringify!($name));
+        )
+    }
 
-    let config_ = config.clone();
-    router.get("info",
-               move |req: &mut Request| -> IronResult<Response> { info(req, &config_) },
-               "info");
+    handler!(register);
+    handler!(info);
+    handler!(subscribe);
+    handler!(unsubscribe);
+    handler!(dnsconfig);
 
-    let config_ = config.clone();
-    router.get("subscribe",
-               move |req: &mut Request| -> IronResult<Response> { subscribe(req, &config_) },
-               "subscribe");
-
-    let config_ = config.clone();
-    router.get("unsubscribe",
-               move |req: &mut Request| -> IronResult<Response> { unsubscribe(req, &config_) },
-               "unsubscribe");
-
-    let config_ = config.clone();
-    router.get("dnsconfig",
-               move |req: &mut Request| -> IronResult<Response> { dns_config(req, &config_) },
-               "dnsconfig");
-
-    let config_ = config.clone();
     if config.socket_path.is_none() {
-        router.post("pdns",
-                    move |req: &mut Request| -> IronResult<Response> {
-                        pdns_endpoint(req, &config_)
-                    },
-                    "pdns");
+        handler!(pdns);
     }
 
     router
