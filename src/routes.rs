@@ -136,19 +136,16 @@ fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
             #[derive(Serialize)]
             struct Discovery {
                 href: String,
-                kind: String,
+                local: bool,
             }
-            let answer = if record.public_ip.unwrap() == remote_ip {
-                // This is a connection from the same network.
-                Discovery {
-                    href: record.name,
-                    kind: "local".to_owned(),
-                }
-            } else {
-                Discovery {
-                    href: record.name,
-                    kind: "remote".to_owned(),
-                }
+
+            // We don't know the local port but we consider that it defaults
+            // to the standard https one.
+            // We need to remove the extra dot at the end of the name...
+            let href = format!("https://{}", record.name[..record.name.len() - 1].to_owned());
+            let answer = Discovery {
+                href: href,
+                local: record.public_ip.unwrap() == remote_ip,
             };
 
             let mut response = Response::with(serde_json::to_string(&answer).unwrap());
