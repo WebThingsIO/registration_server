@@ -126,11 +126,21 @@ fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
               .recv()
               .unwrap() {
         Ok(records) => {
-            
-            let results: Vec<String> = records.into_iter().map(|item| {
-                format!("https://{}",
-                        item.local_name[..item.local_name.len() - 1].to_owned())
-            }).collect();
+            #[derive(Serialize)]
+            struct Discovered {
+                href: String,
+                desc: String,
+            }
+            let results: Vec<Discovered> = records
+                .into_iter()
+                .map(|item| {
+                         Discovered {
+                             href: format!("https://{}",
+                                           item.local_name[..item.local_name.len() - 1].to_owned()),
+                             desc: item.description,
+                         }
+                     })
+                .collect();
 
             let mut response = Response::with(serde_json::to_string(&results).unwrap());
             response.headers.set(ContentType::json());
@@ -200,8 +210,14 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                         Some(&Value::String(ref desc)) => desc.to_owned(),
                         _ => format!("{}'s server", name),
                     };
-                    let record =
-                        DomainRecord::new(&token, &local_name, &full_name, None, None, None, &description, 0);
+                    let record = DomainRecord::new(&token,
+                                                   &local_name,
+                                                   &full_name,
+                                                   None,
+                                                   None,
+                                                   None,
+                                                   &description,
+                                                   0);
                     match config.domain_db.add_record(record).recv().unwrap() {
                         Ok(()) => {
                             // We don't want the full domain name or the dns challenge in the

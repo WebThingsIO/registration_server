@@ -221,9 +221,9 @@ impl DomainDb {
     }
 
     fn select_records(&self,
-                     request: &str,
-                     value: &str)
-                     -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
+                      request: &str,
+                      value: &str)
+                      -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
         let (tx, rx) = channel();
 
         // Run the sql command on a pooled thread.
@@ -238,18 +238,20 @@ impl DomainDb {
             while let Some(result_row) = rows.next() {
                 let row = sqltry!(result_row, tx);
                 result.push(DomainRecord::from_sql(row));
-            } 
+            }
             tx.send(Ok(result)).unwrap();
         });
 
         rx
     }
 
-    pub fn get_records_by_public_ip(&self, public_ip: &str) -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
+    pub fn get_records_by_public_ip(&self,
+                                    public_ip: &str)
+                                    -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
         self.select_records("SELECT token, local_name, remote_name, dns_challenge, \
                             local_ip, public_ip, description, timestamp \
                             FROM domains WHERE public_ip=$1",
-                           public_ip)
+                            public_ip)
     }
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {
