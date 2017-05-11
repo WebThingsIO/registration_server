@@ -174,35 +174,20 @@ impl DomainDb {
                                 panic!("Unable to create the domains database: {}", err);
                             });
 
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_local ON domains(local_name)",
-                     &[])
-            .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains_local index: {}", err);
+        macro_rules! index {
+            ($name:expr) => (
+                conn.execute(&format!("CREATE UNIQUE INDEX IF NOT EXISTS domains_{} ON domains({})",
+                                      $name, $name), &[]).unwrap_or_else(|err| {
+                                panic!("Unable to create the domains_{} index: {}", $name, err);
                             });
+            )
+        }
 
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS domains_remote ON domains(remote_name)",
-                     &[])
-            .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains_remote index: {}", err);
-                            });
-
-        conn.execute("CREATE INDEX IF NOT EXISTS domains_timestamp ON domains(timestamp)",
-                     &[])
-            .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains_timestamp index: {}", err);
-                            });
-
-        conn.execute("CREATE INDEX IF NOT EXISTS domains_public_ip ON domains(public_ip)",
-                     &[])
-            .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains_public_ip index: {}", err);
-                            });
-
-        conn.execute("CREATE INDEX IF NOT EXISTS domains_email ON domains(email)",
-                     &[])
-            .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains_email index: {}", err);
-                            });
+        index!("local_name");
+        index!("remote_name");
+        index!("timestamp");
+        index!("public_ip");
+        index!("email");
 
         DomainDb { pool: pool }
     }
