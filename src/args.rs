@@ -4,7 +4,7 @@
 
 use clap::{App, ArgMatches};
 use config::Config;
-use domain_store::DomainDb;
+use database::Database;
 use serde_json;
 use std::fs::File;
 use std::path::PathBuf;
@@ -95,7 +95,7 @@ impl Args {
 
     pub fn to_config(&self) -> Config {
         Config {
-            domain_db: DomainDb::new(&format!("{}/domains.sqlite", self.data_directory)),
+            db: Database::new(&format!("{}/domains.sqlite", self.data_directory)),
             domain: self.domain.clone(),
             tunnel_ip: self.tunnel_ip.clone(),
             dns_ttl: self.dns_ttl,

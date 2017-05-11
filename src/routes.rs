@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use config::Config;
-use domain_store::{DomainError, DomainRecord};
+use database::{DatabaseError, DomainRecord};
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -43,11 +43,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     // Save this registration in the database if we know about this token.
     // Check if we have a record with this token, bail out if not.
-    match config
-              .domain_db
-              .get_record_by_token(&token)
-              .recv()
-              .unwrap() {
+    match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
             // Update the record with the challenge.
             let dns_challenge = match record.dns_challenge {
@@ -72,11 +68,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                &record.description,
                                                email,
                                                timestamp);
-            match config
-                      .domain_db
-                      .update_record(new_record)
-                      .recv()
-                      .unwrap() {
+            match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
                     let mut response = Response::new();
@@ -87,7 +79,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
         }
-        Err(DomainError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
@@ -102,17 +94,13 @@ fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let token = String::from_value(token.unwrap()).unwrap();
 
-    match config
-              .domain_db
-              .get_record_by_token(&token)
-              .recv()
-              .unwrap() {
+    match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
             let mut response = Response::with(serde_json::to_string(&record).unwrap());
             response.headers.set(ContentType::json());
             Ok(response)
         }
-        Err(DomainError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
@@ -125,7 +113,7 @@ fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
     let remote_ip = format!("{}", req.remote_addr.ip());
 
     match config
-              .domain_db
+              .db
               .get_records_by_public_ip(&remote_ip)
               .recv()
               .unwrap() {
@@ -150,7 +138,7 @@ fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
             response.headers.set(ContentType::json());
             Ok(response)
         }
-        Err(DomainError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
@@ -166,7 +154,7 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     let token = String::from_value(token.unwrap()).unwrap();
 
     match config
-              .domain_db
+              .db
               .delete_record_by_token(&token)
               .recv()
               .unwrap() {
@@ -192,7 +180,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
             info!("trying to subscribe {}", full_name);
 
             let record = config
-                .domain_db
+                .db
                 .get_record_by_name(&full_name)
                 .recv()
                 .unwrap();
@@ -204,7 +192,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     response.headers.set(ContentType::json());
                     Ok(response)
                 }
-                Err(DomainError::NoRecord) => {
+                Err(DatabaseError::NoRecord) => {
                     // Create a token, create and store a record and finally return the token.
                     let token = format!("{}", Uuid::new_v4());
                     let local_name = format!("local.{}", full_name);
@@ -223,7 +211,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                    &description,
                                                    None,
                                                    0);
-                    match config.domain_db.add_record(record).recv().unwrap() {
+                    match config.db.add_record(record).recv().unwrap() {
                         Ok(()) => {
                             // We don't want the full domain name or the dns challenge in the
                             // response so we create a local struct.
@@ -276,11 +264,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     let token = String::from_value(token.unwrap()).unwrap();
 
     // Check if we have a record with this token, bail out if not.
-    match config
-              .domain_db
-              .get_record_by_token(&token)
-              .recv()
-              .unwrap() {
+    match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
             // Update the record with the challenge.
             let local_ip = match record.local_ip {
@@ -304,11 +288,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                &record.description,
                                                email,
                                                record.timestamp);
-            match config
-                      .domain_db
-                      .update_record(new_record)
-                      .recv()
-                      .unwrap() {
+            match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
                     let mut response = Response::new();
@@ -319,7 +299,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
         }
-        Err(DomainError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }

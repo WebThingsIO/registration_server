@@ -6,7 +6,7 @@
 // Each records is made of the name, the private token and the Let's Encrypt
 // challenge value.
 
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{Receiver, channel};
 use std::thread;
 
 use r2d2_sqlite::SqliteConnectionManager;
@@ -99,14 +99,14 @@ unsafe impl Send for DomainRecord {}
 unsafe impl Sync for DomainRecord {}
 
 #[derive(Debug)]
-pub enum DomainError {
+pub enum DatabaseError {
     DbUnavailable,
     SQLError(String),
     NoRecord,
 }
 
 #[derive(Clone)]
-pub struct DomainDb {
+pub struct Database {
     pool: r2d2::Pool<SqliteConnectionManager>,
 }
 
@@ -126,7 +126,7 @@ macro_rules! sqltry {
     ($sql:expr, $tx:ident) => (
         match $sql {
             Err(err) => {
-                $tx.send(Err(DomainError::SQLError(format!("{}", err)))).unwrap();
+                $tx.send(Err(DatabaseError::SQLError(format!("{}", err)))).unwrap();
                 return;
             }
             Ok(value) => value,
@@ -149,7 +149,7 @@ impl ToSql for SqlParam {
     }
 }
 
-impl DomainDb {
+impl Database {
     pub fn new(path: &str) -> Self {
         debug!("Opening database at {}", path);
         let config = r2d2::Config::default();
@@ -157,8 +157,18 @@ impl DomainDb {
         let pool = r2d2::Pool::new(config, manager).expect(&format!("Unable to open database at {}",
                                                                     path));
 
-        // Create the database table if needed.
         let conn = pool.get().unwrap();
+
+        macro_rules! index {
+            ($table:expr, $index:expr) => (
+                conn.execute(&format!("CREATE UNIQUE INDEX IF NOT EXISTS {}_{} ON {}({})",
+                                      $table, $index, $table, $index), &[]).unwrap_or_else(|err| {
+                                panic!("Unable to create the {}_{} index: {}", $table, $index, err);
+                            });
+            )
+        }
+
+        // Create the domains table if needed.
         conn.execute("CREATE TABLE IF NOT EXISTS domains (
                       token         TEXT NOT NULL PRIMARY KEY,
                       local_name    TEXT NOT NULL,
@@ -171,31 +181,66 @@ impl DomainDb {
                       timestamp     INTEGER)",
                      &[])
             .unwrap_or_else(|err| {
-                                panic!("Unable to create the domains database: {}", err);
+                                panic!("Unable to create the domains table: {}", err);
                             });
 
-        macro_rules! index {
-            ($name:expr) => (
-                conn.execute(&format!("CREATE UNIQUE INDEX IF NOT EXISTS domains_{} ON domains({})",
-                                      $name, $name), &[]).unwrap_or_else(|err| {
-                                panic!("Unable to create the domains_{} index: {}", $name, err);
+        index!("domains", "local_name");
+        index!("domains", "remote_name");
+        index!("domains", "timestamp");
+        index!("domains", "public_ip");
+        index!("domains", "email");
+
+        // Create the email management table if needed.
+        conn.execute("CREATE TABLE IF NOT EXISTS emails (
+                      email  TEXT NOT NULL PRIMARY KEY,
+                      token  TEXT NOT NULL,
+                      link   TEXT NOT NULL)",
+                     &[])
+            .unwrap_or_else(|err| {
+                                panic!("Unable to create the email table: {}", err);
                             });
-            )
-        }
 
-        index!("local_name");
-        index!("remote_name");
-        index!("timestamp");
-        index!("public_ip");
-        index!("email");
+        Database { pool: pool }
+    }
 
-        DomainDb { pool: pool }
+    // Add a new email.
+    // TODO: ensure that the token matches a domain token?
+    pub fn add_email(&self,
+                     email: &str,
+                     token: &str,
+                     link: &str)
+                     -> Receiver<Result<(), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let email = email.to_owned();
+        let token = token.to_owned();
+        let link = link.to_owned();
+        thread::spawn(move || {
+                          let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+                          sqltry!(conn.execute("INSERT INTO emails VALUES ($1, $2, $3)",
+                                               &[&email, &token, &link]),
+                                  tx);
+                          tx.send(Ok(())).unwrap();
+                      });
+
+        rx
+    }
+
+    pub fn delete_email(&self, email: &str) -> Receiver<Result<i32, DatabaseError>> {
+        self.execute_1param_sql("DELETE FROM emails WHERE email=$1",
+                                SqlParam::Text(email.to_owned()))
+    }
+
+    pub fn select_email_by_link(&self, link: &str) -> Receiver<Result<i32, DatabaseError>> {
+        self.execute_1param_sql("SELECT COUNT(*) FROM emails WHERE link=$1",
+                                SqlParam::Text(link.to_owned()))
     }
 
     fn select_record(&self,
                      request: &str,
                      value: &str)
-                     -> Receiver<Result<DomainRecord, DomainError>> {
+                     -> Receiver<Result<DomainRecord, DatabaseError>> {
         let (tx, rx) = channel();
 
         // Run the sql command on a pooled thread.
@@ -203,14 +248,14 @@ impl DomainDb {
         let value = value.to_owned();
         let request = request.to_owned();
         thread::spawn(move || {
-            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             let mut stmt = sqltry!(conn.prepare(&request), tx);
             let mut rows = sqltry!(stmt.query(&[&value]), tx);
             if let Some(result_row) = rows.next() {
                 let row = sqltry!(result_row, tx);
                 tx.send(Ok(DomainRecord::from_sql(row))).unwrap();
             } else {
-                tx.send(Err(DomainError::NoRecord)).unwrap();
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
             }
         });
 
@@ -220,7 +265,7 @@ impl DomainDb {
     fn select_records(&self,
                       request: &str,
                       value: &str)
-                      -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
+                      -> Receiver<Result<Vec<DomainRecord>, DatabaseError>> {
         let (tx, rx) = channel();
 
         // Run the sql command on a pooled thread.
@@ -229,7 +274,7 @@ impl DomainDb {
         let request = request.to_owned();
         thread::spawn(move || {
             let mut result = Vec::new();
-            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             let mut stmt = sqltry!(conn.prepare(&request), tx);
             let mut rows = sqltry!(stmt.query(&[&value]), tx);
             while let Some(result_row) = rows.next() {
@@ -244,34 +289,36 @@ impl DomainDb {
 
     pub fn get_records_by_public_ip(&self,
                                     public_ip: &str)
-                                    -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
+                                    -> Receiver<Result<Vec<DomainRecord>, DatabaseError>> {
         self.select_records("SELECT token, local_name, remote_name, dns_challenge, \
                             local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE public_ip=$1",
                             public_ip)
     }
 
-    pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {
+    pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DatabaseError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
                             local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE local_name=$1 or remote_name=$1",
                            name)
     }
 
-    pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<DomainRecord, DomainError>> {
+    pub fn get_record_by_token(&self,
+                               token: &str)
+                               -> Receiver<Result<DomainRecord, DatabaseError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
                            local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE token=$1",
                            token)
     }
 
-    pub fn add_record(&self, record: DomainRecord) -> Receiver<Result<(), DomainError>> {
+    pub fn add_record(&self, record: DomainRecord) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
         let record = record.clone();
         thread::spawn(move || {
-            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
                                  &[&record.token,
                                    &record.local_name,
@@ -289,13 +336,13 @@ impl DomainDb {
         rx
     }
 
-    pub fn update_record(&self, record: DomainRecord) -> Receiver<Result<(), DomainError>> {
+    pub fn update_record(&self, record: DomainRecord) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
         let record = record.clone();
         thread::spawn(move || {
-            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
 
             sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, local_ip=$2, \
                                   public_ip=$3, timestamp=$4 \
@@ -316,12 +363,12 @@ impl DomainDb {
 
     // Evict records older than a given timestamp.
     // Returns the number of evicted records.
-    pub fn evict_records(&self, timestamp: SqlParam) -> Receiver<Result<i32, DomainError>> {
+    pub fn evict_records(&self, timestamp: SqlParam) -> Receiver<Result<i32, DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
         thread::spawn(move || {
-            let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -340,14 +387,14 @@ impl DomainDb {
     pub fn execute_1param_sql(&self,
                               request: &str,
                               value: SqlParam)
-                              -> Receiver<Result<i32, DomainError>> {
+                              -> Receiver<Result<i32, DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
         let value = value.to_owned();
         let request = request.to_owned();
         thread::spawn(move || {
-                          let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+                          let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
                           let res = sqltry!(conn.execute(&request, &[&value]), tx);
                           tx.send(Ok(res)).unwrap();
                       });
@@ -355,17 +402,17 @@ impl DomainDb {
         rx
     }
 
-    pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<i32, DomainError>> {
+    pub fn delete_record_by_token(&self, token: &str) -> Receiver<Result<i32, DatabaseError>> {
         self.execute_1param_sql("DELETE FROM domains WHERE token=$1",
                                 SqlParam::Text(token.to_owned()))
     }
 
-    pub fn flush(&self) -> Receiver<Result<(), DomainError>> {
+    pub fn flush(&self) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
         thread::spawn(move || {
-                          let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
+                          let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
                           sqltry!(conn.execute("DELETE FROM domains", &[]), tx);
                           tx.send(Ok(())).unwrap();
                       });
@@ -375,7 +422,7 @@ impl DomainDb {
 
 #[test]
 fn test_domain_store() {
-    let db = DomainDb::new("domain_db_test.sqlite");
+    let db = Database::new("domain_db_test.sqlite");
 
     // Start with an empty db.
     db.flush().recv().unwrap().expect("Flushing the db");
@@ -384,13 +431,13 @@ fn test_domain_store() {
     match db.get_record_by_name("test.example.org")
               .recv()
               .unwrap() {
-        Err(DomainError::NoRecord) => {}
+        Err(DatabaseError::NoRecord) => {}
         Err(err) => panic!("Should not find a record by name in an empty db. {:?}", err),
         _ => panic!("Should not find a record by name in an empty db."),
     }
 
     match db.get_record_by_token("test-token").recv().unwrap() {
-        Err(DomainError::NoRecord) => {}
+        Err(DatabaseError::NoRecord) => {}
         _ => panic!("Should not find a record by token in an empty db."),
     }
 
@@ -458,7 +505,7 @@ fn test_domain_store() {
     match db.get_record_by_name(&challenge_record.local_name)
               .recv()
               .unwrap() {
-        Err(DomainError::NoRecord) => {}
+        Err(DatabaseError::NoRecord) => {}
         _ => panic!("Should not find this record anymore."),
     }
 }

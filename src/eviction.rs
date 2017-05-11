@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use config::Config;
-use domain_store::SqlParam;
+use database::SqlParam;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub fn evict_old_entries(config: &Config) {
     let delay = config.eviction_delay;
-    let db = config.domain_db.clone();
+    let db = config.db.clone();
     thread::Builder::new()
         .name("eviction".into())
         .spawn(move || {

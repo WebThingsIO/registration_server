@@ -39,7 +39,7 @@ use mount::Mount;
 
 mod args;
 mod config;
-mod domain_store;
+mod database;
 mod errors;
 mod eviction;
 mod pdns;

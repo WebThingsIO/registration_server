@@ -109,7 +109,8 @@ pub fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
 
 pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
     // Pagekite sends dns requests to qnames like:
-    // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
+    // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
+    // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
     debug!("PageKite query for {} {}", qtype, qname);
 
@@ -130,7 +131,7 @@ pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsR
     let parts: Vec<&str> = qname.split('.').collect();
     let subdomain = format!("{}.box.{}.", parts[4], config.domain);
     let ip = match config
-              .domain_db
+              .db
               .get_record_by_name(&subdomain)
               .recv()
               .unwrap() {
@@ -217,11 +218,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         debug!("final qname={}", qname);
 
         // Look for a record with for the qname.
-        match config
-                  .domain_db
-                  .get_record_by_name(&qname)
-                  .recv()
-                  .unwrap() {
+        match config.db.get_record_by_name(&qname).recv().unwrap() {
             Ok(record) => {
                 if record.local_ip.is_none() && qtype == "A" {
                     // No info on this domain, bail out.
