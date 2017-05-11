@@ -194,7 +194,12 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // Create a token, create and store a record and finally return the token.
                     let token = format!("{}", Uuid::new_v4());
                     let local_name = format!("local.{}", full_name);
-                    let description = format!("{}'s server", name);
+
+
+                    let description = match map.find(&["desc"]) {
+                        Some(&Value::String(ref desc)) => desc.to_owned(),
+                        _ => format!("{}'s server", name),
+                    };
                     let record =
                         DomainRecord::new(&token, &local_name, &full_name, None, None, None, &description, 0);
                     match config.domain_db.add_record(record).recv().unwrap() {
