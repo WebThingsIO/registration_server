@@ -28,6 +28,8 @@ pub struct DomainRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_ip: Option<String>,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
     pub timestamp: i64,
 }
 
@@ -54,7 +56,8 @@ impl DomainRecord {
             local_ip: sqlstr!(row, 4),
             public_ip: sqlstr!(row, 5),
             description: row.get(6),
-            timestamp: row.get(7),
+            email: sqlstr!(row, 7),
+            timestamp: row.get(8),
         }
     }
 
@@ -65,6 +68,7 @@ impl DomainRecord {
                local_ip: Option<&str>,
                public_ip: Option<&str>,
                description: &str,
+               email: Option<&str>,
                timestamp: i64)
                -> Self {
         macro_rules! str2sql {
@@ -85,6 +89,7 @@ impl DomainRecord {
             local_ip: str2sql!(local_ip),
             public_ip: str2sql!(public_ip),
             description: description.to_owned(),
+            email: str2sql!(email),
             timestamp: timestamp,
         }
     }
@@ -162,6 +167,7 @@ impl DomainDb {
                       local_ip      TEXT NOT NULL,
                       public_ip     TEXT NOT NULL,
                       description   TEXT NOT NULL,
+                      email         TEXT NOT NULL,
                       timestamp     INTEGER)",
                      &[])
             .unwrap_or_else(|err| {
@@ -190,6 +196,12 @@ impl DomainDb {
                      &[])
             .unwrap_or_else(|err| {
                                 panic!("Unable to create the domains_public_ip index: {}", err);
+                            });
+
+        conn.execute("CREATE INDEX IF NOT EXISTS domains_email ON domains(email)",
+                     &[])
+            .unwrap_or_else(|err| {
+                                panic!("Unable to create the domains_email index: {}", err);
                             });
 
         DomainDb { pool: pool }
@@ -249,21 +261,21 @@ impl DomainDb {
                                     public_ip: &str)
                                     -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
         self.select_records("SELECT token, local_name, remote_name, dns_challenge, \
-                            local_ip, public_ip, description, timestamp \
+                            local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE public_ip=$1",
                             public_ip)
     }
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
-                            local_ip, public_ip, description, timestamp \
+                            local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE local_name=$1 or remote_name=$1",
                            name)
     }
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<DomainRecord, DomainError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
-                           local_ip, public_ip, description, timestamp \
+                           local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE token=$1",
                            token)
     }
@@ -275,7 +287,7 @@ impl DomainDb {
         let record = record.clone();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
                                  &[&record.token,
                                    &record.local_name,
                                    &record.remote_name,
@@ -283,6 +295,7 @@ impl DomainDb {
                                    &record.local_ip.unwrap_or("".to_owned()),
                                    &record.public_ip.unwrap_or("".to_owned()),
                                    &record.description,
+                                   &record.email.unwrap_or("".to_owned()),
                                    &record.timestamp]),
                     tx);
             tx.send(Ok(())).unwrap();
@@ -404,6 +417,7 @@ fn test_domain_store() {
                                                 None,
                                                 None,
                                                 "Test Server",
+                                                None,
                                                 0);
     db.add_record(no_challenge_record.clone())
         .recv()
@@ -431,6 +445,7 @@ fn test_domain_store() {
                                              None,
                                              None,
                                              "Test Server",
+                                             None,
                                              0);
     db.update_record(challenge_record.clone())
         .recv()

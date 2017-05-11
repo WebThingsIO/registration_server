@@ -59,7 +59,10 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs() as i64;
-
+            let email = match record.email {
+                Some(ref email) => Some(email.as_str()),
+                None => None,
+            };
             let new_record = DomainRecord::new(&record.token,
                                                &record.local_name,
                                                &record.remote_name,
@@ -67,6 +70,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                Some(&local_ip),
                                                Some(&public_ip),
                                                &record.description,
+                                               email,
                                                timestamp);
             match config
                       .domain_db
@@ -217,6 +221,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                    None,
                                                    None,
                                                    &description,
+                                                   None,
                                                    0);
                     match config.domain_db.add_record(record).recv().unwrap() {
                         Ok(()) => {
@@ -286,7 +291,10 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Some(ref ip) => Some(ip.as_str()),
                 None => None,
             };
-
+            let email = match record.email {
+                Some(ref email) => Some(email.as_str()),
+                None => None,
+            };
             let new_record = DomainRecord::new(&record.token,
                                                &record.local_name,
                                                &record.remote_name,
@@ -294,6 +302,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                local_ip,
                                                public_ip,
                                                &record.description,
+                                               email,
                                                record.timestamp);
             match config
                       .domain_db
