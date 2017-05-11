@@ -27,6 +27,7 @@ pub struct DomainRecord {
     pub local_ip: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_ip: Option<String>,
+    pub description: String,
     pub timestamp: i64,
 }
 
@@ -52,7 +53,8 @@ impl DomainRecord {
             dns_challenge: sqlstr!(row, 3),
             local_ip: sqlstr!(row, 4),
             public_ip: sqlstr!(row, 5),
-            timestamp: row.get(6),
+            description: row.get(6),
+            timestamp: row.get(7),
         }
     }
 
@@ -62,6 +64,7 @@ impl DomainRecord {
                dns_challenge: Option<&str>,
                local_ip: Option<&str>,
                public_ip: Option<&str>,
+               description: &str,
                timestamp: i64)
                -> Self {
         macro_rules! str2sql {
@@ -81,6 +84,7 @@ impl DomainRecord {
             dns_challenge: str2sql!(dns_challenge),
             local_ip: str2sql!(local_ip),
             public_ip: str2sql!(public_ip),
+            description: description.to_owned(),
             timestamp: timestamp,
         }
     }
@@ -157,6 +161,7 @@ impl DomainDb {
                       dns_challenge TEXT NOT NULL,
                       local_ip      TEXT NOT NULL,
                       public_ip     TEXT NOT NULL,
+                      description   TEXT NOT NULL,
                       timestamp     INTEGER)",
                      &[])
             .unwrap_or_else(|err| {
@@ -242,21 +247,21 @@ impl DomainDb {
 
     pub fn get_records_by_public_ip(&self, public_ip: &str) -> Receiver<Result<Vec<DomainRecord>, DomainError>> {
         self.select_records("SELECT token, local_name, remote_name, dns_challenge, \
-                            local_ip, public_ip, timestamp \
+                            local_ip, public_ip, description, timestamp \
                             FROM domains WHERE public_ip=$1",
                            public_ip)
     }
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DomainError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
-                            local_ip, public_ip, timestamp \
+                            local_ip, public_ip, description, timestamp \
                             FROM domains WHERE local_name=$1 or remote_name=$1",
                            name)
     }
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<DomainRecord, DomainError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
-                           local_ip, public_ip, timestamp \
+                           local_ip, public_ip, description, timestamp \
                             FROM domains WHERE token=$1",
                            token)
     }
@@ -268,13 +273,14 @@ impl DomainDb {
         let record = record.clone();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DomainError::DbUnavailable);
-            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                                  &[&record.token,
                                    &record.local_name,
                                    &record.remote_name,
                                    &record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.local_ip.unwrap_or("".to_owned()),
                                    &record.public_ip.unwrap_or("".to_owned()),
+                                   &record.description,
                                    &record.timestamp]),
                     tx);
             tx.send(Ok(())).unwrap();
@@ -395,6 +401,7 @@ fn test_domain_store() {
                                                 None,
                                                 None,
                                                 None,
+                                                "Test Server",
                                                 0);
     db.add_record(no_challenge_record.clone())
         .recv()
@@ -421,6 +428,7 @@ fn test_domain_store() {
                                              Some("dns-challenge"),
                                              None,
                                              None,
+                                             "Test Server",
                                              0);
     db.update_record(challenge_record.clone())
         .recv()
