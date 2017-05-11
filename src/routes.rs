@@ -105,10 +105,10 @@ fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-// Public discovery endpoint, returning names of servers on the same
+// Public ping endpoint, returning names of servers on the same
 // local network than the client.
-fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /discovery");
+fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /ping");
 
     let remote_ip = format!("{}", req.remote_addr.ip());
 
@@ -322,7 +322,7 @@ pub fn create(config: &Config) -> Router {
     handler!(subscribe);
     handler!(unsubscribe);
     handler!(dnsconfig);
-    handler!(discovery);
+    handler!(ping);
 
     if config.socket_path.is_none() {
         handler!(pdns);
