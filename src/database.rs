@@ -98,7 +98,7 @@ impl DomainRecord {
 unsafe impl Send for DomainRecord {}
 unsafe impl Sync for DomainRecord {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DatabaseError {
     DbUnavailable,
     SQLError(String),
@@ -200,7 +200,61 @@ impl Database {
                                 panic!("Unable to create the email table: {}", err);
                             });
 
+        // Create the discovery table if needed.
+        conn.execute("CREATE TABLE IF NOT EXISTS discovery (
+                      disco  TEXT NOT NULL PRIMARY KEY,
+                      token  TEXT NOT NULL)",
+                     &[])
+            .unwrap_or_else(|err| {
+                                panic!("Unable to create the email table: {}", err);
+                            });
+        index!("discovery", "token");
+
         Database { pool: pool }
+    }
+
+    pub fn add_discovery(&self, token: &str, disco: &str) -> Receiver<Result<(), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let token = token.to_owned();
+        let disco = disco.to_owned();
+        thread::spawn(move || {
+                          let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+                          sqltry!(conn.execute("INSERT INTO discovery VALUES ($1, $2)",
+                                               &[&disco, &token]),
+                                  tx);
+                          tx.send(Ok(())).unwrap();
+                      });
+
+        rx
+    }
+
+    pub fn get_token_for_discovery(&self, disco: &str) -> Receiver<Result<String, DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let disco = disco.to_owned();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+            let mut stmt = sqltry!(conn.prepare("SELECT token from discovery WHERE disco=$1"),
+                                   tx);
+            let mut rows = sqltry!(stmt.query(&[&disco]), tx);
+            if let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                tx.send(Ok(row.get(0))).unwrap();
+            } else {
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            }
+
+        });
+
+        rx
+    }
+
+    pub fn delete_discovery(&self, disco: &str) -> Receiver<Result<i32, DatabaseError>> {
+        self.execute_1param_sql("DELETE FROM discovery WHERE disco=$1",
+                                SqlParam::Text(disco.to_owned()))
     }
 
     // Add a new email.
@@ -407,6 +461,7 @@ impl Database {
                                 SqlParam::Text(token.to_owned()))
     }
 
+    #[cfg(test)]
     pub fn flush(&self) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
@@ -414,6 +469,8 @@ impl Database {
         thread::spawn(move || {
                           let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
                           sqltry!(conn.execute("DELETE FROM domains", &[]), tx);
+                          sqltry!(conn.execute("DELETE FROM emails", &[]), tx);
+                          sqltry!(conn.execute("DELETE FROM discovery", &[]), tx);
                           tx.send(Ok(())).unwrap();
                       });
         rx
@@ -508,4 +565,30 @@ fn test_domain_store() {
         Err(DatabaseError::NoRecord) => {}
         _ => panic!("Should not find this record anymore."),
     }
+}
+
+#[test]
+fn test_discovery() {
+    let db = Database::new("domain_db_test.sqlite");
+
+    // Start with an empty db.
+    db.flush().recv().unwrap().expect("Flushing the db");
+
+    assert_eq!(db.get_token_for_discovery("disco-token")
+                   .recv()
+                   .unwrap(),
+               Err(DatabaseError::NoRecord));
+    assert_eq!(db.add_discovery("secret-token", "disco-token")
+                   .recv()
+                   .unwrap(),
+               Ok(()));
+    assert_eq!(db.get_token_for_discovery("disco-token")
+                   .recv()
+                   .unwrap(),
+               Ok("secret-token".to_owned()));
+    assert_eq!(db.delete_discovery("disco-token").recv().unwrap(), Ok((1)));
+    assert_eq!(db.get_token_for_discovery("disco-token")
+                   .recv()
+                   .unwrap(),
+               Err(DatabaseError::NoRecord));
 }
