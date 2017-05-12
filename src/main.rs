@@ -40,6 +40,7 @@ use mount::Mount;
 mod args;
 mod config;
 mod database;
+mod discovery;
 mod errors;
 mod eviction;
 mod pdns;

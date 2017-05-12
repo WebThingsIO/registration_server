@@ -44,7 +44,7 @@ struct PdnsRequest {
 }
 
 #[derive(Serialize)]
-pub struct PdnsLookupResponse {
+struct PdnsLookupResponse {
     qtype: String,
     qname: String,
     content: String,
@@ -60,12 +60,12 @@ pub struct PdnsLookupResponse {
 
 #[derive(Serialize)]
 #[serde(untagged)]
-pub enum PdnsResponseParams {
+enum PdnsResponseParams {
     Lookup(PdnsLookupResponse),
 }
 
 #[derive(Serialize)]
-pub struct PdnsResponse {
+struct PdnsResponse {
     result: Vec<PdnsResponseParams>,
 }
 
@@ -77,7 +77,7 @@ fn pdns_failure_as_iron(reason: &str) -> IronResult<Response> {
     Ok(response)
 }
 
-pub fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
+fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
     match serde_json::to_string(response) {
         Ok(serialized) => {
             debug!("Response is: {}", serialized);
@@ -95,7 +95,7 @@ pub fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
 }
 
 // Returns a SOA record for a given qname.
-pub fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
+fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "SOA".to_owned(),
         qname: qname.to_owned(),
@@ -107,7 +107,7 @@ pub fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     }
 }
 
-pub fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
+fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
     // Pagekite sends dns requests to qnames like:
     // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
     // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
@@ -373,9 +373,9 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
     }
 
     loop {
-        let mut s = read_json_from_stream(&stream);
+        let s = read_json_from_stream(&stream);
         debug!("JSON String is {}", s);
-        let input: PdnsRequest = match serde_json::from_str(&mut s) {
+        let input: PdnsRequest = match serde_json::from_str(&s) {
             Ok(value) => value,
             Err(err) => {
                 error!("JSON error: {}", err);
