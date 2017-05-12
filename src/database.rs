@@ -286,9 +286,28 @@ impl Database {
                                 SqlParam::Text(email.to_owned()))
     }
 
-    pub fn select_email_by_link(&self, link: &str) -> Receiver<Result<i32, DatabaseError>> {
-        self.execute_1param_sql("SELECT COUNT(*) FROM emails WHERE link=$1",
-                                SqlParam::Text(link.to_owned()))
+    pub fn select_email_by_link(&self,
+                                link: &str)
+                                -> Receiver<Result<(String, String), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let link = link.to_owned();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+            let mut stmt = sqltry!(conn.prepare("SELECT email, token from emails WHERE link=$1"),
+                                   tx);
+            let mut rows = sqltry!(stmt.query(&[&link]), tx);
+            if let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
+            } else {
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            }
+
+        });
+
+        rx
     }
 
     fn select_record(&self,
@@ -479,7 +498,7 @@ impl Database {
 
 #[test]
 fn test_domain_store() {
-    let db = Database::new("domain_db_test.sqlite");
+    let db = Database::new("domain_db_test_domains.sqlite");
 
     // Start with an empty db.
     db.flush().recv().unwrap().expect("Flushing the db");
@@ -568,8 +587,30 @@ fn test_domain_store() {
 }
 
 #[test]
+fn test_email() {
+    let db = Database::new("domain_db_test_email.sqlite");
+
+    // Start with an empty db.
+    db.flush().recv().unwrap().expect("Flushing the db");
+
+    let email = "test@example.com".to_owned();
+    let link = "secret-link".to_owned();
+    let token = "domain-token".to_owned();
+
+    assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
+               Err(DatabaseError::NoRecord));
+    assert_eq!(db.add_email(&email, &token, &link).recv().unwrap(), Ok(()));
+    assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
+               Ok((email.clone(), token)));
+    assert_eq!(db.delete_email(&email).recv().unwrap(), Ok(1));
+    assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
+               Err(DatabaseError::NoRecord));
+}
+
+
+#[test]
 fn test_discovery() {
-    let db = Database::new("domain_db_test.sqlite");
+    let db = Database::new("domain_db_test_discovery.sqlite");
 
     // Start with an empty db.
     db.flush().recv().unwrap().expect("Flushing the db");
