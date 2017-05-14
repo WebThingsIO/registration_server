@@ -48,9 +48,7 @@ pub fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
                      })
                 .collect();
 
-            let mut response = Response::with(serde_json::to_string(&results).unwrap());
-            response.headers.set(ContentType::json());
-            Ok(response)
+            json_response!(&results)
         }
         Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
@@ -75,10 +73,7 @@ pub fn adddiscovery(req: &mut Request, config: &Config) -> IronResult<Response> 
         Ok(_) => {
             match config.db.add_discovery(&token, &disco).recv().unwrap() {
                 Ok(()) => {
-                    let mut response = Response::new();
-                    response.status = Some(Status::Ok);
-
-                    Ok(response)
+                    ok_response!()
                 }
                 Err(_) => EndpointError::with(status::BadRequest, 400),
             }
@@ -105,12 +100,7 @@ pub fn revokediscovery(req: &mut Request, config: &Config) -> IronResult<Respons
     match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(_) => {
             match config.db.delete_discovery(&disco).recv().unwrap() {
-                Ok(_) => {
-                    let mut response = Response::new();
-                    response.status = Some(Status::Ok);
-
-                    Ok(response)
-                }
+                Ok(_) => ok_response!(),
                 Err(_) => EndpointError::with(status::BadRequest, 400),
             }
         }
@@ -167,17 +157,12 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                                   remove_last!(record.remote_name)),
                                                       desc: record.description,
                                                   }];
-                                let mut response = Response::with(serde_json::to_string(&result)
-                                                                      .unwrap());
-                                response.headers.set(ContentType::json());
-                                Ok(response)
+                                json_response!(&result)
                             }
                             Err(_) => EndpointError::with(status::BadRequest, 400),
                         }
                     } else {
-                        let mut response = Response::with(serde_json::to_string(&results).unwrap());
-                        response.headers.set(ContentType::json());
-                        Ok(response)
+                        json_response!(&results)
                     }
                 }
                 Err(_) => EndpointError::with(status::BadRequest, 400),

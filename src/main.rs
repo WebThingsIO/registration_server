@@ -37,6 +37,26 @@ use iron::method::Method;
 use iron_cors::CORS;
 use mount::Mount;
 
+macro_rules! json_response {
+    ($json:expr) => (
+        {
+            let mut response = Response::with(serde_json::to_string($json).unwrap());
+            response.headers.set(ContentType::json());
+            Ok(response)
+        }
+    )
+}
+
+macro_rules! ok_response {
+    () => (
+        {
+            let mut response = Response::new();
+            response.status = Some(Status::Ok);
+            Ok(response)
+        }
+    )
+}
+
 mod args;
 mod config;
 mod database;

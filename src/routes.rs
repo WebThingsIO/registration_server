@@ -72,10 +72,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
             match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
-                    let mut response = Response::new();
-                    response.status = Some(Status::Ok);
-
-                    Ok(response)
+                    ok_response!()
                 }
                 Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
@@ -96,11 +93,7 @@ fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
     let token = String::from_value(token.unwrap()).unwrap();
 
     match config.db.get_record_by_token(&token).recv().unwrap() {
-        Ok(record) => {
-            let mut response = Response::with(serde_json::to_string(&record).unwrap());
-            response.headers.set(ContentType::json());
-            Ok(response)
-        }
+        Ok(record) => json_response!(&record),
         Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
@@ -122,12 +115,7 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
               .recv()
               .unwrap() {
         Ok(0) => EndpointError::with(status::BadRequest, 400), // No record found for this token.
-        Ok(_) => {
-            let mut response = Response::new();
-            response.status = Some(Status::Ok);
-
-            Ok(response)
-        }
+        Ok(_) => ok_response!(),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
@@ -254,10 +242,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
             match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
-                    let mut response = Response::new();
-                    response.status = Some(Status::Ok);
-
-                    Ok(response)
+                    ok_response!()
                 }
                 Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
