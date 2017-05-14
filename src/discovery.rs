@@ -19,6 +19,12 @@ struct Discovered {
     desc: String,
 }
 
+macro_rules! remove_last {
+    ($obj:ident.$prop:ident) => (
+        $obj.$prop[..$obj.$prop.len() - 1].to_owned()
+    )
+}
+
 // Public ping endpoint, returning names of servers on the same
 // local network than the client.
 pub fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
@@ -36,8 +42,7 @@ pub fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
                 .into_iter()
                 .map(|item| {
                          Discovered {
-                             href: format!("https://{}",
-                                           item.local_name[..item.local_name.len() - 1].to_owned()),
+                             href: format!("https://{}", remove_last!(item.local_name)),
                              desc: item.description,
                          }
                      })
@@ -146,9 +151,7 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
                         .filter(|item| item.token == token)
                         .map(|item| {
                                  Discovered {
-                                     href: format!("https://{}",
-                                                   item.local_name[..item.local_name.len() - 1]
-                                                       .to_owned()),
+                                     href: format!("https://{}", remove_last!(item.local_name)),
                                      desc: item.description,
                                  }
                              })
@@ -158,11 +161,10 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
                         // If the result vector is empty, return the remote name for this token.
                         match config.db.get_record_by_token(&token).recv().unwrap() {
                             Ok(record) => {
-                                let len = record.remote_name.len() - 1;
                                 let result = vec![Discovered {
-                                                      href: format!("https://{}",
-                                                                    record.remote_name[..len]
-                                                                        .to_owned()),
+                                                      href:
+                                                          format!("https://{}",
+                                                                  remove_last!(record.remote_name)),
                                                       desc: record.description,
                                                   }];
                                 let mut response = Response::with(serde_json::to_string(&result)
