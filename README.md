@@ -7,7 +7,25 @@ This server exposes a http(s) API that lets you post messages from your home net
 ## Usage
 
 ```bash
-cargo run -- -h 0.0.0.0 -p 4242 --cert-dir /etc/letsencrypt/live/knilxof.org
+USAGE:
+    registration_server [OPTIONS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+        --cert-directory <dir>     Certificate directory.
+        --config-file <path>       Path to a toml configuration file.
+        --data-directory <dir>     The directory where the persistent data will be saved.
+        --dns-ttl <ttl>            TTL of the DNS records, in seconds.
+        --domain <domain>          The domain that will be tied to this registration server.
+        --eviction-delay <secs>    How often we purge old records.
+        --host <host>              Set local hostname.
+        --port <port>              Set port to listen on for http connections.
+        --soa-content <dns>        The content of the SOA record for this tunnel.
+        --socket-path <path>       The path to the socket used to communicate with PowerDNS
+        --tunnel-ip <ip>           The ip address of the tunnel endpoint.
 ```
 
 ## Urls

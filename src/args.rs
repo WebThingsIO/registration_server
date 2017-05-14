@@ -10,7 +10,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use toml;
 
-const USAGE: &'static str = "--config-file=[path]    'Path to a json configuration file.'
+const USAGE: &'static str = "--config-file=[path]    'Path to a toml configuration file.'
 --data-directory=[dir]  'The directory where the persistent data will be saved.'
 --host=[host]           'Set local hostname.'
 --port=[port]           'Set port to listen on for http connections.'
