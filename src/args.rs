@@ -5,9 +5,10 @@
 use clap::{App, ArgMatches};
 use config::Config;
 use database::Database;
-use serde_json;
 use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
+use toml;
 
 const USAGE: &'static str = "--config-file=[path]    'Path to a json configuration file.'
 --data-directory=[dir]  'The directory where the persistent data will be saved.'
@@ -39,9 +40,11 @@ pub struct Args {
 
 impl Args {
     fn from_file(path: &PathBuf) -> Self {
-        let file = File::open(path).expect("Can't open config file");
-
-        serde_json::from_reader(file).expect("Invalid config file")
+        let mut file = File::open(path).expect("Can't open config file");
+        let mut source = String::new();
+        file.read_to_string(&mut source)
+            .expect("Unable to read config file");
+        toml::from_str(&source).expect("Invalid config file")
     }
 
     fn from_matches(matches: ArgMatches) -> Self {
@@ -138,7 +141,7 @@ fn test_args() {
     assert_eq!(args.socket_path, None);
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
-    let args = Args::from(vec!["registration_server", "--config-file=./config.json.sample"]);
+    let args = Args::from(vec!["registration_server", "--config-file=./config.toml.sample"]);
     assert_eq!(args.port, 4141);
     assert_eq!(args.host, "127.0.1.1");
     assert_eq!(args.domain, "box.knilxof.org");

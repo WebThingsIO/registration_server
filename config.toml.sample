@@ -1,0 +1,10 @@
+
+host = "127.0.1.1"
+port = 4141
+domain = "box.knilxof.org"
+data_directory = "/opt/tunnel"
+tunnel_ip = "1.2.3.4"
+dns_ttl = 89
+eviction_delay = 123
+soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+socket_path = "/tmp/powerdns_tunnel.sock"
