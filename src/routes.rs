@@ -138,7 +138,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
             match record {
                 Ok(_) => {
                     // We already have a record for this name, return an error.
-                    let mut response = Response::with("{\"error\": \"UnavailableName\"}");
+                    let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
                     response.status = Some(Status::BadRequest);
                     response.headers.set(ContentType::json());
                     Ok(response)
@@ -175,16 +175,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                 name: name.to_owned(),
                                 token: token,
                             };
-                            match serde_json::to_string(&n_and_t) {
-                                Ok(serialized) => {
-                                    let mut response = Response::with(serialized);
-                                    response.status = Some(Status::Ok);
-                                    response.headers.set(ContentType::json());
-
-                                    Ok(response)
-                                }
-                                Err(_) => EndpointError::with(status::InternalServerError, 501)
-                            }
+                            json_response!(&n_and_t)
                         }
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
@@ -280,4 +271,120 @@ pub fn create(config: &Config) -> Router {
     }
 
     router
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use args::Args;
+    use database::DomainRecord;
+    use iron::{Handler, Headers};
+    use iron::status::Status;
+    use iron_test::{request, response};
+
+    macro_rules! test_handler {
+        ($name:ident, $proxy:ident) => (
+            fn $name(req: &mut Request) -> IronResult<Response> {
+                let args = Args::from(vec!["registration_server",
+                                           "--config-file=./config.toml.test"]);
+                let config = args.to_config();
+                $proxy(req, &config)
+            }
+        )
+    }
+
+    fn get_response<H: Handler>(path: &str, handler: &H) -> Response {
+        match request::get(&format!("http://localhost:3000/{}", path),
+                           Headers::new(),
+                           handler) {
+            Ok(response) => response,
+            Err(err) => err.response,
+        }
+    }
+
+    fn get<H: Handler>(path: &str, handler: &H) -> (String, Status) {
+        let resp = get_response(path, handler);
+        let status = resp.status.unwrap();
+        (response::extract_body_to_string(resp), status)
+    }
+
+    #[test]
+    fn test_router() {
+        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
+
+        let config = args.to_config();
+        config
+            .db
+            .flush()
+            .recv()
+            .unwrap()
+            .expect("Flushing the db");
+
+        test_handler!(test_subscribe, subscribe);
+        test_handler!(test_register, register);
+        test_handler!(test_ping, ping);
+        test_handler!(test_info, info);
+
+        // Nothing is registered yet.
+        assert_eq!(get("ping", &test_ping), ("[]".to_owned(), Status::Ok));
+
+        #[derive(Deserialize)]
+        struct NameAndToken {
+            pub name: String,
+            pub token: String,
+        }
+
+        // Register a test user.
+        let resp = get("subscribe?name=test", &test_subscribe);
+        let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
+        let token = registration.token;
+
+        let bad_request_error = r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned();
+
+        assert_eq!(registration.name, "test".to_owned());
+
+        // Fail to register twice the same user.
+        let res = get_response("subscribe?name=test", &test_subscribe);
+        assert_eq!(res.status, Some(Status::BadRequest));
+        assert_eq!(response::extract_body_to_string(res),
+                   r#"{"error": "UnavailableName"}"#.to_owned());
+
+        // Register without the expected parameters.
+        assert_eq!(get("register", &test_register),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("register?name=test", &test_register),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get(&format!("register?token={}", token), &test_register),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("register?local_ip=10.0.0.1&token=wrong_token",
+                       &test_register),
+                   (bad_request_error.clone(), Status::BadRequest));
+
+        // Register properly.
+        assert_eq!(get(&format!("register?local_ip=10.0.0.1&token={}", token),
+                       &test_register),
+                   ("".to_owned(), Status::Ok));
+
+        // Now retrieve our registered client.
+        assert_eq!(get("ping", &test_ping),
+        (r#"[{"href":"https://local.test.box.box.knilxof.org","desc":"test's server"}]"#
+                            .to_owned(), Status::Ok));
+
+        // Get the full info
+        assert_eq!(get("info", &test_info),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("info?token=wrong_token", &test_info),
+                   (bad_request_error.clone(), Status::BadRequest));
+
+        let response = get(&format!("info?token={}", token), &test_info);
+        assert_eq!(response.1, Status::Ok);
+        let record: DomainRecord = serde_json::from_str(&response.0).unwrap();
+        assert_eq!(record.token, token);
+        assert_eq!(record.local_name, "local.test.box.box.knilxof.org.".to_owned());
+        assert_eq!(record.remote_name, "test.box.box.knilxof.org.");
+        assert_eq!(record.local_ip, Some("10.0.0.1".to_owned()));
+        assert_eq!(record.public_ip, Some("127.0.0.1".to_owned()));
+        assert_eq!(record.description, r#"test's server"#);
+
+    }
 }

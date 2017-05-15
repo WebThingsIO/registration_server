@@ -16,7 +16,7 @@ use rusqlite::Result as SqlResult;
 use rusqlite::types::{ToSql, ToSqlOutput};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DomainRecord {
     pub token: String,
     pub local_name: String,

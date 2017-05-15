@@ -17,6 +17,8 @@ extern crate hyper_openssl;
 #[macro_use]
 extern crate iron;
 extern crate iron_cors;
+#[cfg(test)]
+extern crate iron_test;
 #[macro_use]
 extern crate log;
 extern crate mount;
@@ -43,6 +45,7 @@ macro_rules! json_response {
         {
             let mut response = Response::with(serde_json::to_string($json).unwrap());
             response.headers.set(ContentType::json());
+            response.status = Some(Status::Ok);
             Ok(response)
         }
     )
