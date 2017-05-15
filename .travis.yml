@@ -20,9 +20,8 @@ before_script:
 
 # the main build
 script:
-  - |
-      travis-cargo build &&
-      travis-cargo test
+  - cargo build && cargo test
+
 after_success:
   # measure code coverage and upload to coveralls.io (the verify
   # argument mitigates kcov crashes due to malformed debuginfo, at the
