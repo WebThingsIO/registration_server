@@ -302,8 +302,24 @@ mod tests {
         }
     }
 
+    fn put_response<H: Handler>(path: &str, body: &str, handler: &H) -> Response {
+        match request::put(&format!("http://localhost:3000/{}", path),
+                           Headers::new(),
+                           body,
+                           handler) {
+            Ok(response) => response,
+            Err(err) => err.response,
+        }
+    }
+
     fn get<H: Handler>(path: &str, handler: &H) -> (String, Status) {
         let resp = get_response(path, handler);
+        let status = resp.status.unwrap();
+        (response::extract_body_to_string(resp), status)
+    }
+
+    fn put<H: Handler>(path: &str, body: &str, handler: &H) -> (String, Status) {
+        let resp = put_response(path, body, handler);
         let status = resp.status.unwrap();
         (response::extract_body_to_string(resp), status)
     }
@@ -324,6 +340,11 @@ mod tests {
         test_handler!(test_register, register);
         test_handler!(test_ping, ping);
         test_handler!(test_info, info);
+        test_handler!(test_unsubscribe, unsubscribe);
+        test_handler!(test_dnsconfig, dnsconfig);
+        test_handler!(test_pdns, pdns);
+
+        let bad_request_error = r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned();
 
         // Nothing is registered yet.
         assert_eq!(get("ping", &test_ping), ("[]".to_owned(), Status::Ok));
@@ -334,12 +355,25 @@ mod tests {
             pub token: String,
         }
 
-        // Register a test user.
+        // Subscribe a test user.
         let resp = get("subscribe?name=test", &test_subscribe);
         let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
         let token = registration.token;
 
-        let bad_request_error = r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned();
+        assert_eq!(registration.name, "test".to_owned());
+
+        // Unsubscribe
+        assert_eq!(get("unsubscribe", &test_unsubscribe),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("unsubscribe?token=wrong_token", &test_unsubscribe),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get(&format!("unsubscribe?token={}", token), &test_unsubscribe),
+                   ("".to_owned(), Status::Ok));
+
+        // Subscribe again
+        let resp = get("subscribe?name=test", &test_subscribe);
+        let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
+        let token = registration.token;
 
         assert_eq!(registration.name, "test".to_owned());
 
@@ -367,8 +401,9 @@ mod tests {
 
         // Now retrieve our registered client.
         assert_eq!(get("ping", &test_ping),
-        (r#"[{"href":"https://local.test.box.box.knilxof.org","desc":"test's server"}]"#
-                            .to_owned(), Status::Ok));
+                   (r#"[{"href":"https://local.test.box.knilxof.org","desc":"test's server"}]"#
+                        .to_owned(),
+                    Status::Ok));
 
         // Get the full info
         assert_eq!(get("info", &test_info),
@@ -380,11 +415,78 @@ mod tests {
         assert_eq!(response.1, Status::Ok);
         let record: DomainRecord = serde_json::from_str(&response.0).unwrap();
         assert_eq!(record.token, token);
-        assert_eq!(record.local_name, "local.test.box.box.knilxof.org.".to_owned());
-        assert_eq!(record.remote_name, "test.box.box.knilxof.org.");
+        assert_eq!(record.local_name, "local.test.box.knilxof.org.".to_owned());
+        assert_eq!(record.remote_name, "test.box.knilxof.org.");
         assert_eq!(record.local_ip, Some("10.0.0.1".to_owned()));
         assert_eq!(record.public_ip, Some("127.0.0.1".to_owned()));
         assert_eq!(record.description, r#"test's server"#);
 
+        // Test the LE challenge endpoints.
+        assert_eq!(get("dnsconfig", &test_dnsconfig),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("dnsconfig?token=wrong_token", &test_dnsconfig),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get(&format!("dnsconfig?token={}", token), &test_dnsconfig),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("dnsconfig?token=wrong_token&challenge=test_challenge",
+                       &test_dnsconfig),
+                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get(&format!("dnsconfig?token={}&challenge=test_challenge", token),
+                       &test_dnsconfig),
+                   ("".to_owned(), Status::Ok));
+
+        // Simplified local redeclaration of the pdns data structures since
+        // we don't need them to be public.
+        #[derive(Debug, Serialize)]
+        struct PdnsRequestParameters {
+            // intialize method
+            // path: Option<String>,
+            // timeout: Option<String>,
+
+            // lookup method
+            qtype: Option<String>,
+            qname: Option<String>,
+            // #[serde(rename="zone-id")]
+            // zone_id: Option<i32>,
+            // remote: Option<String>,
+            // local: Option<String>,
+            // real_remote: Option<String>,
+        }
+
+        #[derive(Debug, Serialize)]
+        struct PdnsRequest {
+            method: String,
+            parameters: PdnsRequestParameters,
+        }
+
+        // Test the "remote" dns name.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("A".to_owned()),
+                qname: Some("test.box.knilxof.org.".to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+
+        let success =
+r#"{"result":[{"qtype":"A","qname":"test.box.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
+        assert_eq!(put("pdns", &body, &test_pdns),
+                   (success.to_owned(), Status::Ok));
+
+        // Test the "local" dns name.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("A".to_owned()),
+                qname: Some("local.test.box.knilxof.org.".to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+
+        let success =
+r#"{"result":[{"qtype":"A","qname":"local.test.box.knilxof.org.","content":"10.0.0.1","ttl":89}]}"#;
+        assert_eq!(put("pdns", &body, &test_pdns),
+                   (success.to_owned(), Status::Ok));
     }
 }
