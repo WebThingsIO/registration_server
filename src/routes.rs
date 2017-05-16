@@ -356,6 +356,9 @@ mod tests {
         }
 
         // Subscribe a test user.
+        assert_eq!(get("subscribe", &test_subscribe),
+                   (bad_request_error.clone(), Status::BadRequest));
+
         let resp = get("subscribe?name=test", &test_subscribe);
         let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
         let token = registration.token;
