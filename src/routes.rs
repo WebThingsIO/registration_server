@@ -445,7 +445,9 @@ mod tests {
                    (bad_request_error.to_owned(), Status::BadRequest));
 
         // Unsupported method.
-        assert_eq!(put("pdns", r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#, &test_pdns),
+        assert_eq!(put("pdns",
+                       r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#,
+                       &test_pdns),
                    (r#"{"result":false}"#.to_owned(), Status::Ok));
 
         // Simplified local redeclaration of the pdns data structures since
@@ -562,6 +564,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
             result: Vec<PdnsLookupResponse>,
         }
 
+        // A request with a bogus domain.
         let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
@@ -574,8 +577,10 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         let result = put("pdns", &body, &test_pdns);
         assert_eq!(result.1, Status::Ok);
         let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
-        assert_eq!(response.result[0].content, "255.255.255.0"); // Means "no such name found for pagekite"
+        // 255.255.255.0 Means "no such name found for pagekite"
+        assert_eq!(response.result[0].content, "255.255.255.0");
 
+        // A request with a correct domain.
         let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.box.knilxof.org.box.knilxof.org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
@@ -588,6 +593,35 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         let result = put("pdns", &body, &test_pdns);
         assert_eq!(result.1, Status::Ok);
         let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
-        assert_eq!(response.result[0].content, "255.255.255.1"); // Means "failed to verify signature for pagekite"
+        // 255.255.255.1 Means "failed to verify signature for pagekite"
+        assert_eq!(response.result[0].content, "255.255.255.1");
+
+        // SOA request.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("SOA".to_owned()),
+                qname: Some(qname.to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+        let result = put("pdns", &body, &test_pdns);
+        assert_eq!(result.1, Status::Ok);
+        let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
+        assert_eq!(response.result[0].content,
+                   "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800");
+
+        // TXT request.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("TXT".to_owned()),
+                qname: Some(qname.to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+        let result = put("pdns", &body, &test_pdns);
+        assert_eq!(result.1, Status::Ok);
+        assert_eq!(result.0, r#"{"result":false}"#);
     }
 }

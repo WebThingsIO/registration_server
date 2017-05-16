@@ -21,7 +21,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::thread;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct PdnsRequestParameters {
     // intialize method
     path: Option<String>,
@@ -37,7 +37,7 @@ struct PdnsRequestParameters {
     real_remote: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct PdnsRequest {
     method: String,
     parameters: PdnsRequestParameters,
@@ -454,4 +454,96 @@ pub fn start_socket_endpoint(config: &Config) {
             }
         })
         .expect("Failed to start pdns socket thread.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use args::Args;
+    use std::time::Duration;
+
+    fn build_request(method: &str, qtype: Option<&str>, qname: Option<&str>) -> PdnsRequest {
+        let qtype = match qtype {
+            Some(val) => Some(val.to_owned()),
+            None => None,
+        };
+        let qname = match qname {
+            Some(val) => Some(val.to_owned()),
+            None => None,
+        };
+        PdnsRequest {
+            method: method.to_owned(),
+            parameters: PdnsRequestParameters {
+                path: None,
+                timeout: None,
+
+                // lookup method
+                qtype: qtype,
+                qname: qname,
+                zone_id: None,
+                remote: None,
+                local: None,
+                real_remote: None,
+            },
+        }
+    }
+
+    #[test]
+    fn test_socket() {
+        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
+
+        let config = args.to_config();
+
+        start_socket_endpoint(&config);
+
+        // Let enough time for the socket thread to start up and bind the socket.
+        thread::sleep(Duration::new(1, 0));
+        // Connect to the socket.
+        let mut stream = UnixStream::connect(&config.socket_path.unwrap()).unwrap();
+        // Build a initialization request and send it to the stream.
+        let request = build_request("initialize", None, None);
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        let empty_success = b"{\"result\":true}";
+        let empty_error = b"{\"result\":false}";
+
+        let mut answer: [u8; 256] = [0; 256];
+        assert_eq!(stream.read(&mut answer).unwrap(), 15);
+        assert_eq!(&answer[..15], empty_success);
+
+        // Build a lookup request and send it to the stream.
+        let request = build_request("lookup", Some("A"), Some("example.org"));
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 16);
+        assert_eq!(&answer[..16], empty_error);
+
+        // Build a SOA lookup request and send it to the stream.
+        let request = build_request("lookup", Some("SOA"), Some("example.org"));
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 16);
+        assert_eq!(&answer[..16], empty_error);
+
+        // SOA pagekite query, to create a successfull response without
+        // having to setup records in the db.
+        let request = build_request("lookup",
+                                    Some("A"),
+                                    Some("1d48.https-4443.test.box.knilxof.org.box.knilxof.org."));
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 125);
+        let result = String::from_utf8(answer[..125].to_vec()).unwrap();
+        let soa_success =
+r#"{"result":[{"qtype":"A","qname":"1d48.https-4443.test.box.knilxof.org.box.knilxof.org.","content":"255.255.255.0","ttl":89}]}"#;
+        assert_eq!(&result, soa_success);
+    }
 }
