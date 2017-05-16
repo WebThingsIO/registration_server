@@ -438,6 +438,16 @@ mod tests {
                        &test_dnsconfig),
                    ("".to_owned(), Status::Ok));
 
+        // Tests for the pdns endpoint.
+
+        // Bogus payload.
+        assert_eq!(put("pdns", r#"{"foo": true}"#, &test_pdns),
+                   (bad_request_error.to_owned(), Status::BadRequest));
+
+        // Unsupported method.
+        assert_eq!(put("pdns", r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#, &test_pdns),
+                   (r#"{"result":false}"#.to_owned(), Status::Ok));
+
         // Simplified local redeclaration of the pdns data structures since
         // we don't need them to be public.
         #[derive(Debug, Serialize)]
@@ -461,6 +471,18 @@ mod tests {
             method: String,
             parameters: PdnsRequestParameters,
         }
+
+        // Failure for an unknown domain.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("A".to_owned()),
+                qname: Some("www.example.org.".to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+        assert_eq!(put("pdns", &body, &test_pdns),
+                   (r#"{"result":false}"#.to_owned(), Status::Ok));
 
         // Test the "remote" dns name.
         let pdns_request = PdnsRequest {
@@ -491,5 +513,81 @@ r#"{"result":[{"qtype":"A","qname":"test.box.knilxof.org.","content":"1.2.3.4","
 r#"{"result":[{"qtype":"A","qname":"local.test.box.knilxof.org.","content":"10.0.0.1","ttl":89}]}"#;
         assert_eq!(put("pdns", &body, &test_pdns),
                    (success.to_owned(), Status::Ok));
+
+        // Test LE challenge queries.
+        // Test the "local" dns name.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("TXT".to_owned()),
+                qname: Some("_acme-challenge.local.test.box.knilxof.org.".to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+
+        let success =
+r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.box.knilxof.org.","content":"test_challenge","ttl":89}]}"#;
+        assert_eq!(put("pdns", &body, &test_pdns),
+                   (success.to_owned(), Status::Ok));
+
+        // Test SOA queries.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("SOA".to_owned()),
+                qname: Some("test.box.knilxof.org.".to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+
+        let success =
+r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800","ttl":89}]}"#;
+        assert_eq!(put("pdns", &body, &test_pdns),
+                   (success.to_owned(), Status::Ok));
+
+        // PageKite queries
+        #[derive(Deserialize)]
+        struct PdnsLookupResponse {
+            qtype: String,
+            qname: String,
+            content: String,
+            ttl: u32,
+            domain_id: Option<String>,
+            #[serde(rename="scopeMask")]
+            scope_mask: Option<String>,
+            auth: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct PdnsResponse {
+            result: Vec<PdnsLookupResponse>,
+        }
+
+        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org.";
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("A".to_owned()),
+                qname: Some(qname.to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+        let result = put("pdns", &body, &test_pdns);
+        assert_eq!(result.1, Status::Ok);
+        let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
+        assert_eq!(response.result[0].content, "255.255.255.0"); // Means "no such name found for pagekite"
+
+        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.box.knilxof.org.box.knilxof.org.";
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("A".to_owned()),
+                qname: Some(qname.to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+        let result = put("pdns", &body, &test_pdns);
+        assert_eq!(result.1, Status::Ok);
+        let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
+        assert_eq!(response.result[0].content, "255.255.255.1"); // Means "failed to verify signature for pagekite"
     }
 }
