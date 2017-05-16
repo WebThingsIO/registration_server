@@ -504,18 +504,13 @@ fn test_domain_store() {
     db.flush().recv().unwrap().expect("Flushing the db");
 
     // Check that we don't find any record.
-    match db.get_record_by_name("test.example.org")
-              .recv()
-              .unwrap() {
-        Err(DatabaseError::NoRecord) => {}
-        Err(err) => panic!("Should not find a record by name in an empty db. {:?}", err),
-        _ => panic!("Should not find a record by name in an empty db."),
-    }
+    assert_eq!(db.get_record_by_name("test.example.org")
+                   .recv()
+                   .unwrap(),
+               Err(DatabaseError::NoRecord));
 
-    match db.get_record_by_token("test-token").recv().unwrap() {
-        Err(DatabaseError::NoRecord) => {}
-        _ => panic!("Should not find a record by token in an empty db."),
-    }
+    assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
+               Err(DatabaseError::NoRecord));
 
     // Add a record without a dns challenge.
     let no_challenge_record = DomainRecord::new("test-token",
@@ -527,23 +522,19 @@ fn test_domain_store() {
                                                 "Test Server",
                                                 None,
                                                 0);
-    db.add_record(no_challenge_record.clone())
-        .recv()
-        .unwrap()
-        .expect("Adding the no_challenge record");
+    assert_eq!(db.add_record(no_challenge_record.clone())
+                   .recv()
+                   .unwrap(),
+               Ok(()));
 
     // Check that we can find it and that it matches our record.
-    match db.get_record_by_name("test.example.org")
-              .recv()
-              .unwrap() {
-        Ok(record) => assert_eq!(record, no_challenge_record),
-        Err(err) => panic!("Failed to find record by name: {:?}", err),
-    }
+    assert_eq!(db.get_record_by_name("test.example.org")
+                   .recv()
+                   .unwrap(),
+               Ok(no_challenge_record.clone()));
 
-    match db.get_record_by_token("test-token").recv().unwrap() {
-        Ok(record) => assert_eq!(record, no_challenge_record),
-        Err(err) => panic!("Failed to find record by token: {:?}", err),
-    }
+    assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
+               Ok(no_challenge_record.clone()));
 
     // Update the record to have challenge.
     let challenge_record = DomainRecord::new("test-token",
@@ -555,38 +546,36 @@ fn test_domain_store() {
                                              "Test Server",
                                              None,
                                              0);
-    db.update_record(challenge_record.clone())
-        .recv()
-        .unwrap()
-        .expect("Updating the challenge record");
+    assert_eq!(db.update_record(challenge_record.clone())
+                   .recv()
+                   .unwrap(),
+               Ok(()));
 
     // Check that we can find it and that it matches our record.
-    match db.get_record_by_name("test.example.org")
-              .recv()
-              .unwrap() {
-        Ok(record) => assert_eq!(record, challenge_record),
-        Err(err) => panic!("Failed to find record by name: {:?}", err),
-    }
+    assert_eq!(db.get_record_by_name("test.example.org")
+                   .recv()
+                   .unwrap(),
+               Ok(challenge_record.clone()));
 
-    match db.get_record_by_token("test-token").recv().unwrap() {
-        Ok(record) => assert_eq!(record, challenge_record),
-        Err(err) => panic!("Failed to find record by token: {:?}", err),
-    }
+    assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
+               Ok(challenge_record.clone()));
 
     // Remove by token.
-    db.delete_record_by_token(&challenge_record.token)
-        .recv()
-        .unwrap()
-        .expect("Should delete record by token");
-    match db.get_record_by_name(&challenge_record.local_name)
-              .recv()
-              .unwrap() {
-        Err(DatabaseError::NoRecord) => {}
-        _ => panic!("Should not find this record anymore."),
-    }
+    assert_eq!(db.delete_record_by_token(&challenge_record.token)
+                   .recv()
+                   .unwrap(),
+               Ok(1));
+
+    assert_eq!(db.get_record_by_name(&challenge_record.local_name)
+                   .recv()
+                   .unwrap(),
+               Err(DatabaseError::NoRecord));
 
     // Add again a token and evict it.
-    let max_age = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    let max_age = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
     let no_challenge_record = DomainRecord::new("test-token",
                                                 "local.test.example.org",
                                                 "test.example.org",
@@ -596,11 +585,14 @@ fn test_domain_store() {
                                                 "Test Server",
                                                 None,
                                                 max_age - 1);
-    db.add_record(no_challenge_record.clone())
-        .recv()
-        .unwrap()
-        .expect("Adding a soon to be evicted record");
-    assert_eq!(db.evict_records(SqlParam::Integer(max_age as i64)).recv().unwrap(), Ok(1));
+    assert_eq!(db.add_record(no_challenge_record.clone())
+                   .recv()
+                   .unwrap(),
+               Ok(()));
+    assert_eq!(db.evict_records(SqlParam::Integer(max_age as i64))
+                   .recv()
+                   .unwrap(),
+               Ok(1));
 }
 
 #[test]
