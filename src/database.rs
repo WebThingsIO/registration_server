@@ -584,6 +584,23 @@ fn test_domain_store() {
         Err(DatabaseError::NoRecord) => {}
         _ => panic!("Should not find this record anymore."),
     }
+
+    // Add again a token and evict it.
+    let max_age = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    let no_challenge_record = DomainRecord::new("test-token",
+                                                "local.test.example.org",
+                                                "test.example.org",
+                                                None,
+                                                None,
+                                                None,
+                                                "Test Server",
+                                                None,
+                                                max_age - 1);
+    db.add_record(no_challenge_record.clone())
+        .recv()
+        .unwrap()
+        .expect("Adding a soon to be evicted record");
+    assert_eq!(db.evict_records(SqlParam::Integer(max_age as i64)).recv().unwrap(), Ok(1));
 }
 
 #[test]
