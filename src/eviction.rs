@@ -39,8 +39,7 @@ pub fn evict_old_entries(config: &Config) {
 mod tests {
     use super::*;
     use args::Args;
-    use config::Config;
-    use database::{Database, DatabaseError, DomainRecord};
+    use database::{Database, DomainRecord};
     use std::time::Duration;
 
     #[test]
@@ -76,13 +75,16 @@ mod tests {
                        .unwrap(),
                    Ok(eviction_record));
 
-        
+
         // Start the eviction thread and wait forthe eviction to happen.
         evict_old_entries(&config);
 
         thread::sleep(Duration::new(6, 0));
 
-        let evicted = db.get_record_by_token("test-token-eviction").recv().unwrap().unwrap();
+        let evicted = db.get_record_by_token("test-token-eviction")
+            .recv()
+            .unwrap()
+            .unwrap();
         assert_eq!(evicted.email, Some("eviction@example.com".to_owned()));
         assert_eq!(evicted.local_ip, None);
         assert_eq!(evicted.public_ip, None);

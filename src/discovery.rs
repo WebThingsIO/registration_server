@@ -72,9 +72,7 @@ pub fn adddiscovery(req: &mut Request, config: &Config) -> IronResult<Response> 
     match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(_) => {
             match config.db.add_discovery(&token, &disco).recv().unwrap() {
-                Ok(()) => {
-                    ok_response!()
-                }
+                Ok(()) => ok_response!(),
                 Err(_) => EndpointError::with(status::BadRequest, 400),
             }
         }
@@ -135,7 +133,7 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
                       .recv()
                       .unwrap() {
                 Ok(records) => {
-                    // Filter out and only return the record that matches the token.
+                    // Filter out and only return the records that matches the token.
                     let results: Vec<Discovered> = records
                         .into_iter()
                         .filter(|item| item.token == token)

@@ -277,7 +277,7 @@ pub fn create(config: &Config) -> Router {
 mod tests {
     use super::*;
     use args::Args;
-    use database::{Database, DomainRecord};
+    use database::{Database, DomainRecord, SqlParam};
     use iron::{Handler, Headers};
     use iron::status::Status;
     use iron_test::{request, response};
@@ -340,8 +340,13 @@ mod tests {
         test_handler!(test_unsubscribe, unsubscribe);
         test_handler!(test_dnsconfig, dnsconfig);
         test_handler!(test_pdns, pdns);
+        test_handler!(test_adddiscovery, adddiscovery);
+        test_handler!(test_revokediscovery, revokediscovery);
+        test_handler!(test_discovery, discovery);
 
-        let bad_request_error = r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned();
+        let bad_request_error = (r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
+                                 Status::BadRequest);
+        let empty_ok = ("".to_owned(), Status::Ok);
 
         // Nothing is registered yet.
         assert_eq!(get("ping", &test_ping), ("[]".to_owned(), Status::Ok));
@@ -353,8 +358,7 @@ mod tests {
         }
 
         // Subscribe a test user.
-        assert_eq!(get("subscribe", &test_subscribe),
-                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("subscribe", &test_subscribe), bad_request_error);
 
         let resp = get("subscribe?name=test", &test_subscribe);
         let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
@@ -363,12 +367,11 @@ mod tests {
         assert_eq!(registration.name, "test".to_owned());
 
         // Unsubscribe
-        assert_eq!(get("unsubscribe", &test_unsubscribe),
-                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("unsubscribe", &test_unsubscribe), bad_request_error);
         assert_eq!(get("unsubscribe?token=wrong_token", &test_unsubscribe),
-                   (bad_request_error.clone(), Status::BadRequest));
+                   bad_request_error);
         assert_eq!(get(&format!("unsubscribe?token={}", token), &test_unsubscribe),
-                   ("".to_owned(), Status::Ok));
+                   empty_ok);
 
         // Subscribe again
         let resp = get("subscribe?name=test", &test_subscribe);
@@ -384,20 +387,18 @@ mod tests {
                    r#"{"error": "UnavailableName"}"#.to_owned());
 
         // Register without the expected parameters.
-        assert_eq!(get("register", &test_register),
-                   (bad_request_error.clone(), Status::BadRequest));
-        assert_eq!(get("register?name=test", &test_register),
-                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("register", &test_register), bad_request_error);
+        assert_eq!(get("register?name=test", &test_register), bad_request_error);
         assert_eq!(get(&format!("register?token={}", token), &test_register),
-                   (bad_request_error.clone(), Status::BadRequest));
+                   bad_request_error);
         assert_eq!(get("register?local_ip=10.0.0.1&token=wrong_token",
                        &test_register),
-                   (bad_request_error.clone(), Status::BadRequest));
+                   bad_request_error);
 
         // Register properly.
         assert_eq!(get(&format!("register?local_ip=10.0.0.1&token={}", token),
                        &test_register),
-                   ("".to_owned(), Status::Ok));
+                   empty_ok);
 
         // Now retrieve our registered client.
         assert_eq!(get("ping", &test_ping),
@@ -406,10 +407,8 @@ mod tests {
                     Status::Ok));
 
         // Get the full info
-        assert_eq!(get("info", &test_info),
-                   (bad_request_error.clone(), Status::BadRequest));
-        assert_eq!(get("info?token=wrong_token", &test_info),
-                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("info", &test_info), bad_request_error);
+        assert_eq!(get("info?token=wrong_token", &test_info), bad_request_error);
 
         let response = get(&format!("info?token={}", token), &test_info);
         assert_eq!(response.1, Status::Ok);
@@ -422,24 +421,23 @@ mod tests {
         assert_eq!(record.description, r#"test's server"#);
 
         // Test the LE challenge endpoints.
-        assert_eq!(get("dnsconfig", &test_dnsconfig),
-                   (bad_request_error.clone(), Status::BadRequest));
+        assert_eq!(get("dnsconfig", &test_dnsconfig), bad_request_error);
         assert_eq!(get("dnsconfig?token=wrong_token", &test_dnsconfig),
-                   (bad_request_error.clone(), Status::BadRequest));
+                   bad_request_error);
         assert_eq!(get(&format!("dnsconfig?token={}", token), &test_dnsconfig),
-                   (bad_request_error.clone(), Status::BadRequest));
+                   bad_request_error);
         assert_eq!(get("dnsconfig?token=wrong_token&challenge=test_challenge",
                        &test_dnsconfig),
-                   (bad_request_error.clone(), Status::BadRequest));
+                   bad_request_error);
         assert_eq!(get(&format!("dnsconfig?token={}&challenge=test_challenge", token),
                        &test_dnsconfig),
-                   ("".to_owned(), Status::Ok));
+                   empty_ok);
 
         // Tests for the pdns endpoint.
 
         // Bogus payload.
         assert_eq!(put("pdns", r#"{"foo": true}"#, &test_pdns),
-                   (bad_request_error.to_owned(), Status::BadRequest));
+                   bad_request_error);
 
         // Unsupported method.
         assert_eq!(put("pdns",
@@ -547,13 +545,19 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         // PageKite queries
         #[derive(Deserialize)]
         struct PdnsLookupResponse {
+            #[allow(dead_code)]
             qtype: String,
+            #[allow(dead_code)]
             qname: String,
             content: String,
+            #[allow(dead_code)]
             ttl: u32,
+            #[allow(dead_code)]
             domain_id: Option<String>,
+            #[allow(dead_code)]
             #[serde(rename="scopeMask")]
             scope_mask: Option<String>,
+            #[allow(dead_code)]
             auth: Option<String>,
         }
         #[derive(Deserialize)]
@@ -620,5 +624,58 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         let result = put("pdns", &body, &test_pdns);
         assert_eq!(result.1, Status::Ok);
         assert_eq!(result.0, r#"{"result":false}"#);
+
+        // Discovery tests.
+
+        // Add a discovery token
+        assert_eq!(get("adddiscovery", &test_adddiscovery), bad_request_error);
+        assert_eq!(get("adddiscovery?token=wrong_token", &test_adddiscovery),
+                   bad_request_error);
+        assert_eq!(get("adddiscovery?token=wrong_token&disco=disco_token",
+                       &test_adddiscovery),
+                   bad_request_error);
+        assert_eq!(get(&format!("adddiscovery?token={}&disco=disco_token", token),
+                       &test_adddiscovery),
+                   empty_ok);
+
+        // Get records for a given token.
+        assert_eq!(get("discovery", &test_discovery), bad_request_error);
+        assert_eq!(get("discovery?disco=wrong_disco", &test_discovery),
+                   bad_request_error);
+        assert_eq!(get("discovery?disco=disco_token", &test_discovery),
+        (r#"[{"href":"https://local.test.box.knilxof.org","desc":"test's server"}]"#.to_owned(),
+        Status::Ok));
+
+        // Get the record with to evict it.
+        let db = Database::new("domain_db_test_routes.sqlite");
+        let timestamp = db.get_record_by_token(&token)
+            .recv()
+            .unwrap()
+            .unwrap()
+            .timestamp;
+        assert_eq!(db.evict_records(SqlParam::Integer(timestamp + 1))
+                       .recv()
+                       .unwrap(),
+                   Ok(1));
+
+        // Check that we discover it now as a remote server.
+        assert_eq!(get("discovery?disco=disco_token", &test_discovery),
+        (r#"[{"href":"https://test.box.knilxof.org","desc":"test's server"}]"#.to_owned(),
+        Status::Ok));
+
+        // Revoke the token.
+        assert_eq!(get("revokediscovery", &test_revokediscovery),
+                   bad_request_error);
+        assert_eq!(get("revokediscovery?token=wrong_token", &test_revokediscovery),
+                   bad_request_error);
+        assert_eq!(get(&format!("revokediscovery?token={}", token),
+                       &test_revokediscovery),
+                   bad_request_error);
+        assert_eq!(get(&format!("revokediscovery?token={}&disco=disco_token", token),
+                       &test_revokediscovery),
+                   empty_ok);
+        assert_eq!(get("discovery?disco=disco_token", &test_discovery),
+                   bad_request_error);
+
     }
 }
