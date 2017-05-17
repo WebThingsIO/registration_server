@@ -436,6 +436,8 @@ impl Database {
 
     // Evict records older than a given timestamp.
     // Returns the number of evicted records.
+    // Eviction means that we loose the local <-> public ip binding,
+    // *not* that we remove the record from the database.
     pub fn evict_records(&self, timestamp: SqlParam) -> Receiver<Result<i32, DatabaseError>> {
         let (tx, rx) = channel();
 

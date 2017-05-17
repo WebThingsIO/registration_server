@@ -14,3 +14,10 @@ pub struct Config {
     pub soa_content: String,
     pub socket_path: Option<String>,
 }
+
+impl Config {
+    pub fn with_db(&mut self, db: Database) -> &mut Self {
+        self.db = db;
+        self
+    }
+}
