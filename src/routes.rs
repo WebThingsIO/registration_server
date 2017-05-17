@@ -277,7 +277,7 @@ pub fn create(config: &Config) -> Router {
 mod tests {
     use super::*;
     use args::Args;
-    use database::DomainRecord;
+    use database::{Database, DomainRecord};
     use iron::{Handler, Headers};
     use iron::status::Status;
     use iron_test::{request, response};
@@ -287,7 +287,11 @@ mod tests {
             fn $name(req: &mut Request) -> IronResult<Response> {
                 let args = Args::from(vec!["registration_server",
                                            "--config-file=./config.toml.test"]);
-                let config = args.to_config();
+
+                let mut arg_config = args.to_config();
+                let db = Database::new("domain_db_test_routes.sqlite");
+                let config = arg_config.with_db(db.clone());
+
                 $proxy(req, &config)
             }
         )
@@ -326,15 +330,8 @@ mod tests {
 
     #[test]
     fn test_router() {
-        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
-
-        let config = args.to_config();
-        config
-            .db
-            .flush()
-            .recv()
-            .unwrap()
-            .expect("Flushing the db");
+        let db = Database::new("domain_db_test_routes.sqlite");
+        db.flush().recv().unwrap().expect("Flushing the db");
 
         test_handler!(test_subscribe, subscribe);
         test_handler!(test_register, register);

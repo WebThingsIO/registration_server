@@ -121,5 +121,3 @@ fn main() {
         iron.https(addr.as_ref() as &str, ssl).unwrap();
     }
 }
-
-// TODO: add iron tests.

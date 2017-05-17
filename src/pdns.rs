@@ -460,6 +460,7 @@ pub fn start_socket_endpoint(config: &Config) {
 mod tests {
     use super::*;
     use args::Args;
+    use database::Database;
     use std::time::Duration;
 
     fn build_request(method: &str, qtype: Option<&str>, qname: Option<&str>) -> PdnsRequest {
@@ -492,14 +493,18 @@ mod tests {
     fn test_socket() {
         let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
 
-        let config = args.to_config();
+        let db = Database::new("domain_db_test_pdns.sqlite");
+        db.flush().recv().unwrap().expect("Flushing the db");
+
+        let mut arg_config = args.to_config();
+        let config = arg_config.with_db(db.clone());
 
         start_socket_endpoint(&config);
 
         // Let enough time for the socket thread to start up and bind the socket.
         thread::sleep(Duration::new(1, 0));
         // Connect to the socket.
-        let mut stream = UnixStream::connect(&config.socket_path.unwrap()).unwrap();
+        let mut stream = UnixStream::connect(&config.clone().socket_path.unwrap()).unwrap();
         // Build a initialization request and send it to the stream.
         let request = build_request("initialize", None, None);
         let body = serde_json::to_string(&request).unwrap();
