@@ -270,62 +270,81 @@ pub fn create(config: &Config) -> Router {
         handler!(pdns);
     }
 
+    // Tests need the pdns handler in all cases.
+    #[cfg(test)]
+    {
+        if config.socket_path.is_some() {
+            handler!(pdns);
+        }
+    }
+
     router
 }
 
 #[cfg(test)]
 mod tests {
+    extern crate hyper;
+
     use super::*;
     use args::Args;
     use database::{Database, DomainRecord, SqlParam};
-    use iron::{Handler, Headers};
+    use iron::{Handler, Url};
     use iron::status::Status;
-    use iron_test::{request, response};
+    use iron::method;
+    use iron;
+    use iron_test::response;
+    use iron_test::mock_stream::MockStream;
+    use std::io::Cursor;
+    use self::hyper::buffer::BufReader;
+    use self::hyper::net::NetworkStream;
 
-    macro_rules! test_handler {
-        ($name:ident, $proxy:ident) => (
-            fn $name(req: &mut Request) -> IronResult<Response> {
-                let args = Args::from(vec!["registration_server",
-                                           "--config-file=./config.toml.test"]);
-
-                let mut arg_config = args.to_config();
-                let db = Database::new("domain_db_test_routes.sqlite");
-                let config = arg_config.with_db(db.clone());
-
-                $proxy(req, &config)
-            }
-        )
-    }
-
-    fn get_response<H: Handler>(path: &str, handler: &H) -> Response {
-        match request::get(&format!("http://localhost:3000/{}", path),
-                           Headers::new(),
-                           handler) {
+    fn get(path: &str, router: &Router) -> (String, Status) {
+        let resp = match request(method::Method::Get, path, "", router) {
             Ok(response) => response,
             Err(err) => err.response,
-        }
-    }
-
-    fn put_response<H: Handler>(path: &str, body: &str, handler: &H) -> Response {
-        match request::put(&format!("http://localhost:3000/{}", path),
-                           Headers::new(),
-                           body,
-                           handler) {
-            Ok(response) => response,
-            Err(err) => err.response,
-        }
-    }
-
-    fn get<H: Handler>(path: &str, handler: &H) -> (String, Status) {
-        let resp = get_response(path, handler);
+        };
         let status = resp.status.unwrap();
         (response::extract_body_to_string(resp), status)
     }
 
-    fn put<H: Handler>(path: &str, body: &str, handler: &H) -> (String, Status) {
-        let resp = put_response(path, body, handler);
+    fn put(path: &str, body: &str, router: &Router) -> (String, Status) {
+        let resp = match request(method::Method::Get, path, body, router) {
+            Ok(response) => response,
+            Err(err) => err.response,
+        };
         let status = resp.status.unwrap();
         (response::extract_body_to_string(resp), status)
+    }
+
+    // Triggers a request for a url on the router.
+    fn request(method: method::Method,
+               path: &str,
+               body: &str,
+               router: &Router)
+               -> IronResult<Response> {
+        let url = Url::parse(&format!("http://localhost/{}", path)).unwrap();
+        // From iron 0.5.x, iron::Request contains private field. So, it is not good to
+        // create iron::Request directly. Make http request and parse it with hyper,
+        // and make iron::Request from hyper::client::Request.
+        let mut buffer = String::new();
+        buffer.push_str(&format!("{} {} HTTP/1.1\r\n", &method, url));
+        buffer.push_str(&format!("Content-Length: {}\r\n", body.len() as u64));
+        buffer.push_str("\r\n");
+        buffer.push_str(body);
+
+        let addr = "127.0.0.1:3000".parse().unwrap();
+        let protocol = match url.scheme() {
+            "http" => iron::Protocol::http(),
+            "https" => iron::Protocol::https(),
+            _ => panic!("unknown protocol {}", url.scheme()),
+        };
+
+        let mut stream = MockStream::new(Cursor::new(buffer.as_bytes().to_vec()));
+        let mut buf_reader = BufReader::new(&mut stream as &mut NetworkStream);
+        let http_request = hyper::server::Request::new(&mut buf_reader, addr).unwrap();
+        let mut req = Request::from_http(http_request, addr, &protocol).unwrap();
+
+        router.handle(&mut req)
     }
 
     #[test]
@@ -333,23 +352,16 @@ mod tests {
         let db = Database::new("domain_db_test_routes.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
 
-        test_handler!(test_subscribe, subscribe);
-        test_handler!(test_register, register);
-        test_handler!(test_ping, ping);
-        test_handler!(test_info, info);
-        test_handler!(test_unsubscribe, unsubscribe);
-        test_handler!(test_dnsconfig, dnsconfig);
-        test_handler!(test_pdns, pdns);
-        test_handler!(test_adddiscovery, adddiscovery);
-        test_handler!(test_revokediscovery, revokediscovery);
-        test_handler!(test_discovery, discovery);
+        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
+        let mut arg_config = args.to_config();
+        let router = create(&arg_config.with_db(db.clone()));
 
         let bad_request_error = (r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
                                  Status::BadRequest);
         let empty_ok = ("".to_owned(), Status::Ok);
 
         // Nothing is registered yet.
-        assert_eq!(get("ping", &test_ping), ("[]".to_owned(), Status::Ok));
+        assert_eq!(get("ping", &router), ("[]".to_owned(), Status::Ok));
 
         #[derive(Deserialize)]
         struct NameAndToken {
@@ -358,59 +370,57 @@ mod tests {
         }
 
         // Subscribe a test user.
-        assert_eq!(get("subscribe", &test_subscribe), bad_request_error);
+        assert_eq!(get("subscribe", &router), bad_request_error);
 
-        let resp = get("subscribe?name=test", &test_subscribe);
+        let resp = get("subscribe?name=test", &router);
         let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
         let token = registration.token;
 
         assert_eq!(registration.name, "test".to_owned());
 
         // Unsubscribe
-        assert_eq!(get("unsubscribe", &test_unsubscribe), bad_request_error);
-        assert_eq!(get("unsubscribe?token=wrong_token", &test_unsubscribe),
+        assert_eq!(get("unsubscribe", &router), bad_request_error);
+        assert_eq!(get("unsubscribe?token=wrong_token", &router),
                    bad_request_error);
-        assert_eq!(get(&format!("unsubscribe?token={}", token), &test_unsubscribe),
+        assert_eq!(get(&format!("unsubscribe?token={}", token), &router),
                    empty_ok);
 
         // Subscribe again
-        let resp = get("subscribe?name=test", &test_subscribe);
+        let resp = get("subscribe?name=test", &router);
         let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
         let token = registration.token;
 
         assert_eq!(registration.name, "test".to_owned());
 
         // Fail to register twice the same user.
-        let res = get_response("subscribe?name=test", &test_subscribe);
-        assert_eq!(res.status, Some(Status::BadRequest));
-        assert_eq!(response::extract_body_to_string(res),
-                   r#"{"error": "UnavailableName"}"#.to_owned());
+        let res = get("subscribe?name=test", &router);
+        assert_eq!(res,
+                   (r#"{"error": "UnavailableName"}"#.to_owned(), Status::BadRequest));
 
         // Register without the expected parameters.
-        assert_eq!(get("register", &test_register), bad_request_error);
-        assert_eq!(get("register?name=test", &test_register), bad_request_error);
-        assert_eq!(get(&format!("register?token={}", token), &test_register),
+        assert_eq!(get("register", &router), bad_request_error);
+        assert_eq!(get("register?name=test", &router), bad_request_error);
+        assert_eq!(get(&format!("register?token={}", token), &router),
                    bad_request_error);
-        assert_eq!(get("register?local_ip=10.0.0.1&token=wrong_token",
-                       &test_register),
+        assert_eq!(get("register?local_ip=10.0.0.1&token=wrong_token", &router),
                    bad_request_error);
 
         // Register properly.
         assert_eq!(get(&format!("register?local_ip=10.0.0.1&token={}", token),
-                       &test_register),
+                       &router),
                    empty_ok);
 
         // Now retrieve our registered client.
-        assert_eq!(get("ping", &test_ping),
+        assert_eq!(get("ping", &router),
                    (r#"[{"href":"https://local.test.box.knilxof.org","desc":"test's server"}]"#
                         .to_owned(),
                     Status::Ok));
 
         // Get the full info
-        assert_eq!(get("info", &test_info), bad_request_error);
-        assert_eq!(get("info?token=wrong_token", &test_info), bad_request_error);
+        assert_eq!(get("info", &router), bad_request_error);
+        assert_eq!(get("info?token=wrong_token", &router), bad_request_error);
 
-        let response = get(&format!("info?token={}", token), &test_info);
+        let response = get(&format!("info?token={}", token), &router);
         assert_eq!(response.1, Status::Ok);
         let record: DomainRecord = serde_json::from_str(&response.0).unwrap();
         assert_eq!(record.token, token);
@@ -421,28 +431,27 @@ mod tests {
         assert_eq!(record.description, r#"test's server"#);
 
         // Test the LE challenge endpoints.
-        assert_eq!(get("dnsconfig", &test_dnsconfig), bad_request_error);
-        assert_eq!(get("dnsconfig?token=wrong_token", &test_dnsconfig),
+        assert_eq!(get("dnsconfig", &router), bad_request_error);
+        assert_eq!(get("dnsconfig?token=wrong_token", &router),
                    bad_request_error);
-        assert_eq!(get(&format!("dnsconfig?token={}", token), &test_dnsconfig),
+        assert_eq!(get(&format!("dnsconfig?token={}", token), &router),
                    bad_request_error);
         assert_eq!(get("dnsconfig?token=wrong_token&challenge=test_challenge",
-                       &test_dnsconfig),
+                       &router),
                    bad_request_error);
         assert_eq!(get(&format!("dnsconfig?token={}&challenge=test_challenge", token),
-                       &test_dnsconfig),
+                       &router),
                    empty_ok);
 
         // Tests for the pdns endpoint.
 
         // Bogus payload.
-        assert_eq!(put("pdns", r#"{"foo": true}"#, &test_pdns),
-                   bad_request_error);
+        assert_eq!(put("pdns", r#"{"foo": true}"#, &router), bad_request_error);
 
         // Unsupported method.
         assert_eq!(put("pdns",
                        r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#,
-                       &test_pdns),
+                       &router),
                    (r#"{"result":false}"#.to_owned(), Status::Ok));
 
         // Simplified local redeclaration of the pdns data structures since
@@ -478,7 +487,7 @@ mod tests {
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
-        assert_eq!(put("pdns", &body, &test_pdns),
+        assert_eq!(put("pdns", &body, &router),
                    (r#"{"result":false}"#.to_owned(), Status::Ok));
 
         // Test the "remote" dns name.
@@ -493,7 +502,7 @@ mod tests {
 
         let success =
 r#"{"result":[{"qtype":"A","qname":"test.box.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &test_pdns),
+        assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
         // Test the "local" dns name.
@@ -508,7 +517,7 @@ r#"{"result":[{"qtype":"A","qname":"test.box.knilxof.org.","content":"1.2.3.4","
 
         let success =
 r#"{"result":[{"qtype":"A","qname":"local.test.box.knilxof.org.","content":"10.0.0.1","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &test_pdns),
+        assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
         // Test LE challenge queries.
@@ -524,7 +533,7 @@ r#"{"result":[{"qtype":"A","qname":"local.test.box.knilxof.org.","content":"10.0
 
         let success =
 r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.box.knilxof.org.","content":"test_challenge","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &test_pdns),
+        assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
         // Test SOA queries.
@@ -539,7 +548,7 @@ r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.box.knilxof.org
 
         let success =
 r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &test_pdns),
+        assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
         // PageKite queries
@@ -575,7 +584,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &test_pdns);
+        let result = put("pdns", &body, &router);
         assert_eq!(result.1, Status::Ok);
         let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
         // 255.255.255.0 Means "no such name found for pagekite"
@@ -591,7 +600,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &test_pdns);
+        let result = put("pdns", &body, &router);
         assert_eq!(result.1, Status::Ok);
         let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
         // 255.255.255.1 Means "failed to verify signature for pagekite"
@@ -606,7 +615,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &test_pdns);
+        let result = put("pdns", &body, &router);
         assert_eq!(result.1, Status::Ok);
         let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
         assert_eq!(response.result[0].content,
@@ -621,28 +630,27 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &test_pdns);
+        let result = put("pdns", &body, &router);
         assert_eq!(result.1, Status::Ok);
         assert_eq!(result.0, r#"{"result":false}"#);
 
         // Discovery tests.
 
         // Add a discovery token
-        assert_eq!(get("adddiscovery", &test_adddiscovery), bad_request_error);
-        assert_eq!(get("adddiscovery?token=wrong_token", &test_adddiscovery),
+        assert_eq!(get("adddiscovery", &router), bad_request_error);
+        assert_eq!(get("adddiscovery?token=wrong_token", &router),
                    bad_request_error);
-        assert_eq!(get("adddiscovery?token=wrong_token&disco=disco_token",
-                       &test_adddiscovery),
+        assert_eq!(get("adddiscovery?token=wrong_token&disco=disco_token", &router),
                    bad_request_error);
         assert_eq!(get(&format!("adddiscovery?token={}&disco=disco_token", token),
-                       &test_adddiscovery),
+                       &router),
                    empty_ok);
 
         // Get records for a given token.
-        assert_eq!(get("discovery", &test_discovery), bad_request_error);
-        assert_eq!(get("discovery?disco=wrong_disco", &test_discovery),
+        assert_eq!(get("discovery", &router), bad_request_error);
+        assert_eq!(get("discovery?disco=wrong_disco", &router),
                    bad_request_error);
-        assert_eq!(get("discovery?disco=disco_token", &test_discovery),
+        assert_eq!(get("discovery?disco=disco_token", &router),
         (r#"[{"href":"https://local.test.box.knilxof.org","desc":"test's server"}]"#.to_owned(),
         Status::Ok));
 
@@ -659,23 +667,20 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
                    Ok(1));
 
         // Check that we discover it now as a remote server.
-        assert_eq!(get("discovery?disco=disco_token", &test_discovery),
+        assert_eq!(get("discovery?disco=disco_token", &router),
         (r#"[{"href":"https://test.box.knilxof.org","desc":"test's server"}]"#.to_owned(),
         Status::Ok));
 
         // Revoke the token.
-        assert_eq!(get("revokediscovery", &test_revokediscovery),
+        assert_eq!(get("revokediscovery", &router), bad_request_error);
+        assert_eq!(get("revokediscovery?token=wrong_token", &router),
                    bad_request_error);
-        assert_eq!(get("revokediscovery?token=wrong_token", &test_revokediscovery),
-                   bad_request_error);
-        assert_eq!(get(&format!("revokediscovery?token={}", token),
-                       &test_revokediscovery),
+        assert_eq!(get(&format!("revokediscovery?token={}", token), &router),
                    bad_request_error);
         assert_eq!(get(&format!("revokediscovery?token={}&disco=disco_token", token),
-                       &test_revokediscovery),
+                       &router),
                    empty_ok);
-        assert_eq!(get("discovery?disco=disco_token", &test_discovery),
+        assert_eq!(get("discovery?disco=disco_token", &router),
                    bad_request_error);
-
     }
 }

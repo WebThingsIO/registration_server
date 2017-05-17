@@ -28,3 +28,4 @@ uuid = { version = "0.4", features = ["v4"] }
 
 [dev-dependencies]
 iron-test = "0.5"
+hyper = "0.10"
