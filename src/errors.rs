@@ -23,7 +23,7 @@ impl Error for StringError {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct ErrorBody {
     pub code: u16,
     pub errno: u16,
@@ -44,4 +44,11 @@ impl EndpointError {
         Err(IronError::new(StringError(error),
                            (status, serde_json::to_string(&body).unwrap())))
     }
+}
+
+#[test]
+fn test_error() {
+    let s_error = StringError(status::BadRequest.canonical_reason().unwrap().to_owned());
+    let error = format!("{} {}", s_error, s_error.description());
+    assert_eq!(error, r#"StringError("Bad Request") Bad Request"#);
 }
