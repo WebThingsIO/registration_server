@@ -29,6 +29,8 @@ pub struct EmailOptions {
     pub user: Option<String>,
     pub password: Option<String>,
     pub sender: Option<String>,
+    pub confirmation_title: Option<String>,
+    pub confirmation_body: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]

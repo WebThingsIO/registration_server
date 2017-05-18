@@ -9,21 +9,23 @@ use std::io::Read;
 use std::path::PathBuf;
 use toml;
 
-const USAGE: &'static str = "--config-file=[path]    'Path to a toml configuration file.'
---data-directory=[dir]  'The directory where the persistent data will be saved.'
---host=[host]           'Set local hostname.'
---port=[port]           'Set port to listen on for http connections.'
---cert-directory=[dir]  'Certificate directory.'
---domain=[domain]       'The domain that will be tied to this registration server.'
---dns-ttl=[ttl]         'TTL of the DNS records, in seconds.'
---eviction-delay=[secs] 'How often we purge old records.'
---tunnel-ip=[ip]        'The ip address of the tunnel endpoint.'
---soa-content=[dns]     'The content of the SOA record for this tunnel.'
---socket-path=[path]    'The path to the socket used to communicate with PowerDNS'
---email-server=[name]   'The name of the smpt server'
---email-user=[username] 'The username to authenticate with'
---email-password=[pass] 'The password for this email account'
---email-sender=[email]  'The email identity to use as a sender'";
+const USAGE: &'static str = "--config-file=[path]     'Path to a toml configuration file.'
+--data-directory=[dir]   'The directory where the persistent data will be saved.'
+--host=[host]            'Set local hostname.'
+--port=[port]            'Set port to listen on for http connections.'
+--cert-directory=[dir]   'Certificate directory.'
+--domain=[domain]        'The domain that will be tied to this registration server.'
+--dns-ttl=[ttl]          'TTL of the DNS records, in seconds.'
+--eviction-delay=[secs]  'How often we purge old records.'
+--tunnel-ip=[ip]         'The ip address of the tunnel endpoint.'
+--soa-content=[dns]      'The content of the SOA record for this tunnel.'
+--socket-path=[path]     'The path to the socket used to communicate with PowerDNS'
+--email-server=[name]    'The name of the smpt server'
+--email-user=[username]  'The username to authenticate with'
+--email-password=[pass]  'The password for this email account'
+--email-sender=[email]   'The email identity to use as a sender'
+--confirmation-title=[s] 'The title of the confirmation email'
+--confirmation-body=[s]  'The body of the confirmation email'";
 
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
@@ -63,6 +65,8 @@ impl ArgsParser {
         optional!(email_user, "email-user");
         optional!(email_password, "email-password");
         optional!(email_sender, "email-sender");
+        optional!(confirmation_title, "confirmation-title");
+        optional!(confirmation_body, "confirmation-body");
 
         Args {
             general: GeneralOptions {
@@ -94,6 +98,8 @@ impl ArgsParser {
                 user: email_user,
                 password: email_password,
                 sender: email_sender,
+                confirmation_title: confirmation_title,
+                confirmation_body: confirmation_body,
             },
         }
     }

@@ -4,8 +4,6 @@
 
 // Email related routes.
 
-// TODO: make the email body and subject configurable.
-
 use config::Config;
 use database::DatabaseError;
 use email::Mailbox;
@@ -66,7 +64,6 @@ impl EmailSender {
     }
 
     pub fn send(&mut self, to: &str, body: &str, subject: &str) -> Result<(), ()> {
-        // Stub sender.
         let email = match EmailBuilder::new()
                   .to(to)
                   .from(&*self.from)
@@ -141,10 +138,30 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         Ok(_) => {
             match EmailSender::new(config) {
                 Ok(mut sender) => {
-                    let body = format!("Follow <a href=\"https://{}:4443/confirmemail?s={}\">this link</a> to confirm your email.",
-                                       config.options.general.domain,
-                                       link);
-                    match sender.send(&email, &body, "Welcome to your server!") {
+                    let scheme = match config.options.general.cert_directory {
+                        Some(_) => "https",
+                        None => "http",
+                    };
+                    let full_link = format!("{}://{}:{}/confirmemail?s={}",
+                                            scheme,
+                                            config.options.general.domain,
+                                            config.options.general.port,
+                                            link);
+                    let body = config
+                        .options
+                        .email
+                        .clone()
+                        .confirmation_body
+                        .unwrap()
+                        .replace("{link}", &full_link);
+                    match sender.send(&email,
+                                      &body,
+                                      &config
+                                           .options
+                                           .email
+                                           .clone()
+                                           .confirmation_title
+                                           .unwrap()) {
                         Ok(_) => ok_response!(),
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
