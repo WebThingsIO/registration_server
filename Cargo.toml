@@ -8,6 +8,7 @@ ssl = []
 
 [dependencies]
 clap = "2"
+email = "0.0"
 env_logger = "0.3"
 hyper-openssl = "0.2"
 iron = "0.5"

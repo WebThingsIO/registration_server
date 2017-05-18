@@ -4,7 +4,6 @@
 
 use clap::{App, ArgMatches};
 use config::{Args, EmailOptions, GeneralOptions, PdnsOptions};
-use database::Database;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;

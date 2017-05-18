@@ -8,15 +8,18 @@
 
 use config::Config;
 use database::DatabaseError;
+use email::Mailbox;
 use errors::*;
 use lettre::email::EmailBuilder;
-use lettre::transport::smtp::{SecurityLevel, SmtpTransport, SmtpTransportBuilder};
+use lettre::transport::smtp::{SUBMISSION_PORT, SecurityLevel, SmtpTransport, SmtpTransportBuilder};
 use lettre::transport::smtp::authentication::Mechanism;
-use lettre::transport::smtp::SUBMISSION_PORT;
 use lettre::transport::EmailTransport;
+#[cfg(test)]
+use lettre::transport::stub::StubEmailTransport;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use params::{FromValue, Params};
+use std::str::FromStr;
 use uuid::Uuid;
 
 pub struct EmailSender {
@@ -62,14 +65,8 @@ impl EmailSender {
            })
     }
 
-    #[cfg(test)]
-    pub fn send(&mut self, _: &str, _: &str, _: &str) -> Result<(), ()> {
-        // Dummy sender.
-        Ok(())
-    }
-
-    #[cfg(not(test))]
     pub fn send(&mut self, to: &str, body: &str, subject: &str) -> Result<(), ()> {
+        // Stub sender.
         let email = match EmailBuilder::new()
                   .to(to)
                   .from(&*self.from)
@@ -83,11 +80,24 @@ impl EmailSender {
             }
         };
 
+        #[cfg(not(test))]
         match self.connection.send(email.clone()) {
             Ok(_) => Ok(()),
             Err(error) => {
                 error!("{:?}", error);
                 Err(())
+            }
+        }
+
+        #[cfg(test)]
+        {
+            let mut transport = StubEmailTransport;
+            match transport.send(email.clone()) {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    error!("{:?}", error);
+                    Err(())
+                }
             }
         }
     }
@@ -106,7 +116,10 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     let token = String::from_value(token.unwrap()).unwrap();
     let email = String::from_value(email.unwrap()).unwrap();
-    // TODO: check that this is a valid email address.
+    // Check that this is a valid email address.
+    if Mailbox::from_str(&email).is_err() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
 
     let link = format!("{}", Uuid::new_v4());
 

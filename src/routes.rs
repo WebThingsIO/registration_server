@@ -5,7 +5,7 @@
 use config::Config;
 use database::{DatabaseError, DomainRecord};
 use discovery::{adddiscovery, discovery, ping, revokediscovery};
-use email::{setemail, verifyemail};
+use email_routes::{setemail, verifyemail};
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -695,6 +695,11 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         let email = "test@example.com".to_owned();
         assert_eq!(get("setemail", &router), bad_request_error);
         assert_eq!(get("setemail?token=wrong_token", &router),
+                   bad_request_error);
+        assert_eq!(get("setemail?token=wrong_token&email=me@example.com", &router),
+                   bad_request_error);
+        assert_eq!(get(&format!("setemail?token={}&email=not_an_email", token),
+                       &router),
                    bad_request_error);
         assert_eq!(get(&format!("setemail?token={}&email={}", token, email),
                        &router),

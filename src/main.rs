@@ -12,6 +12,7 @@
 #[macro_use]
 extern crate clap;
 extern crate crypto;
+extern crate email;
 extern crate env_logger;
 extern crate hyper_openssl;
 #[macro_use]
@@ -66,7 +67,7 @@ mod args;
 mod config;
 mod database;
 mod discovery;
-mod email;
+mod email_routes;
 mod errors;
 mod eviction;
 mod pdns;
