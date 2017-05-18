@@ -79,7 +79,7 @@ fn main() {
 
     let args = Args::new();
 
-    info!("Managing the domain {}", args.domain);
+    info!("Managing the domain {}", args.general.domain);
 
     let config = args.to_config();
 
@@ -101,16 +101,18 @@ fn main() {
     chain.link_after(cors);
 
     let iron = Iron::new(chain);
-    info!("Starting server on {}:{}", args.host, args.port);
-    let addr = format!("{}:{}", args.host, args.port);
+    info!("Starting server on {}:{}",
+          args.general.host,
+          args.general.port);
+    let addr = format!("{}:{}", args.general.host, args.general.port);
 
     pdns::start_socket_endpoint(&config);
 
-    if args.cert_directory.is_none() {
+    if args.general.cert_directory.is_none() {
         iron.http(addr.as_ref() as &str).unwrap();
     } else {
         info!("Starting TLS server");
-        let certificate_directory = args.cert_directory.unwrap();
+        let certificate_directory = args.general.cert_directory.unwrap();
 
         let mut private_key = certificate_directory.clone();
         private_key.push("privkey.pem");

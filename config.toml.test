@@ -1,15 +1,20 @@
 # Configuration used for tests.
 
+[general]
 host = "127.0.1.1"
 port = 4141
 domain = "knilxof.org"
 data_directory = "/tmp"
 tunnel_ip = "1.2.3.4"
-dns_ttl = 89
 eviction_delay = 2
+
+[pdns]
+dns_ttl = 89
 soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
 socket_path = "/tmp/powerdns_tunnel.sock"
-email_server = "mail.gandi.net"
-email_user = "accounts@knilxof.org"
-email_password = "*******"
-email_sender = "accounts@knilxof.org"
+
+[email]
+server = "mail.gandi.net"
+user = "accounts@knilxof.org"
+password = "******"
+sender = "accounts@knilxof.org"

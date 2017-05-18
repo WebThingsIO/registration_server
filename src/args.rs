@@ -29,21 +29,36 @@ const USAGE: &'static str = "--config-file=[path]    'Path to a toml configurati
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
 #[derive(Deserialize)]
-pub struct Args {
+pub struct GeneralOptions {
     pub host: String,
     pub port: u16,
     pub data_directory: String,
     pub cert_directory: Option<PathBuf>,
     pub domain: String,
     tunnel_ip: String,
+    eviction_delay: u32,
+}
+
+#[derive(Deserialize)]
+pub struct PdnsOptions {
     soa_content: String,
     socket_path: Option<String>,
     dns_ttl: u32,
-    eviction_delay: u32,
-    email_server: Option<String>,
-    email_user: Option<String>,
-    email_password: Option<String>,
-    email_sender: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct EmailOptions {
+    server: Option<String>,
+    user: Option<String>,
+    password: Option<String>,
+    sender: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct Args {
+    pub general: GeneralOptions,
+    pub pdns: PdnsOptions,
+    pub email: EmailOptions,
 }
 
 impl Args {
@@ -82,30 +97,36 @@ impl Args {
         optional!(email_sender, "email-sender");
 
         Args {
-            host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
-            port: value_t!(matches, "port", u16).unwrap_or(4242),
-            cert_directory: cert_directory,
-            data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
-            domain: matches
-                .value_of("domain")
-                .unwrap_or("knilxof.org")
-                .to_owned(),
-            tunnel_ip: matches
-                .value_of("tunnel-ip")
-                .unwrap_or("0.0.0.0")
-                .to_owned(),
-            soa_content: matches
-                .value_of("soa-content")
-                .unwrap_or("_soa_not_configured_")
-                .to_owned(),
-            socket_path: matches.value_of("soa-content").map(|s| s.to_owned()),
-            dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
-            eviction_delay: value_t!(matches, "eviction-delay", u32)
-                .unwrap_or(DEFAULT_EVICTION_DELAY),
-            email_server: email_server,
-            email_user: email_user,
-            email_password: email_password,
-            email_sender: email_sender,
+            general: GeneralOptions {
+                host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
+                port: value_t!(matches, "port", u16).unwrap_or(4242),
+                cert_directory: cert_directory,
+                data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
+                domain: matches
+                    .value_of("domain")
+                    .unwrap_or("knilxof.org")
+                    .to_owned(),
+                tunnel_ip: matches
+                    .value_of("tunnel-ip")
+                    .unwrap_or("0.0.0.0")
+                    .to_owned(),
+                eviction_delay: value_t!(matches, "eviction-delay", u32)
+                    .unwrap_or(DEFAULT_EVICTION_DELAY),
+            },
+            pdns: PdnsOptions {
+                soa_content: matches
+                    .value_of("soa-content")
+                    .unwrap_or("_soa_not_configured_")
+                    .to_owned(),
+                socket_path: matches.value_of("soa-content").map(|s| s.to_owned()),
+                dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
+            },
+            email: EmailOptions {
+                server: email_server,
+                user: email_user,
+                password: email_password,
+                sender: email_sender,
+            },
         }
     }
 
@@ -126,17 +147,17 @@ impl Args {
 
     pub fn to_config(&self) -> Config {
         Config {
-            db: Database::new(&format!("{}/domains.sqlite", self.data_directory)),
-            domain: self.domain.clone(),
-            tunnel_ip: self.tunnel_ip.clone(),
-            dns_ttl: self.dns_ttl,
-            eviction_delay: self.eviction_delay,
-            soa_content: self.soa_content.clone(),
-            socket_path: self.socket_path.clone(),
-            email_server: self.email_server.clone(),
-            email_user: self.email_user.clone(),
-            email_password: self.email_password.clone(),
-            email_sender: self.email_sender.clone(),
+            db: Database::new(&format!("{}/domains.sqlite", self.general.data_directory)),
+            domain: self.general.domain.clone(),
+            tunnel_ip: self.general.tunnel_ip.clone(),
+            dns_ttl: self.pdns.dns_ttl,
+            eviction_delay: self.general.eviction_delay,
+            soa_content: self.pdns.soa_content.clone(),
+            socket_path: self.pdns.socket_path.clone(),
+            email_server: self.email.server.clone(),
+            email_user: self.email.user.clone(),
+            email_password: self.email.password.clone(),
+            email_sender: self.email.sender.clone(),
         }
     }
 }
@@ -145,14 +166,14 @@ impl Args {
 fn test_args() {
     let args = Args::from(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
 
-    assert_eq!(args.port, 4242);
-    assert_eq!(args.host, "0.0.0.0");
-    assert_eq!(args.domain, "knilxof.org");
-    assert_eq!(args.cert_directory, None);
-    assert_eq!(args.tunnel_ip, "1.2.3.4");
-    assert_eq!(args.dns_ttl, 60);
-    assert_eq!(args.eviction_delay, DEFAULT_EVICTION_DELAY);
-    assert_eq!(args.socket_path, None);
+    assert_eq!(args.general.port, 4242);
+    assert_eq!(args.general.host, "0.0.0.0");
+    assert_eq!(args.general.domain, "knilxof.org");
+    assert_eq!(args.general.cert_directory, None);
+    assert_eq!(args.general.tunnel_ip, "1.2.3.4");
+    assert_eq!(args.pdns.dns_ttl, 60);
+    assert_eq!(args.general.eviction_delay, DEFAULT_EVICTION_DELAY);
+    assert_eq!(args.pdns.socket_path, None);
 
     let args = Args::from(vec!["registration_server",
                                "--host=127.0.1.1",
@@ -163,25 +184,26 @@ fn test_args() {
                                "--tunnel-ip=1.2.3.4",
                                "--eviction-delay=60"]);
 
-    assert_eq!(args.port, 4343);
-    assert_eq!(args.host, "127.0.1.1");
-    assert_eq!(args.domain, "example.com");
-    assert_eq!(args.cert_directory, Some(PathBuf::from("/tmp/certs")));
-    assert_eq!(args.tunnel_ip, "1.2.3.4");
-    assert_eq!(args.dns_ttl, 120);
-    assert_eq!(args.eviction_delay, 60);
-    assert_eq!(args.socket_path, None);
+    assert_eq!(args.general.port, 4343);
+    assert_eq!(args.general.host, "127.0.1.1");
+    assert_eq!(args.general.domain, "example.com");
+    assert_eq!(args.general.cert_directory,
+               Some(PathBuf::from("/tmp/certs")));
+    assert_eq!(args.general.tunnel_ip, "1.2.3.4");
+    assert_eq!(args.pdns.dns_ttl, 120);
+    assert_eq!(args.general.eviction_delay, 60);
+    assert_eq!(args.pdns.socket_path, None);
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
     let args = Args::from(vec!["registration_server", "--config-file=./config.toml.sample"]);
-    assert_eq!(args.port, 4141);
-    assert_eq!(args.host, "127.0.1.1");
-    assert_eq!(args.domain, "box.knilxof.org");
-    assert_eq!(args.cert_directory, None);
-    assert_eq!(args.tunnel_ip, "1.2.3.4");
-    assert_eq!(args.dns_ttl, 89);
-    assert_eq!(args.eviction_delay, 123);
-    assert_eq!(args.soa_content, soa);
-    assert_eq!(args.socket_path,
+    assert_eq!(args.general.port, 4141);
+    assert_eq!(args.general.host, "127.0.1.1");
+    assert_eq!(args.general.domain, "knilxof.org");
+    assert_eq!(args.general.cert_directory, None);
+    assert_eq!(args.general.tunnel_ip, "1.2.3.4");
+    assert_eq!(args.pdns.dns_ttl, 89);
+    assert_eq!(args.general.eviction_delay, 2);
+    assert_eq!(args.pdns.soa_content, soa);
+    assert_eq!(args.pdns.socket_path,
                Some("/tmp/powerdns_tunnel.sock".to_owned()));
 }
