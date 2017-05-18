@@ -5,7 +5,7 @@
 use config::Config;
 use database::{DatabaseError, DomainRecord};
 use discovery::{adddiscovery, discovery, ping, revokediscovery};
-use email_routes::{setemail, verifyemail};
+use email_routes::{revokeemail, setemail, verifyemail};
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -270,6 +270,7 @@ pub fn create(config: &Config) -> Router {
 
     handler!(verifyemail);
     handler!(setemail);
+    handler!(revokeemail);
 
     if config.options.pdns.socket_path.is_none() {
         handler!(pdns);
@@ -715,6 +716,22 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
                    (arg_config.options.email.success_page.unwrap(), Status::Ok));
         // 3. check that the email has been set on the domain record.
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
-        assert_eq!(domain_record.email, Some(email));
+        assert_eq!(domain_record.email, Some(email.clone()));
+        // 4. email revokation
+        assert_eq!(get("revokeemail", &router), bad_request_error);
+        assert_eq!(get("revokeemail?token=wrong_token", &router),
+                   bad_request_error);
+        assert_eq!(get("revokeemail?token=wrong_token&email=me@example.com",
+                       &router),
+                   bad_request_error);
+        assert_eq!(get(&format!("revokeemail?token={}&email=not_an_email", token),
+                       &router),
+                   bad_request_error);
+        assert_eq!(get(&format!("revokeemail?token={}&email={}", token, email),
+                       &router),
+                   empty_ok);
+        // 5. Verify we don't have this email record anymore.
+        let email_record = db.get_email_by_token(&token).recv().unwrap();
+        assert_eq!(email_record, Err(DatabaseError::NoRecord));
     }
 }

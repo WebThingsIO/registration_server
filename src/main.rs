@@ -110,7 +110,9 @@ fn main() {
                               (vec![Method::Get], "ping".to_owned()),
                               (vec![Method::Get], "adddiscovery".to_owned()),
                               (vec![Method::Get], "revokediscovery".to_owned()),
-                              (vec![Method::Get], "discovery".to_owned())]);
+                              (vec![Method::Get], "discovery".to_owned()),
+                              (vec![Method::Get], "setemail".to_owned()),
+                              (vec![Method::Get], "revokeemail".to_owned())]);
     chain.link_after(cors);
 
     let iron = Iron::new(chain);

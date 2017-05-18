@@ -212,3 +212,43 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
+
+pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
+    info!("GET /revokeemail");
+
+    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let token = map.find(&["token"]);
+    let email = map.find(&["email"]);
+
+    if token.is_none() || email.is_none() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    let token = String::from_value(token.unwrap()).unwrap();
+    let email = String::from_value(email.unwrap()).unwrap();
+    // Check that this is a valid email address.
+    if Mailbox::from_str(&email).is_err() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    // Check that this is a valid token.
+    if config
+           .db
+           .get_record_by_token(&token)
+           .recv()
+           .unwrap()
+           .is_err() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    if config
+           .db
+           .delete_email(&email)
+           .recv()
+           .unwrap()
+           .is_err() {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    ok_response!()
+}
