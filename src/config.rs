@@ -31,6 +31,8 @@ pub struct EmailOptions {
     pub sender: Option<String>,
     pub confirmation_title: Option<String>,
     pub confirmation_body: Option<String>,
+    pub success_page: Option<String>,
+    pub error_page: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]

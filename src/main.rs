@@ -53,6 +53,17 @@ macro_rules! json_response {
     )
 }
 
+macro_rules! html_response {
+    ($html:expr) => (
+        {
+            let mut response = Response::with($html);
+            response.headers.set(ContentType::html());
+            response.status = Some(Status::Ok);
+            Ok(response)
+        }
+    )
+}
+
 macro_rules! ok_response {
     () => (
         {

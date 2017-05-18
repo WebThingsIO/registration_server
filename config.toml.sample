@@ -20,3 +20,17 @@ password = "******"
 sender = "accounts@knilxof.org"
 confirmation_title = "Welcome to MozIot"
 confirmation_body = "To confirm your email address, follow this link: {link}"
+success_page = """<!DOCTYPE html>
+<html>
+  <head><title>Email Confirmation Successful!</title></head>
+  <body>
+    <h1>Thank you for verifying your email, {email}.</h1>
+  </body>
+</html>"""
+error_page = """<!DOCTYPE html>
+<html>
+  <head><title>Email Confirmation Error!</title></head>
+  <body>
+    <h1>An error happened while verifiying your email.</h1>
+  </body>
+</html>"""

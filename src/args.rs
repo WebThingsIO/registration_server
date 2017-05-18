@@ -25,7 +25,9 @@ const USAGE: &'static str = "--config-file=[path]     'Path to a toml configurat
 --email-password=[pass]  'The password for this email account'
 --email-sender=[email]   'The email identity to use as a sender'
 --confirmation-title=[s] 'The title of the confirmation email'
---confirmation-body=[s]  'The body of the confirmation email'";
+--confirmation-body=[s]  'The body of the confirmation email'
+--success-page=[s]       'HTML content of the email confirmation success page'
+--error-page=[s]         'HTML content of the email confirmation error page'";
 
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
@@ -67,6 +69,8 @@ impl ArgsParser {
         optional!(email_sender, "email-sender");
         optional!(confirmation_title, "confirmation-title");
         optional!(confirmation_body, "confirmation-body");
+        optional!(success_page, "success-page");
+        optional!(error_page, "error-page");
 
         Args {
             general: GeneralOptions {
@@ -100,6 +104,8 @@ impl ArgsParser {
                 sender: email_sender,
                 confirmation_title: confirmation_title,
                 confirmation_body: confirmation_body,
+                success_page: success_page,
+                error_page: error_page,
             },
         }
     }

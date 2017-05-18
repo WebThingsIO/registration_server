@@ -8,6 +8,7 @@ use config::Config;
 use database::DatabaseError;
 use email::Mailbox;
 use errors::*;
+use iron::headers::ContentType;
 use lettre::email::EmailBuilder;
 use lettre::transport::smtp::{SUBMISSION_PORT, SecurityLevel, SmtpTransport, SmtpTransportBuilder};
 use lettre::transport::smtp::authentication::Mechanism;
@@ -185,8 +186,6 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let link = String::from_value(link.unwrap()).unwrap();
 
-    // TODO: return some useful content
-
     match config.db.get_email_by_link(&link).recv().unwrap() {
         Ok((email, token)) => {
             match config.db.get_record_by_token(&token).recv().unwrap() {
@@ -194,18 +193,22 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // Update the record to set the email address.
                     record.email = Some(email);
                     match config.db.update_record(record).recv().unwrap() {
-                        Ok(_) => ok_response!(),
+                        Ok(_) => html_response!(config.options.email.clone().success_page.unwrap()),
                         Err(DatabaseError::NoRecord) => {
-                            EndpointError::with(status::BadRequest, 400)
+                            html_response!(config.options.email.clone().error_page.unwrap())
                         }
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
                 }
-                Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+                Err(DatabaseError::NoRecord) => {
+                    html_response!(config.options.email.clone().error_page.unwrap())
+                }
                 Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
         }
-        Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+        Err(DatabaseError::NoRecord) => {
+            html_response!(config.options.email.clone().error_page.unwrap())
+        }
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }

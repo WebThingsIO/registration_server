@@ -709,8 +709,10 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         let link = email_record.1;
         // 2. verify the email
         assert_eq!(get("verifyemail", &router), bad_request_error);
-        assert_eq!(get("verifyemail?s=wrong_link", &router), bad_request_error);
-        assert_eq!(get(&format!("verifyemail?s={}", link), &router), empty_ok);
+        assert_eq!(get("verifyemail?s=wrong_link", &router),
+                   (arg_config.options.email.error_page.unwrap(), Status::Ok));
+        assert_eq!(get(&format!("verifyemail?s={}", link), &router),
+                   (arg_config.options.email.success_page.unwrap(), Status::Ok));
         // 3. check that the email has been set on the domain record.
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
         assert_eq!(domain_record.email, Some(email));
