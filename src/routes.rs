@@ -75,7 +75,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // Everything went fine, return an empty 200 OK for now.
                     ok_response!()
                 }
-                Err(_) => EndpointError::with(status::InternalServerError, 501)
+                Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
         }
         Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
@@ -690,11 +690,15 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
 
         // Email routes tests
         // 1. set an email address
+        let email = "test@example.com".to_owned();
         assert_eq!(get("setemail", &router), bad_request_error);
-        assert_eq!(get("setemail?token=wrong_token", &router), bad_request_error);
-        assert_eq!(get(&format!("setemail?token={}&email=test@example.com", token), &router), empty_ok);
-        let email_record = db.select_email_by_token(&token).recv().unwrap().unwrap();
-        assert_eq!(email_record.0, "test@example.com".to_owned());
+        assert_eq!(get("setemail?token=wrong_token", &router),
+                   bad_request_error);
+        assert_eq!(get(&format!("setemail?token={}&email={}", token, email),
+                       &router),
+                   empty_ok);
+        let email_record = db.get_email_by_token(&token).recv().unwrap().unwrap();
+        assert_eq!(email_record.0, email);
         let link = email_record.1;
         // 2. verify the email
         assert_eq!(get("verifyemail", &router), bad_request_error);
@@ -702,6 +706,6 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         assert_eq!(get(&format!("verifyemail?s={}", link), &router), empty_ok);
         // 3. check that the email has been set on the domain record.
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
-        assert_eq!(domain_record.email, Some("test@example.com".to_owned()));
+        assert_eq!(domain_record.email, Some(email));
     }
 }

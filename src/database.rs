@@ -287,9 +287,9 @@ impl Database {
                                 SqlParam::Text(email.to_owned()))
     }
 
-    pub fn select_email_by_link(&self,
-                                link: &str)
-                                -> Receiver<Result<(String, String), DatabaseError>> {
+    pub fn get_email_by_link(&self,
+                             link: &str)
+                             -> Receiver<Result<(String, String), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
@@ -311,9 +311,10 @@ impl Database {
         rx
     }
 
-    pub fn select_email_by_token(&self,
-                                token: &str)
-                                -> Receiver<Result<(String, String), DatabaseError>> {
+    #[cfg(test)]
+    pub fn get_email_by_token(&self,
+                              token: &str)
+                              -> Receiver<Result<(String, String), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
@@ -635,15 +636,15 @@ fn test_email() {
     let link = "secret-link".to_owned();
     let token = "domain-token".to_owned();
 
-    assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
+    assert_eq!(db.get_email_by_link(&link).recv().unwrap(),
                Err(DatabaseError::NoRecord));
     assert_eq!(db.add_email(&email, &token, &link).recv().unwrap(), Ok(()));
-    assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
+    assert_eq!(db.get_email_by_link(&link).recv().unwrap(),
                Ok((email.clone(), token.clone())));
-    assert_eq!(db.select_email_by_token(&token).recv().unwrap(),
+    assert_eq!(db.get_email_by_token(&token).recv().unwrap(),
                Ok((email.clone(), link.clone())));
     assert_eq!(db.delete_email(&email).recv().unwrap(), Ok(1));
-    assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
+    assert_eq!(db.get_email_by_link(&link).recv().unwrap(),
                Err(DatabaseError::NoRecord));
 }
 

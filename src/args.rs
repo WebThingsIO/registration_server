@@ -117,6 +117,7 @@ impl Args {
     }
 
     // Gets the args from a string array.
+    #[cfg(test)]
     pub fn from(params: Vec<&str>) -> Self {
         Args::from_matches(App::new("registration_server")
                                .args_from_usage(USAGE)

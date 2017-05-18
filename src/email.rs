@@ -14,11 +14,9 @@ use lettre::transport::smtp::{SecurityLevel, SmtpTransport, SmtpTransportBuilder
 use lettre::transport::smtp::authentication::Mechanism;
 use lettre::transport::smtp::SUBMISSION_PORT;
 use lettre::transport::EmailTransport;
-use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use params::{FromValue, Params};
-use serde_json;
 use uuid::Uuid;
 
 pub struct EmailSender {
@@ -35,14 +33,15 @@ impl EmailSender {
             return Err(());
         }
 
-        let builder = match SmtpTransportBuilder::new((config.clone().email_server.unwrap().as_str(),
-                                                       SUBMISSION_PORT)) {
-            Ok(builder) => builder,
-            Err(error) => {
-                error!("{:?}", error);
-                return Err(());
-            }
-        };
+        let builder =
+            match SmtpTransportBuilder::new((config.clone().email_server.unwrap().as_str(),
+                                             SUBMISSION_PORT)) {
+                Ok(builder) => builder,
+                Err(error) => {
+                    error!("{:?}", error);
+                    return Err(());
+                }
+            };
 
         let user = config.clone().email_user.unwrap().clone();
         let password = config.clone().email_password.unwrap().clone();
@@ -110,7 +109,12 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     let link = format!("{}", Uuid::new_v4());
 
     // Check that this is a valid token.
-    if config.db.get_record_by_token(&token).recv().unwrap().is_err() {
+    if config
+           .db
+           .get_record_by_token(&token)
+           .recv()
+           .unwrap()
+           .is_err() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
@@ -122,13 +126,15 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         Ok(_) => {
             match EmailSender::new(config) {
                 Ok(mut sender) => {
-                    let body = format!("Follow <a href=\"https://{}:4443/confirmemail?s={}\">this link</a> to confirm your email.", config.domain, link);
+                    let body = format!("Follow <a href=\"https://{}:4443/confirmemail?s={}\">this link</a> to confirm your email.",
+                                       config.domain,
+                                       link);
                     match sender.send(&email, &body, "Welcome to your server!") {
                         Ok(_) => ok_response!(),
-                        Err(_) => EndpointError::with(status::InternalServerError, 501)
+                        Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
                 }
-                Err(_) => EndpointError::with(status::InternalServerError, 501)
+                Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
         }
         Err(_) => EndpointError::with(status::InternalServerError, 501),
@@ -149,7 +155,7 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     // TODO: return some useful content
 
-    match config.db.select_email_by_link(&link).recv().unwrap() {
+    match config.db.get_email_by_link(&link).recv().unwrap() {
         Ok((email, token)) => {
             match config.db.get_record_by_token(&token).recv().unwrap() {
                 Ok(mut record) => {
@@ -157,14 +163,16 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
                     record.email = Some(email);
                     match config.db.update_record(record).recv().unwrap() {
                         Ok(_) => ok_response!(),
-                        Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
+                        Err(DatabaseError::NoRecord) => {
+                            EndpointError::with(status::BadRequest, 400)
+                        }
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
-                },
+                }
                 Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
                 Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
-        },
+        }
         Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
