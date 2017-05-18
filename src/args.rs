@@ -20,7 +20,11 @@ const USAGE: &'static str = "--config-file=[path]    'Path to a toml configurati
 --eviction-delay=[secs] 'How often we purge old records.'
 --tunnel-ip=[ip]        'The ip address of the tunnel endpoint.'
 --soa-content=[dns]     'The content of the SOA record for this tunnel.'
---socket-path=[path]    'The path to the socket used to communicate with PowerDNS'";
+--socket-path=[path]    'The path to the socket used to communicate with PowerDNS'
+--email-server=[name]   'The name of the smpt server'
+--email-user=[username] 'The username to authenticate with'
+--email-password=[pass] 'The password for this email account'
+--email-sender=[email]  'The email identity to use as a sender'";
 
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
@@ -36,6 +40,10 @@ pub struct Args {
     socket_path: Option<String>,
     dns_ttl: u32,
     eviction_delay: u32,
+    email_server: Option<String>,
+    email_user: Option<String>,
+    email_password: Option<String>,
+    email_sender: Option<String>,
 }
 
 impl Args {
@@ -52,11 +60,26 @@ impl Args {
             return Args::from_file(&PathBuf::from(matches.value_of("config-file").unwrap()));
         }
 
-        let cert_directory = if matches.is_present("cert-directory") {
-            Some(PathBuf::from(matches.value_of("cert-directory").unwrap()))
-        } else {
-            None
+        macro_rules! optional {
+            ($var:ident, $name:expr) => (
+                let $var = if matches.is_present($name) {
+                    Some(matches.value_of($name).unwrap().to_owned())
+                } else {
+                    None
+                };
+            )
+        }
+
+        optional!(cert_dir, "cert-directory");
+        let cert_directory = match cert_dir {
+            Some(dir) => Some(PathBuf::from(dir)),
+            None => None,
         };
+
+        optional!(email_server, "email-server");
+        optional!(email_user, "email-user");
+        optional!(email_password, "email-password");
+        optional!(email_sender, "email-sender");
 
         Args {
             host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
@@ -79,6 +102,10 @@ impl Args {
             dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
             eviction_delay: value_t!(matches, "eviction-delay", u32)
                 .unwrap_or(DEFAULT_EVICTION_DELAY),
+            email_server: email_server,
+            email_user: email_user,
+            email_password: email_password,
+            email_sender: email_sender,
         }
     }
 
@@ -105,6 +132,10 @@ impl Args {
             eviction_delay: self.eviction_delay,
             soa_content: self.soa_content.clone(),
             socket_path: self.socket_path.clone(),
+            email_server: self.email_server.clone(),
+            email_user: self.email_user.clone(),
+            email_password: self.email_password.clone(),
+            email_sender: self.email_sender.clone(),
         }
     }
 }

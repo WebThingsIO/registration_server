@@ -13,6 +13,10 @@ pub struct Config {
     pub eviction_delay: u32,
     pub soa_content: String,
     pub socket_path: Option<String>,
+    pub email_server: Option<String>,
+    pub email_user: Option<String>,
+    pub email_password: Option<String>,
+    pub email_sender: Option<String>,
 }
 
 impl Config {

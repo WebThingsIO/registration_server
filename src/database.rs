@@ -199,6 +199,7 @@ impl Database {
             .unwrap_or_else(|err| {
                                 panic!("Unable to create the email table: {}", err);
                             });
+        index!("emails", "link");
 
         // Create the discovery table if needed.
         conn.execute("CREATE TABLE IF NOT EXISTS discovery (
@@ -298,6 +299,30 @@ impl Database {
             let mut stmt = sqltry!(conn.prepare("SELECT email, token from emails WHERE link=$1"),
                                    tx);
             let mut rows = sqltry!(stmt.query(&[&link]), tx);
+            if let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
+            } else {
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            }
+
+        });
+
+        rx
+    }
+
+    pub fn select_email_by_token(&self,
+                                token: &str)
+                                -> Receiver<Result<(String, String), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let token = token.to_owned();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+            let mut stmt = sqltry!(conn.prepare("SELECT email, link from emails WHERE token=$1"),
+                                   tx);
+            let mut rows = sqltry!(stmt.query(&[&token]), tx);
             if let Some(result_row) = rows.next() {
                 let row = sqltry!(result_row, tx);
                 tx.send(Ok((row.get(0), row.get(1)))).unwrap();
@@ -418,12 +443,14 @@ impl Database {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
 
             sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, local_ip=$2, \
-                                  public_ip=$3, timestamp=$4 \
-                                  WHERE (local_name=$5 OR remote_name=$6) AND token=$7",
+                                  public_ip=$3, timestamp=$4, email=$5, description=$6 \
+                                  WHERE (local_name=$7 OR remote_name=$8) AND token=$9",
                                  &[&record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.local_ip.unwrap_or("".to_owned()),
                                    &record.public_ip.unwrap_or("".to_owned()),
                                    &record.timestamp,
+                                   &record.email.unwrap_or("".to_owned()),
+                                   &record.description,
                                    &record.local_name,
                                    &record.remote_name,
                                    &record.token]),
@@ -612,7 +639,9 @@ fn test_email() {
                Err(DatabaseError::NoRecord));
     assert_eq!(db.add_email(&email, &token, &link).recv().unwrap(), Ok(()));
     assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
-               Ok((email.clone(), token)));
+               Ok((email.clone(), token.clone())));
+    assert_eq!(db.select_email_by_token(&token).recv().unwrap(),
+               Ok((email.clone(), link.clone())));
     assert_eq!(db.delete_email(&email).recv().unwrap(), Ok(1));
     assert_eq!(db.select_email_by_link(&link).recv().unwrap(),
                Err(DatabaseError::NoRecord));

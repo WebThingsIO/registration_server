@@ -5,6 +5,7 @@
 use config::Config;
 use database::{DatabaseError, DomainRecord};
 use discovery::{adddiscovery, discovery, ping, revokediscovery};
+use email::{setemail, verifyemail};
 use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -74,7 +75,7 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // Everything went fine, return an empty 200 OK for now.
                     ok_response!()
                 }
-                Err(_) => EndpointError::with(status::InternalServerError, 501),
+                Err(_) => EndpointError::with(status::InternalServerError, 501)
             }
         }
         Err(DatabaseError::NoRecord) => EndpointError::with(status::BadRequest, 400),
@@ -261,10 +262,14 @@ pub fn create(config: &Config) -> Router {
     handler!(subscribe);
     handler!(unsubscribe);
     handler!(dnsconfig);
+
     handler!(ping);
     handler!(adddiscovery);
     handler!(revokediscovery);
     handler!(discovery);
+
+    handler!(verifyemail);
+    handler!(setemail);
 
     if config.socket_path.is_none() {
         handler!(pdns);
@@ -682,5 +687,21 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
                    empty_ok);
         assert_eq!(get("discovery?disco=disco_token", &router),
                    bad_request_error);
+
+        // Email routes tests
+        // 1. set an email address
+        assert_eq!(get("setemail", &router), bad_request_error);
+        assert_eq!(get("setemail?token=wrong_token", &router), bad_request_error);
+        assert_eq!(get(&format!("setemail?token={}&email=test@example.com", token), &router), empty_ok);
+        let email_record = db.select_email_by_token(&token).recv().unwrap().unwrap();
+        assert_eq!(email_record.0, "test@example.com".to_owned());
+        let link = email_record.1;
+        // 2. verify the email
+        assert_eq!(get("verifyemail", &router), bad_request_error);
+        assert_eq!(get("verifyemail?s=wrong_link", &router), bad_request_error);
+        assert_eq!(get(&format!("verifyemail?s={}", link), &router), empty_ok);
+        // 3. check that the email has been set on the domain record.
+        let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
+        assert_eq!(domain_record.email, Some("test@example.com".to_owned()));
     }
 }

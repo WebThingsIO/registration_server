@@ -9,3 +9,7 @@ dns_ttl = 89
 eviction_delay = 2
 soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
 socket_path = "/tmp/powerdns_tunnel.sock"
+email_server = "mail.gandi.net"
+email_user = "accounts@knilxof.org"
+email_password = "*******"
+email_sender = "accounts@knilxof.org"

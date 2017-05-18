@@ -19,6 +19,7 @@ extern crate iron;
 extern crate iron_cors;
 #[cfg(test)]
 extern crate iron_test;
+extern crate lettre;
 #[macro_use]
 extern crate log;
 extern crate mount;
@@ -65,6 +66,7 @@ mod args;
 mod config;
 mod database;
 mod discovery;
+mod email;
 mod errors;
 mod eviction;
 mod pdns;

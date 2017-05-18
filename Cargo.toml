@@ -12,6 +12,7 @@ env_logger = "0.3"
 hyper-openssl = "0.2"
 iron = "0.5"
 iron-cors = { git = "https://github.com/fxbox/iron-cors.git" }
+lettre = "0.6"
 log = "0.3"
 params = "0.6"
 mount = "0.3"
