@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use clap::{App, ArgMatches};
-use config::Config;
+use config::{Args, EmailOptions, GeneralOptions, PdnsOptions};
 use database::Database;
 use std::fs::File;
 use std::io::Read;
@@ -28,41 +28,10 @@ const USAGE: &'static str = "--config-file=[path]    'Path to a toml configurati
 
 const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
 
-#[derive(Deserialize)]
-pub struct GeneralOptions {
-    pub host: String,
-    pub port: u16,
-    pub data_directory: String,
-    pub cert_directory: Option<PathBuf>,
-    pub domain: String,
-    tunnel_ip: String,
-    eviction_delay: u32,
-}
+pub struct ArgsParser;
 
-#[derive(Deserialize)]
-pub struct PdnsOptions {
-    soa_content: String,
-    socket_path: Option<String>,
-    dns_ttl: u32,
-}
-
-#[derive(Deserialize)]
-pub struct EmailOptions {
-    server: Option<String>,
-    user: Option<String>,
-    password: Option<String>,
-    sender: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct Args {
-    pub general: GeneralOptions,
-    pub pdns: PdnsOptions,
-    pub email: EmailOptions,
-}
-
-impl Args {
-    fn from_file(path: &PathBuf) -> Self {
+impl ArgsParser {
+    fn from_file(path: &PathBuf) -> Args {
         let mut file = File::open(path).expect("Can't open config file");
         let mut source = String::new();
         file.read_to_string(&mut source)
@@ -70,9 +39,9 @@ impl Args {
         toml::from_str(&source).expect("Invalid config file")
     }
 
-    fn from_matches(matches: ArgMatches) -> Self {
+    fn from_matches(matches: ArgMatches) -> Args {
         if matches.is_present("config-file") {
-            return Args::from_file(&PathBuf::from(matches.value_of("config-file").unwrap()));
+            return ArgsParser::from_file(&PathBuf::from(matches.value_of("config-file").unwrap()));
         }
 
         macro_rules! optional {
@@ -131,40 +100,24 @@ impl Args {
     }
 
     // Gets the args from the default command line.
-    pub fn new() -> Self {
-        Args::from_matches(App::new("registration_server")
-                               .args_from_usage(USAGE)
-                               .get_matches())
+    pub fn from_env() -> Args {
+        ArgsParser::from_matches(App::new("registration_server")
+                                     .args_from_usage(USAGE)
+                                     .get_matches())
     }
 
     // Gets the args from a string array.
     #[cfg(test)]
-    pub fn from(params: Vec<&str>) -> Self {
-        Args::from_matches(App::new("registration_server")
-                               .args_from_usage(USAGE)
-                               .get_matches_from(params))
-    }
-
-    pub fn to_config(&self) -> Config {
-        Config {
-            db: Database::new(&format!("{}/domains.sqlite", self.general.data_directory)),
-            domain: self.general.domain.clone(),
-            tunnel_ip: self.general.tunnel_ip.clone(),
-            dns_ttl: self.pdns.dns_ttl,
-            eviction_delay: self.general.eviction_delay,
-            soa_content: self.pdns.soa_content.clone(),
-            socket_path: self.pdns.socket_path.clone(),
-            email_server: self.email.server.clone(),
-            email_user: self.email.user.clone(),
-            email_password: self.email.password.clone(),
-            email_sender: self.email.sender.clone(),
-        }
+    pub fn from_vec(params: Vec<&str>) -> Args {
+        ArgsParser::from_matches(App::new("registration_server")
+                                     .args_from_usage(USAGE)
+                                     .get_matches_from(params))
     }
 }
 
 #[test]
 fn test_args() {
-    let args = Args::from(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
+    let args = ArgsParser::from_vec(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
 
     assert_eq!(args.general.port, 4242);
     assert_eq!(args.general.host, "0.0.0.0");
@@ -175,14 +128,14 @@ fn test_args() {
     assert_eq!(args.general.eviction_delay, DEFAULT_EVICTION_DELAY);
     assert_eq!(args.pdns.socket_path, None);
 
-    let args = Args::from(vec!["registration_server",
-                               "--host=127.0.1.1",
-                               "--port=4343",
-                               "--domain=example.com",
-                               "--cert-directory=/tmp/certs",
-                               "--dns-ttl=120",
-                               "--tunnel-ip=1.2.3.4",
-                               "--eviction-delay=60"]);
+    let args = ArgsParser::from_vec(vec!["registration_server",
+                                         "--host=127.0.1.1",
+                                         "--port=4343",
+                                         "--domain=example.com",
+                                         "--cert-directory=/tmp/certs",
+                                         "--dns-ttl=120",
+                                         "--tunnel-ip=1.2.3.4",
+                                         "--eviction-delay=60"]);
 
     assert_eq!(args.general.port, 4343);
     assert_eq!(args.general.host, "127.0.1.1");
@@ -195,7 +148,8 @@ fn test_args() {
     assert_eq!(args.pdns.socket_path, None);
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
-    let args = Args::from(vec!["registration_server", "--config-file=./config.toml.sample"]);
+    let args = ArgsParser::from_vec(vec!["registration_server",
+                                         "--config-file=./config.toml.sample"]);
     assert_eq!(args.general.port, 4141);
     assert_eq!(args.general.host, "127.0.1.1");
     assert_eq!(args.general.domain, "knilxof.org");

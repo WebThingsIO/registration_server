@@ -99,8 +99,8 @@ fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "SOA".to_owned(),
         qname: qname.to_owned(),
-        content: config.soa_content.to_owned(),
-        ttl: config.dns_ttl,
+        content: config.options.pdns.soa_content.to_owned(),
+        ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
         auth: None,
@@ -129,7 +129,7 @@ fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
 
     // Split up the qname.
     let parts: Vec<&str> = qname.split('.').collect();
-    let subdomain = format!("{}.box.{}.", parts[4], config.domain);
+    let subdomain = format!("{}.box.{}.", parts[4], config.options.general.domain);
     let ip = match config
               .db
               .get_record_by_name(&subdomain)
@@ -140,7 +140,7 @@ fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
             let token = parts[1];
             let sign = parts[2];
             let proto = parts[3];
-            let kite_domain = format!("{}.box.{}", parts[4], config.domain);
+            let kite_domain = format!("{}.box.{}", parts[4], config.options.general.domain);
             let payload = format!("{}:{}:{}:{}", proto, kite_domain, srand, token);
             let salt = sign[..8].to_owned();
 
@@ -171,7 +171,7 @@ fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
         qtype: "A".to_owned(),
         qname: qname.to_owned(),
         content: ip.to_owned(),
-        ttl: config.dns_ttl,
+        ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
         auth: None,
@@ -204,7 +204,8 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
         // If the qname ends up with .box.$domain.box.$domain. we consider that it's a
         // PageKite request and process it separately.
-        if qname.ends_with(&format!(".box.{}.box.{}.", config.domain, config.domain)) {
+        let domain = &config.options.general.domain;
+        if qname.ends_with(&format!(".box.{}.box.{}.", domain, domain)) {
             return pakegite_query(&qname, &qtype, config);
         }
 
@@ -233,7 +234,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 } else {
                     // We are outside of the home network, return the ip of the tunnel
                     // for the A record.
-                    config.tunnel_ip.to_owned()
+                    config.options.general.tunnel_ip.to_owned()
                 };
 
                 let mut pdns_response = PdnsResponse { result: Vec::new() };
@@ -250,7 +251,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         qtype: "A".to_owned(),
                         qname: original_qname.to_owned(),
                         content: a_record,
-                        ttl: config.dns_ttl,
+                        ttl: config.options.pdns.dns_ttl,
                         domain_id: None,
                         scope_mask: None,
                         auth: None,
@@ -266,7 +267,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         qtype: "TXT".to_owned(),
                         qname: original_qname.to_owned(),
                         content: record.dns_challenge.unwrap(),
-                        ttl: config.dns_ttl,
+                        ttl: config.options.pdns.dns_ttl,
                         domain_id: None,
                         scope_mask: None,
                         auth: None,
@@ -413,12 +414,12 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
 }
 
 pub fn start_socket_endpoint(config: &Config) {
-    if config.socket_path.is_none() {
+    if config.options.pdns.socket_path.is_none() {
         error!("No socket path configured!");
         return;
     }
 
-    let path = &config.socket_path.clone().unwrap();
+    let path = &config.options.pdns.socket_path.clone().unwrap();
 
     debug!("Starting the pdns socket endpoint at {}", path);
 
@@ -459,7 +460,8 @@ pub fn start_socket_endpoint(config: &Config) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use args::Args;
+    use args::ArgsParser;
+    use config::Config;
     use database::Database;
     use std::time::Duration;
 
@@ -491,12 +493,13 @@ mod tests {
 
     #[test]
     fn test_socket() {
-        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
+        let args = ArgsParser::from_vec(vec!["registration_server",
+                                             "--config-file=./config.toml.test"]);
 
         let db = Database::new("domain_db_test_pdns.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
 
-        let mut arg_config = args.to_config();
+        let mut arg_config = Config::from_args(args);
         let config = arg_config.with_db(db.clone());
 
         start_socket_endpoint(&config);
@@ -504,7 +507,8 @@ mod tests {
         // Let enough time for the socket thread to start up and bind the socket.
         thread::sleep(Duration::new(1, 0));
         // Connect to the socket.
-        let mut stream = UnixStream::connect(&config.clone().socket_path.unwrap()).unwrap();
+        let mut stream = UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap())
+            .unwrap();
         // Build a initialization request and send it to the stream.
         let request = build_request("initialize", None, None);
         let body = serde_json::to_string(&request).unwrap();

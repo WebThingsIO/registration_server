@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 // Clients should renew their registration at a shorter interval.
 
 pub fn evict_old_entries(config: &Config) {
-    let delay = config.eviction_delay;
+    let delay = config.options.general.eviction_delay;
     let db = config.db.clone();
     thread::Builder::new()
         .name("eviction".into())
@@ -38,18 +38,20 @@ pub fn evict_old_entries(config: &Config) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use args::Args;
+    use args::ArgsParser;
+    use config::Config;
     use database::{Database, DomainRecord};
     use std::time::Duration;
 
     #[test]
     fn eviction_thread() {
-        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
+        let args = ArgsParser::from_vec(vec!["registration_server",
+                                             "--config-file=./config.toml.test"]);
 
         let db = Database::new("domain_db_test_eviction.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
 
-        let mut arg_config = args.to_config();
+        let mut arg_config = Config::from_args(args);
         let config = arg_config.with_db(db.clone());
 
         // Add a entry to the database, with a current timestamp.

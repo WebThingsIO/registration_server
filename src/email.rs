@@ -27,14 +27,16 @@ pub struct EmailSender {
 impl EmailSender {
     pub fn new(config: &Config) -> Result<EmailSender, ()> {
 
-        if config.email_server.is_none() || config.email_user.is_none() ||
-           config.email_password.is_none() || config.email_sender.is_none() {
+        let options = &config.options;
+
+        if options.email.server.is_none() || options.email.user.is_none() ||
+           options.email.password.is_none() || options.email.sender.is_none() {
             error!("All email fields need to be set.");
             return Err(());
         }
 
         let builder =
-            match SmtpTransportBuilder::new((config.clone().email_server.unwrap().as_str(),
+            match SmtpTransportBuilder::new((options.clone().email.server.unwrap().as_str(),
                                              SUBMISSION_PORT)) {
                 Ok(builder) => builder,
                 Err(error) => {
@@ -43,8 +45,8 @@ impl EmailSender {
                 }
             };
 
-        let user = config.clone().email_user.unwrap().clone();
-        let password = config.clone().email_password.unwrap().clone();
+        let user = options.clone().email.user.unwrap().clone();
+        let password = options.clone().email.password.unwrap().clone();
         let connection = builder
             .hello_name("localhost")
             .credentials(&user, &password)
@@ -56,7 +58,7 @@ impl EmailSender {
 
         Ok(EmailSender {
                connection: connection,
-               from: config.clone().email_sender.unwrap().clone(),
+               from: options.clone().email.sender.unwrap().clone(),
            })
     }
 
@@ -127,7 +129,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
             match EmailSender::new(config) {
                 Ok(mut sender) => {
                     let body = format!("Follow <a href=\"https://{}:4443/confirmemail?s={}\">this link</a> to confirm your email.",
-                                       config.domain,
+                                       config.options.general.domain,
                                        link);
                     match sender.send(&email, &body, "Welcome to your server!") {
                         Ok(_) => ok_response!(),

@@ -72,16 +72,17 @@ mod eviction;
 mod pdns;
 mod routes;
 
-use args::Args;
+use args::ArgsParser;
+use config::Config;
 
 fn main() {
     env_logger::init().unwrap();
 
-    let args = Args::new();
+    let args = ArgsParser::from_env();
 
     info!("Managing the domain {}", args.general.domain);
 
-    let config = args.to_config();
+    let config = Config::from_args(args.clone());
 
     eviction::evict_old_entries(&config);
 

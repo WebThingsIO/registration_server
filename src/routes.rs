@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 fn domain_for_name(name: &str, config: &Config) -> String {
-    format!("{}.box.{}.", name, config.domain).to_lowercase()
+    format!("{}.box.{}.", name, config.options.general.domain).to_lowercase()
 }
 
 fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
@@ -271,14 +271,14 @@ pub fn create(config: &Config) -> Router {
     handler!(verifyemail);
     handler!(setemail);
 
-    if config.socket_path.is_none() {
+    if config.options.pdns.socket_path.is_none() {
         handler!(pdns);
     }
 
     // Tests need the pdns handler in all cases.
     #[cfg(test)]
     {
-        if config.socket_path.is_some() {
+        if config.options.pdns.socket_path.is_some() {
             handler!(pdns);
         }
     }
@@ -291,7 +291,8 @@ mod tests {
     extern crate hyper;
 
     use super::*;
-    use args::Args;
+    use args::ArgsParser;
+    use config::Config;
     use database::{Database, DomainRecord, SqlParam};
     use iron::{Handler, Url};
     use iron::status::Status;
@@ -357,8 +358,9 @@ mod tests {
         let db = Database::new("domain_db_test_routes.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
 
-        let args = Args::from(vec!["registration_server", "--config-file=./config.toml.test"]);
-        let mut arg_config = args.to_config();
+        let args = ArgsParser::from_vec(vec!["registration_server",
+                                             "--config-file=./config.toml.test"]);
+        let mut arg_config = Config::from_args(args);
         let router = create(&arg_config.with_db(db.clone()));
 
         let bad_request_error = (r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
