@@ -176,7 +176,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
 // Process the email confirmation links, that have the link as the "s" parameter.
 pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /setemail");
+    info!("GET /verifyemail");
 
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     let link = map.find(&["s"]);

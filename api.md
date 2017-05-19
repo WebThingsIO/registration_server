@@ -108,3 +108,27 @@ This endpoint will provide the best way to reach a gateway for a 3rd party appli
 *Returns:*
 
 An array of `{ "href": "...", "desc": "..." }` objects each describing a way to reach the gateway.
+
+# /setemail
+
+Adds a pending verification email to a gateway.
+
+*Parameters:*
+* `token`: the secret token assigned to this gateway.
+* `email`: the email to verify.
+
+*Returns:*
+
+An empty HTTP 200 response. This will trigger an email verification flow by sending a message to the email address with a link to follow in order to associate the email address with the gateway.
+
+# /revokeemail
+
+Calling this endpoint will cancel an ongoing email verification flow.
+
+*Parameters:*
+* `token`: the secret token assigned to this gateway.
+* `email`: the email being verified.
+
+*Returns:*
+
+An empty HTTP 200 response.
