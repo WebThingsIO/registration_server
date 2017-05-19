@@ -27,4 +27,4 @@ Just run `cargo build` !
 
 ## Api
 
-The REST api is documented [here](api.md).
+The REST api is documented [here](api.md). Its usage is describe in [this document](flow.md).
