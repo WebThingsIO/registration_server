@@ -1,6 +1,6 @@
 # REST API
 
-The REST api follows the following general rules:
+The REST api follows these general rules:
 * All the requests are GET requests.
 * CORS is enabled on endpoints that are meant to be queried by web browsers.
 * 400 is returned for any client error (missing parameter, incorrect parameter value).
