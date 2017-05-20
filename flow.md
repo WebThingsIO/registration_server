@@ -11,10 +11,10 @@
 # Setup
 
 1. [gateway <-> browser] Start the server on http and load the setup UI at http://localhost:8080
-2. [gateway <-> cloud] Find an available DNS name, receive the api token.
-3. [gateway <-> cloud] Run the LE DNS challenge, retrieve the certificates, restart the server on https.
-4. [gateway <-> browser] Create the admin account with an email address, verify email.
-5. [gateway <-> cloud] periodically register the server local ip with the cloud service.
+2. [gateway <-> cloud] Find an available DNS name, receive the api token using `/subscribe`.
+3. [gateway <-> cloud] Run the LE DNS challenge, use `/dnsconfig`, retrieve the certificates, restart the server on https.
+4. [gateway <-> browser] Create the admin account with an email address, verify email using `/setemail`.
+5. [gateway <-> cloud] periodically register the server local ip with the cloud service using `/register`.
 
 # Discovery
 
