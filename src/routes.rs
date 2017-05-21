@@ -110,11 +110,7 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let token = String::from_value(token.unwrap()).unwrap();
 
-    match config
-              .db
-              .delete_record_by_token(&token)
-              .recv()
-              .unwrap() {
+    match config.db.delete_record_by_token(&token).recv().unwrap() {
         Ok(0) => EndpointError::with(status::BadRequest, 400), // No record found for this token.
         Ok(_) => ok_response!(),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
@@ -131,11 +127,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
             let full_name = domain_for_name(name, config);
             info!("trying to subscribe {}", full_name);
 
-            let record = config
-                .db
-                .get_record_by_name(&full_name)
-                .recv()
-                .unwrap();
+            let record = config.db.get_record_by_name(&full_name).recv().unwrap();
             match record {
                 Ok(_) => {
                     // We already have a record for this name, return an error.

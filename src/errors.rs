@@ -48,10 +48,7 @@ impl EndpointError {
 
 #[test]
 fn test_error() {
-    let s_error = StringError(status::BadRequest
-                                  .canonical_reason()
-                                  .unwrap()
-                                  .to_owned());
+    let s_error = StringError(status::BadRequest.canonical_reason().unwrap().to_owned());
     let error = format!("{} {}", s_error, s_error.description());
     assert_eq!(error, r#"StringError("Bad Request") Bad Request"#);
 }

@@ -154,8 +154,8 @@ impl Database {
         debug!("Opening database at {}", path);
         let config = r2d2::Config::default();
         let manager = SqliteConnectionManager::new(path);
-        let pool = r2d2::Pool::new(config, manager).expect(&format!("Unable to open database at {}",
-                                                                    path));
+        let pool = r2d2::Pool::new(config, manager)
+            .expect(&format!("Unable to open database at {}", path));
 
         let conn = pool.get().unwrap();
 
@@ -534,9 +534,7 @@ fn test_domain_store() {
     db.flush().recv().unwrap().expect("Flushing the db");
 
     // Check that we don't find any record.
-    assert_eq!(db.get_record_by_name("test.example.org")
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.get_record_by_name("test.example.org").recv().unwrap(),
                Err(DatabaseError::NoRecord));
 
     assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
@@ -552,15 +550,11 @@ fn test_domain_store() {
                                                 "Test Server",
                                                 None,
                                                 0);
-    assert_eq!(db.add_record(no_challenge_record.clone())
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.add_record(no_challenge_record.clone()).recv().unwrap(),
                Ok(()));
 
     // Check that we can find it and that it matches our record.
-    assert_eq!(db.get_record_by_name("test.example.org")
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.get_record_by_name("test.example.org").recv().unwrap(),
                Ok(no_challenge_record.clone()));
 
     assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
@@ -576,15 +570,11 @@ fn test_domain_store() {
                                              "Test Server",
                                              None,
                                              0);
-    assert_eq!(db.update_record(challenge_record.clone())
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.update_record(challenge_record.clone()).recv().unwrap(),
                Ok(()));
 
     // Check that we can find it and that it matches our record.
-    assert_eq!(db.get_record_by_name("test.example.org")
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.get_record_by_name("test.example.org").recv().unwrap(),
                Ok(challenge_record.clone()));
 
     assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
@@ -615,9 +605,7 @@ fn test_domain_store() {
                                                 "Test Server",
                                                 None,
                                                 max_age - 1);
-    assert_eq!(db.add_record(no_challenge_record.clone())
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.add_record(no_challenge_record.clone()).recv().unwrap(),
                Ok(()));
     assert_eq!(db.evict_records(SqlParam::Integer(max_age as i64))
                    .recv()
@@ -656,21 +644,15 @@ fn test_discovery() {
     // Start with an empty db.
     db.flush().recv().unwrap().expect("Flushing the db");
 
-    assert_eq!(db.get_token_for_discovery("disco-token")
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.get_token_for_discovery("disco-token").recv().unwrap(),
                Err(DatabaseError::NoRecord));
     assert_eq!(db.add_discovery("secret-token", "disco-token")
                    .recv()
                    .unwrap(),
                Ok(()));
-    assert_eq!(db.get_token_for_discovery("disco-token")
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.get_token_for_discovery("disco-token").recv().unwrap(),
                Ok("secret-token".to_owned()));
     assert_eq!(db.delete_discovery("disco-token").recv().unwrap(), Ok((1)));
-    assert_eq!(db.get_token_for_discovery("disco-token")
-                   .recv()
-                   .unwrap(),
+    assert_eq!(db.get_token_for_discovery("disco-token").recv().unwrap(),
                Err(DatabaseError::NoRecord));
 }

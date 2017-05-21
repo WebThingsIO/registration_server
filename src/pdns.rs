@@ -130,11 +130,7 @@ fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
     // Split up the qname.
     let parts: Vec<&str> = qname.split('.').collect();
     let subdomain = format!("{}.box.{}.", parts[4], config.options.general.domain);
-    let ip = match config
-              .db
-              .get_record_by_name(&subdomain)
-              .recv()
-              .unwrap() {
+    let ip = match config.db.get_record_by_name(&subdomain).recv().unwrap() {
         Ok(record) => {
             let srand = parts[0];
             let token = parts[1];

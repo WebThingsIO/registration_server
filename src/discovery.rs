@@ -121,11 +121,7 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     let disco = String::from_value(disco.unwrap()).unwrap();
 
-    match config
-              .db
-              .get_token_for_discovery(&disco)
-              .recv()
-              .unwrap() {
+    match config.db.get_token_for_discovery(&disco).recv().unwrap() {
         Ok(token) => {
             match config
                       .db

@@ -131,11 +131,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    match config
-              .db
-              .add_email(&email, &token, &link)
-              .recv()
-              .unwrap() {
+    match config.db.add_email(&email, &token, &link).recv().unwrap() {
         Ok(_) => {
             match EmailSender::new(config) {
                 Ok(mut sender) => {
@@ -157,12 +153,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
                         .replace("{link}", &full_link);
                     match sender.send(&email,
                                       &body,
-                                      &config
-                                           .options
-                                           .email
-                                           .clone()
-                                           .confirmation_title
-                                           .unwrap()) {
+                                      &config.options.email.clone().confirmation_title.unwrap()) {
                         Ok(_) => ok_response!(),
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
@@ -241,12 +232,7 @@ pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    if config
-           .db
-           .delete_email(&email)
-           .recv()
-           .unwrap()
-           .is_err() {
+    if config.db.delete_email(&email).recv().unwrap().is_err() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
