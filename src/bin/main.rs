@@ -7,17 +7,13 @@
 extern crate env_logger;
 extern crate hyper_openssl;
 extern crate iron;
-extern crate iron_cors;
 #[macro_use]
 extern crate log;
 extern crate mount;
 extern crate registration_server;
 
 use hyper_openssl::OpensslServer;
-use iron::{Chain, Iron};
-use iron::method::Method;
-use iron_cors::CORS;
-use mount::Mount;
+use iron::Iron;
 
 use registration_server::args::ArgsParser;
 use registration_server::config::Config;
@@ -36,24 +32,7 @@ fn main() {
 
     eviction::evict_old_entries(&config);
 
-    let mut mount = Mount::new();
-    mount.mount("/", routes::create(&config));
-
-    let mut chain = Chain::new(mount);
-    let cors = CORS::new(vec![(vec![Method::Get], "info".to_owned()),
-                              (vec![Method::Get], "subscribe".to_owned()),
-                              (vec![Method::Get], "unsubscribe".to_owned()),
-                              (vec![Method::Get], "register".to_owned()),
-                              (vec![Method::Get], "dnsconfig".to_owned()),
-                              (vec![Method::Get], "ping".to_owned()),
-                              (vec![Method::Get], "adddiscovery".to_owned()),
-                              (vec![Method::Get], "revokediscovery".to_owned()),
-                              (vec![Method::Get], "discovery".to_owned()),
-                              (vec![Method::Get], "setemail".to_owned()),
-                              (vec![Method::Get], "revokeemail".to_owned())]);
-    chain.link_after(cors);
-
-    let iron = Iron::new(chain);
+    let iron_server = Iron::new(routes::create_chain("/", &config));
     info!("Starting server on {}:{}",
           args.general.host,
           args.general.port);
@@ -62,7 +41,7 @@ fn main() {
     pdns::start_socket_endpoint(&config);
 
     if args.general.cert_directory.is_none() {
-        iron.http(addr.as_ref() as &str).unwrap();
+        iron_server.http(addr.as_ref() as &str).unwrap();
     } else {
         info!("Starting TLS server");
         let certificate_directory = args.general.cert_directory.unwrap();
@@ -75,6 +54,6 @@ fn main() {
 
         info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
         let ssl = OpensslServer::from_files(private_key, cert).unwrap();
-        iron.https(addr.as_ref() as &str, ssl).unwrap();
+        iron_server.https(addr.as_ref() as &str, ssl).unwrap();
     }
 }

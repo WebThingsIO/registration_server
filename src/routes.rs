@@ -8,8 +8,11 @@ use discovery::{adddiscovery, discovery, ping, revokediscovery};
 use email_routes::{revokeemail, setemail, verifyemail};
 use errors::*;
 use iron::headers::ContentType;
+use iron::method::Method;
 use iron::prelude::*;
 use iron::status::{self, Status};
+use iron_cors::CORS;
+use mount::Mount;
 use params::{FromValue, Params, Value};
 use pdns::pdns;
 use router::Router;
@@ -236,7 +239,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-pub fn create(config: &Config) -> Router {
+pub fn create_router(config: &Config) -> Router {
     let mut router = Router::new();
 
     macro_rules! handler {
@@ -277,6 +280,26 @@ pub fn create(config: &Config) -> Router {
     }
 
     router
+}
+
+pub fn create_chain(root_path: &str, config: &Config) -> Chain {
+    let mut mount = Mount::new();
+    mount.mount(root_path, create_router(&config));
+
+    let mut chain = Chain::new(mount);
+    let cors = CORS::new(vec![(vec![Method::Get], "info".to_owned()),
+                              (vec![Method::Get], "subscribe".to_owned()),
+                              (vec![Method::Get], "unsubscribe".to_owned()),
+                              (vec![Method::Get], "register".to_owned()),
+                              (vec![Method::Get], "dnsconfig".to_owned()),
+                              (vec![Method::Get], "ping".to_owned()),
+                              (vec![Method::Get], "adddiscovery".to_owned()),
+                              (vec![Method::Get], "revokediscovery".to_owned()),
+                              (vec![Method::Get], "discovery".to_owned()),
+                              (vec![Method::Get], "setemail".to_owned()),
+                              (vec![Method::Get], "revokeemail".to_owned())]);
+    chain.link_after(cors);
+    chain
 }
 
 #[cfg(test)]
@@ -354,7 +377,7 @@ mod tests {
         let args = ArgsParser::from_vec(vec!["registration_server",
                                              "--config-file=./config.toml.test"]);
         let mut arg_config = Config::from_args(args);
-        let router = create(&arg_config.with_db(db.clone()));
+        let router = create_router(&arg_config.with_db(db.clone()));
 
         let bad_request_error = (r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
                                  Status::BadRequest);
