@@ -10,4 +10,4 @@ pdns_server --config-dir=$ROOT_DIR
 
 pagekite.py --isfrontend --ports=4443 --protos=https --domain=https:*.$DOMAIN:$SECRET --authdomain=$DOMAIN &
 
-./target/release/registration_server --config-file=$ROOT_DIR/config.json
+./target/release/registration_server --config-file=$ROOT_DIR/config.toml
