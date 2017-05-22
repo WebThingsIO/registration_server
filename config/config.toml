@@ -1,0 +1,36 @@
+# Configuration used for tests.
+
+[general]
+host = "127.0.1.1"
+port = 4141
+domain = "knilxof.org"
+data_directory = "/tmp"
+tunnel_ip = "1.2.3.4"
+eviction_delay = 2
+
+[pdns]
+dns_ttl = 89
+soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+socket_path = "/tmp/powerdns_tunnel.sock"
+
+[email]
+server = "mail.gandi.net"
+user = "accounts@knilxof.org"
+password = "******"
+sender = "accounts@knilxof.org"
+confirmation_title = "Welcome to your MozIot Gateway"
+confirmation_body = "Hello,\n\nTo confirm your email address, follow this link: {link}"
+success_page = """<!DOCTYPE html>
+<html>
+  <head><title>Email Confirmation Successful!</title></head>
+  <body>
+    <h1>Thank you for verifying your email, {email}.</h1>
+  </body>
+</html>"""
+error_page = """<!DOCTYPE html>
+<html>
+  <head><title>Email Confirmation Error!</title></head>
+  <body>
+    <h1>An error happened while verifiying your email.</h1>
+  </body>
+</html>"""

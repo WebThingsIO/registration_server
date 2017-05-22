@@ -1,9 +1,0 @@
-{
-    "host": "0.0.0.0",
-    "port": 4242,
-    "domain": "box.knilxof.org",
-    "tunnel_ip": "0.0.0.0",
-    "dns_ttl": 60,
-    "eviction_delay": 120,
-    "data_directory": "/opt/tunnel"
-}
