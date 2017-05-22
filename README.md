@@ -21,9 +21,13 @@ OPTIONS:
 See the `config.toml.sample` for an example of configuration file.
 
 
-## Building
+## Building & testing
 
-Just run `cargo build` !
+Just run `cargo build` and `cargo test` !
+
+## Deploying
+
+Deployment details are provided in the [deployment guide](deployment.md).
 
 ## Api
 
