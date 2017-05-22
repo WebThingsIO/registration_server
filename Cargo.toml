@@ -3,9 +3,6 @@ name = "registration_server"
 version = "0.1.0"
 authors = ["fabrice <fabrice@desre.org>"]
 
-[features]
-ssl = []
-
 [dependencies]
 clap = "2"
 email = "0.0"
