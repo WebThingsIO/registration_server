@@ -4,6 +4,7 @@
 
 // Discovery related routes.
 
+use api_types::Discovered;
 use config::Config;
 use database::DatabaseError;
 use errors::*;
@@ -12,12 +13,6 @@ use iron::prelude::*;
 use iron::status::{self, Status};
 use params::{FromValue, Params};
 use serde_json;
-
-#[derive(Serialize)]
-struct Discovered {
-    href: String,
-    desc: String,
-}
 
 macro_rules! remove_last {
     ($obj:ident.$prop:ident) => (

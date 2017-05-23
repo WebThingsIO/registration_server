@@ -66,6 +66,7 @@ macro_rules! ok_response {
     )
 }
 
+pub mod api_types;
 pub mod args;
 pub mod config;
 pub mod database;

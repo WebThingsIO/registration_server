@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use api_types::NameAndToken;
 use config::Config;
 use database::{DatabaseError, DomainRecord};
 use discovery::{adddiscovery, discovery, ping, revokediscovery};
@@ -162,11 +163,6 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                         Ok(()) => {
                             // We don't want the full domain name or the dns challenge in the
                             // response so we create a local struct.
-                            #[derive(Serialize)]
-                            struct NameAndToken {
-                                name: String,
-                                token: String,
-                            }
                             let n_and_t = NameAndToken {
                                 name: name.to_owned(),
                                 token: token,
@@ -307,6 +303,7 @@ mod tests {
     extern crate hyper;
 
     use super::*;
+    use api_types::NameAndToken;
     use args::ArgsParser;
     use config::Config;
     use database::{Database, DomainRecord, SqlParam};
@@ -385,12 +382,6 @@ mod tests {
 
         // Nothing is registered yet.
         assert_eq!(get("ping", &router), ("[]".to_owned(), Status::Ok));
-
-        #[derive(Deserialize)]
-        struct NameAndToken {
-            pub name: String,
-            pub token: String,
-        }
 
         // Subscribe a test user.
         assert_eq!(get("subscribe", &router), bad_request_error);
