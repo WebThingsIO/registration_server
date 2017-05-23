@@ -22,8 +22,8 @@ The PowerDNS server is only used to answer queries for the `*.box.yourdomain.com
 
 If `1.2.3.4` is the public IP of the server, add the following to your DNS zone configuration:
 ```
-* 10800 IN A 52.39.215.79
-@ 10800 IN A 52.39.215.79
+* 10800 IN A 1.2.3.4
+@ 10800 IN A 1.2.3.4
 box 10800 IN NS yourdomain.com.
 ```
 
