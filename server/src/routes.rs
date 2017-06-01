@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use api_types::NameAndToken;
+use types::NameAndToken;
 use config::Config;
 use database::{DatabaseError, DomainRecord};
 use discovery::{adddiscovery, discovery, ping, revokediscovery};
@@ -303,10 +303,10 @@ mod tests {
     extern crate hyper;
 
     use super::*;
-    use api_types::NameAndToken;
+    use types::{NameAndToken, ServerInfo};
     use args::ArgsParser;
     use config::Config;
-    use database::{Database, DomainRecord, SqlParam};
+    use database::{Database, SqlParam};
     use iron::{Handler, Url};
     use iron::status::Status;
     use iron::method;
@@ -436,7 +436,7 @@ mod tests {
 
         let response = get(&format!("info?token={}", token), &router);
         assert_eq!(response.1, Status::Ok);
-        let record: DomainRecord = serde_json::from_str(&response.0).unwrap();
+        let record: ServerInfo = serde_json::from_str(&response.0).unwrap();
         assert_eq!(record.token, token);
         assert_eq!(record.local_name, "local.test.box.knilxof.org.".to_owned());
         assert_eq!(record.remote_name, "test.box.knilxof.org.");

@@ -23,6 +23,7 @@ extern crate lettre;
 extern crate log;
 extern crate mount;
 extern crate params;
+extern crate registration_types as types;
 extern crate r2d2;
 extern crate r2d2_sqlite;
 extern crate router;
@@ -66,7 +67,6 @@ macro_rules! ok_response {
     )
 }
 
-pub mod api_types;
 pub mod args;
 pub mod config;
 pub mod database;
