@@ -23,7 +23,7 @@ See the `config.toml.sample` for an example of configuration file.
 
 ## Building & testing
 
-Just run `cargo build` and `cargo test` !
+Just run `cargo build` and `cargo test` in the `server` directory!
 
 ## Deploying
 
