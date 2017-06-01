@@ -4,7 +4,7 @@
 
 // Discovery related routes.
 
-use api_types::Discovered;
+use types::Discovered;
 use config::Config;
 use database::DatabaseError;
 use errors::*;
