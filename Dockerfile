@@ -37,6 +37,7 @@ ENV PATH=/home/user/.cargo/bin:/home/user/bin:$PATH
 COPY . /home/user
 WORKDIR /home/user/server
 RUN cargo build --release
+WORKDIR /home/user
 
 USER root
 
