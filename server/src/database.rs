@@ -6,32 +6,15 @@
 // Each records is made of the name, the private token and the Let's Encrypt
 // challenge value.
 
-use std::sync::mpsc::{Receiver, channel};
-use std::thread;
-
+use types::ServerInfo;
 use r2d2_sqlite::SqliteConnectionManager;
 use r2d2;
 use rusqlite::Row;
 use rusqlite::Result as SqlResult;
 use rusqlite::types::{ToSql, ToSqlOutput};
+use std::sync::mpsc::{Receiver, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DomainRecord {
-    pub token: String,
-    pub local_name: String,
-    pub remote_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dns_challenge: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub local_ip: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_ip: Option<String>,
-    pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-    pub timestamp: i64,
-}
+use std::thread;
 
 macro_rules! sqlstr {
     ($row:ident, $index:expr) => (
@@ -46,9 +29,11 @@ macro_rules! sqlstr {
     )
 }
 
+pub struct DomainRecord;
+
 impl DomainRecord {
-    fn from_sql(row: Row) -> Self {
-        DomainRecord {
+    fn from_sql(row: Row) -> ServerInfo {
+        ServerInfo {
             token: row.get(0),
             local_name: row.get(1),
             remote_name: row.get(2),
@@ -70,7 +55,7 @@ impl DomainRecord {
                description: &str,
                email: Option<&str>,
                timestamp: i64)
-               -> Self {
+               -> ServerInfo {
         macro_rules! str2sql {
             ($val:expr) => (
                 if $val.is_some() {
@@ -81,7 +66,7 @@ impl DomainRecord {
             )
         }
 
-        DomainRecord {
+        ServerInfo {
             local_name: local_name.to_owned(),
             remote_name: remote_name.to_owned(),
             token: token.to_owned(),
@@ -94,9 +79,6 @@ impl DomainRecord {
         }
     }
 }
-
-unsafe impl Send for DomainRecord {}
-unsafe impl Sync for DomainRecord {}
 
 #[derive(Debug, PartialEq)]
 pub enum DatabaseError {
@@ -339,7 +321,7 @@ impl Database {
     fn select_record(&self,
                      request: &str,
                      value: &str)
-                     -> Receiver<Result<DomainRecord, DatabaseError>> {
+                     -> Receiver<Result<ServerInfo, DatabaseError>> {
         let (tx, rx) = channel();
 
         // Run the sql command on a pooled thread.
@@ -364,7 +346,7 @@ impl Database {
     fn select_records(&self,
                       request: &str,
                       value: &str)
-                      -> Receiver<Result<Vec<DomainRecord>, DatabaseError>> {
+                      -> Receiver<Result<Vec<ServerInfo>, DatabaseError>> {
         let (tx, rx) = channel();
 
         // Run the sql command on a pooled thread.
@@ -388,14 +370,14 @@ impl Database {
 
     pub fn get_records_by_public_ip(&self,
                                     public_ip: &str)
-                                    -> Receiver<Result<Vec<DomainRecord>, DatabaseError>> {
+                                    -> Receiver<Result<Vec<ServerInfo>, DatabaseError>> {
         self.select_records("SELECT token, local_name, remote_name, dns_challenge, \
                             local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE public_ip=$1",
                             public_ip)
     }
 
-    pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<DomainRecord, DatabaseError>> {
+    pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
                             local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE local_name=$1 or remote_name=$1",
@@ -404,14 +386,14 @@ impl Database {
 
     pub fn get_record_by_token(&self,
                                token: &str)
-                               -> Receiver<Result<DomainRecord, DatabaseError>> {
+                               -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
                            local_ip, public_ip, description, email, timestamp \
                             FROM domains WHERE token=$1",
                            token)
     }
 
-    pub fn add_record(&self, record: DomainRecord) -> Receiver<Result<(), DatabaseError>> {
+    pub fn add_record(&self, record: ServerInfo) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
@@ -435,7 +417,7 @@ impl Database {
         rx
     }
 
-    pub fn update_record(&self, record: DomainRecord) -> Receiver<Result<(), DatabaseError>> {
+    pub fn update_record(&self, record: ServerInfo) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
