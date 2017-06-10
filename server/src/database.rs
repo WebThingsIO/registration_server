@@ -150,6 +150,15 @@ impl Database {
             )
         }
 
+
+        macro_rules! nouniqueindex {
+            ($table:expr, $index:expr) => (
+                conn.execute(&format!("CREATE INDEX IF NOT EXISTS {}_{} ON {}({})",
+                                      $table, $index, $table, $index), &[]).unwrap_or_else(|err| {
+                                panic!("Unable to create the {}_{} index: {}", $table, $index, err);
+                            });
+            )
+        }
         // Create the domains table if needed.
         conn.execute("CREATE TABLE IF NOT EXISTS domains (
                       token         TEXT NOT NULL PRIMARY KEY,
@@ -168,9 +177,9 @@ impl Database {
 
         index!("domains", "local_name");
         index!("domains", "remote_name");
-        index!("domains", "timestamp");
-        index!("domains", "public_ip");
-        index!("domains", "email");
+        nouniqueindex!("domains", "timestamp");
+        nouniqueindex!("domains", "public_ip");
+        nouniqueindex!("domains", "email");
 
         // Create the email management table if needed.
         conn.execute("CREATE TABLE IF NOT EXISTS emails (
