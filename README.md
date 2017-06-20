@@ -1,6 +1,6 @@
 # Registration server
 
-[![Build Status](https://travis-ci.org/moziot/registration_server.svg?branch=master)](https://travis-ci.org/moziot/registration_server)
+[![Build Status](https://travis-ci.org/mozilla-iot/registration_server.svg?branch=master)](https://travis-ci.org/mozilla-iot/registration_server)
 
 This server exposes a http(s) API that lets you post messages from your home network and discover them later on.
 
