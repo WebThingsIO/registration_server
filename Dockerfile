@@ -47,6 +47,6 @@ CMD service pdns stop
 # We expect to find the configuration mounted in /home/user/config
 # and to find the following files:
 # - pdns.conf   : PowerDNS configuration.
-# - config.json : registration server configuration.
+# - config.toml : registration server configuration.
 # - env         : used to source environment variables.
 CMD ./run_from_docker.sh
