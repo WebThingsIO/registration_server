@@ -129,14 +129,14 @@ fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
 
     // Split up the qname.
     let parts: Vec<&str> = qname.split('.').collect();
-    let subdomain = format!("{}.box.{}.", parts[4], config.options.general.domain);
+    let subdomain = format!("{}.{}.", parts[4], config.options.general.domain);
     let ip = match config.db.get_record_by_name(&subdomain).recv().unwrap() {
         Ok(record) => {
             let srand = parts[0];
             let token = parts[1];
             let sign = parts[2];
             let proto = parts[3];
-            let kite_domain = format!("{}.box.{}", parts[4], config.options.general.domain);
+            let kite_domain = format!("{}.{}", parts[4], config.options.general.domain);
             let payload = format!("{}:{}:{}:{}", proto, kite_domain, srand, token);
             let salt = sign[..8].to_owned();
 
@@ -201,7 +201,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         // If the qname ends up with .box.$domain.box.$domain. we consider that it's a
         // PageKite request and process it separately.
         let domain = &config.options.general.domain;
-        if qname.ends_with(&format!(".box.{}.box.{}.", domain, domain)) {
+        if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
             return pakegite_query(&qname, &qtype, config);
         }
 
@@ -556,15 +556,15 @@ mod tests {
         // having to setup records in the db.
         let request = build_request("lookup",
                                     Some("A"),
-                                    Some("1d48.https-4443.test.box.knilxof.org.box.knilxof.org."));
+                                    Some("1d48.https-4443.test.knilxof.org.knilxof.org."));
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 125);
-        let result = String::from_utf8(answer[..125].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 117);
+        let result = String::from_utf8(answer[..117].to_vec()).unwrap();
         let soa_success =
-r#"{"result":[{"qtype":"A","qname":"1d48.https-4443.test.box.knilxof.org.box.knilxof.org.","content":"255.255.255.0","ttl":89}]}"#;
+r#"{"result":[{"qtype":"A","qname":"1d48.https-4443.test.knilxof.org.knilxof.org.","content":"255.255.255.0","ttl":89}]}"#;
         assert_eq!(&result, soa_success);
     }
 }

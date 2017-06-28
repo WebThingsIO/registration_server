@@ -22,7 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 fn domain_for_name(name: &str, config: &Config) -> String {
-    format!("{}.box.{}.", name, config.options.general.domain).to_lowercase()
+    format!("{}.{}.", name, config.options.general.domain).to_lowercase()
 }
 
 fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
@@ -426,7 +426,7 @@ mod tests {
 
         // Now retrieve our registered client.
         assert_eq!(get("ping", &router),
-                   (r#"[{"href":"https://local.test.box.knilxof.org","desc":"test's server"}]"#
+                   (r#"[{"href":"https://local.test.knilxof.org","desc":"test's server"}]"#
                         .to_owned(),
                     Status::Ok));
 
@@ -438,8 +438,8 @@ mod tests {
         assert_eq!(response.1, Status::Ok);
         let record: ServerInfo = serde_json::from_str(&response.0).unwrap();
         assert_eq!(record.token, token);
-        assert_eq!(record.local_name, "local.test.box.knilxof.org.".to_owned());
-        assert_eq!(record.remote_name, "test.box.knilxof.org.");
+        assert_eq!(record.local_name, "local.test.knilxof.org.".to_owned());
+        assert_eq!(record.remote_name, "test.knilxof.org.");
         assert_eq!(record.local_ip, Some("10.0.0.1".to_owned()));
         assert_eq!(record.public_ip, Some("127.0.0.1".to_owned()));
         assert_eq!(record.description, r#"test's server"#);
@@ -509,13 +509,12 @@ mod tests {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("A".to_owned()),
-                qname: Some("test.box.knilxof.org.".to_owned()),
+                qname: Some("test.knilxof.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success =
-r#"{"result":[{"qtype":"A","qname":"test.box.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
+        let success = r#"{"result":[{"qtype":"A","qname":"test.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
         assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
@@ -524,13 +523,13 @@ r#"{"result":[{"qtype":"A","qname":"test.box.knilxof.org.","content":"1.2.3.4","
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("A".to_owned()),
-                qname: Some("local.test.box.knilxof.org.".to_owned()),
+                qname: Some("local.test.knilxof.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
         let success =
-r#"{"result":[{"qtype":"A","qname":"local.test.box.knilxof.org.","content":"10.0.0.1","ttl":89}]}"#;
+r#"{"result":[{"qtype":"A","qname":"local.test.knilxof.org.","content":"10.0.0.1","ttl":89}]}"#;
         assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
@@ -540,13 +539,13 @@ r#"{"result":[{"qtype":"A","qname":"local.test.box.knilxof.org.","content":"10.0
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("TXT".to_owned()),
-                qname: Some("_acme-challenge.local.test.box.knilxof.org.".to_owned()),
+                qname: Some("_acme-challenge.local.test.knilxof.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
         let success =
-r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.box.knilxof.org.","content":"test_challenge","ttl":89}]}"#;
+r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.knilxof.org.","content":"test_challenge","ttl":89}]}"#;
         assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
@@ -555,13 +554,13 @@ r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.box.knilxof.org
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("SOA".to_owned()),
-                qname: Some("test.box.knilxof.org.".to_owned()),
+                qname: Some("test.knilxof.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
         let success =
-r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800","ttl":89}]}"#;
+r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800","ttl":89}]}"#;
         assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
@@ -589,7 +588,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         }
 
         // A request with a bogus domain.
-        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org.";
+        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.knilxof.org.knilxof.org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
@@ -605,7 +604,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         assert_eq!(response.result[0].content, "255.255.255.0");
 
         // A request with a correct domain.
-        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.box.knilxof.org.box.knilxof.org.";
+        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.knilxof.org.knilxof.org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
@@ -665,7 +664,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
         assert_eq!(get("discovery?disco=wrong_disco", &router),
                    bad_request_error);
         assert_eq!(get("discovery?disco=disco_token", &router),
-        (r#"[{"href":"https://local.test.box.knilxof.org","desc":"test's server"}]"#.to_owned(),
+        (r#"[{"href":"https://local.test.knilxof.org","desc":"test's server"}]"#.to_owned(),
         Status::Ok));
 
         // Get the record with to evict it.
@@ -682,7 +681,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.box.knilxof.org.","content":"a.dns.ga
 
         // Check that we discover it now as a remote server.
         assert_eq!(get("discovery?disco=disco_token", &router),
-        (r#"[{"href":"https://test.box.knilxof.org","desc":"test's server"}]"#.to_owned(),
+        (r#"[{"href":"https://test.knilxof.org","desc":"test's server"}]"#.to_owned(),
         Status::Ok));
 
         // Revoke the token.
