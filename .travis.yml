@@ -11,4 +11,5 @@ script:
       cd server &&
       cargo build &&
       cargo test
-  
+notifications:
+irc: "irc.mozilla.org#iot"
