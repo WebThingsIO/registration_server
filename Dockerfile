@@ -15,12 +15,21 @@ RUN apt-get update && \
        libsqlite3-dev \
        python \
        pkgconf \
-       pdns-server \
-       pdns-backend-remote \
-       sqlite \
+       bzip2 \
+       sqlite \ 
+       g++ \ 
+       libboost-all-dev \ 
+       libtool \
+       libssl-dev \
+       make \
        -qqy \
        --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+# Install powerdns 4.0.4
+RUN curl https://downloads.powerdns.com/releases/pdns-4.0.4.tar.bz2 | tar xvjf -
+
+RUN cd pdns-4.0.4 && ./configure --with-modules=remote && make && make install 
 
 # Install PageKite
 RUN curl -s https://pagekite.net/pk/ | bash
