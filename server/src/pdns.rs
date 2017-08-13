@@ -273,6 +273,22 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         .push(PdnsResponseParams::Lookup(ns_record));
                 }
 
+                if qtype == "ANY" {
+                    // Add an "CAA" record.
+                    let ns_record = PdnsLookupResponse {
+                        qtype: "CAA".to_owned(),
+                        qname: original_qname.to_owned(),
+                        content: "0 issue \"letsencrypt.org\"".to_owned(),
+                        ttl: config.options.pdns.dns_ttl,
+                        domain_id: None,
+                        scope_mask: None,
+                        auth: None,
+                    };
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(ns_record));
+                }
+
                 return Ok(pdns_response);
             }
             Err(_) => {
