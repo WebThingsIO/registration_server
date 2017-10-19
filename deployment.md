@@ -9,6 +9,7 @@ To make it easier to deploy a working environment, a Docker file is provided whi
 
 Getting a full setup ready involves the following:
 - build a Docker image.
+- Install nginx on the container's host
 - configure the DNS zone for the domain you want to use.
 - run the Docker image with the proper configuration.
 
@@ -36,6 +37,62 @@ You will have to mount a couple of directories and relay some ports for the Dock
 Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for the http server and the tunnel also need to be forwarded.
 
 ## Configuration files
+
+
+* Add the following script to your nginx.conf server directive in the host
+```
+ location /subscribe {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /unsubscribe {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /register {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /dnsconfig {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /info {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /ping {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /adddiscovery {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /revokediscovery {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /discovery {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /revokeemail {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+      	location / {
+                if ($http_authorization) {
+                    return 403;
+                }
+    
+                if ($request_method != GET) {
+                     return 403;
+                }
+                    
+                return 301 https://$host$request_uri;
+      	}
+```
 
 * The `$CONFIG_DIR/env` file is used to set any environment variable need. It is mandatory to declare DOMAIN and SECRET to configure PageKite. For instance, set DOMAIN to `box.yourdomain.com`. Here's a full example:
 ```
@@ -69,7 +126,7 @@ loglevel=5
 
 [general]
 host = "0.0.0.0"
-port = 80
+port = 81
 domain = "yourdomain.org"
 data_directory = "/home/user/data"
 # Uncomment to use TLS (recommended)
@@ -114,6 +171,6 @@ Once you have all your configuration files ready, you can use such a shell scrip
 ```
 #!/bin/bash
 set -x -e
-docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 80:80 -p 4443:4443 -p 53:53 -p 53:53/udp tunnel_server
+docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 81:81 -p 443:4443 -p 53:53 -p 53:53/udp tunnel_server
 ```
 This script relays port 80 for the server, but it is recommended to instead relay port 443 and to setup TLS certificates. The gateway will be available on port 4443 from the public endpoint, over https.
