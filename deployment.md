@@ -114,6 +114,6 @@ Once you have all your configuration files ready, you can use such a shell scrip
 ```
 #!/bin/bash
 set -x -e
-docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 80:80 -p 4443:4443 -p 53:53 -p 53:53/udp tunnel_server
+docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 81:81 -p 80:80 -p 4443:4443 -p 53:53 -p 53:53/udp tunnel_server
 ```
 This script relays port 80 for the server, but it is recommended to instead relay port 443 and to setup TLS certificates. The gateway will be available on port 4443 from the public endpoint, over https.
