@@ -17,17 +17,6 @@ Getting a full setup ready involves the following:
 
 First, build the docker image with `docker build -t tunnel_server .` from the source directory.
 
-## DNS Zone configuration
-
-The PowerDNS server is only used to answer queries for the `*.box.yourdomain.com` qnames. This means that you need to have access to the configuration of `yourdomain.com` in order to delegate the DNS queries appropriately.
-
-If `1.2.3.4` is the public IP of the server, add the following to your DNS zone configuration:
-```
-* 10800 IN A 1.2.3.4
-@ 10800 IN A 1.2.3.4
-box 10800 IN NS yourdomain.com.
-```
-
 ## Running the Docker image
 
 You will have to mount a couple of directories and relay some ports for the Docker image to run properly:
