@@ -80,6 +80,10 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
         location /revokeemail {
                 proxy_pass http://127.0.0.1:81;
         }
+        
+        location /setemail {
+                proxy_pass http://127.0.0.1:81;
+        }
 
       	location / {
                 if ($http_authorization) {
