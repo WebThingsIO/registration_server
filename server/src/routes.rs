@@ -16,6 +16,7 @@ use iron_cors::CORS;
 use mount::Mount;
 use params::{FromValue, Params, Value};
 use pdns::pdns;
+use regex::Regex;
 use router::Router;
 use serde_json;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -128,7 +129,20 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     match map.find(&["name"]) {
         Some(&Value::String(ref name)) => {
-            let full_name = domain_for_name(name, config);
+            let subdomain = name.trim().to_lowercase();
+            let re = Regex::new(r"([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])").unwrap();
+
+            // Ensure that subdomain is valid:
+            // - Contains only a-z, 0-9, and hyphens, but does not start or end with hyphen.
+            // - Is not equal to "api", as that's reserved.
+            if !re.is_match(&subdomain) || subdomain == "api" {
+                let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
+                response.status = Some(Status::BadRequest);
+                response.headers.set(ContentType::json());
+                return Ok(response);
+            }
+
+            let full_name = domain_for_name(&subdomain, config);
             info!("trying to subscribe {}", full_name);
 
             let record = config.db.get_record_by_name(&full_name).recv().unwrap();
@@ -144,7 +158,6 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // Create a token, create and store a record and finally return the token.
                     let token = format!("{}", Uuid::new_v4());
                     let local_name = format!("local.{}", full_name);
-
 
                     let description = match map.find(&["desc"]) {
                         Some(&Value::String(ref desc)) => desc.to_owned(),
@@ -164,7 +177,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                             // We don't want the full domain name or the dns challenge in the
                             // response so we create a local struct.
                             let n_and_t = NameAndToken {
-                                name: name.to_owned(),
+                                name: subdomain.to_owned(),
                                 token: token,
                             };
                             json_response!(&n_and_t)
