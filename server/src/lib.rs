@@ -23,6 +23,7 @@ extern crate lettre;
 extern crate log;
 extern crate mount;
 extern crate params;
+extern crate regex;
 extern crate registration_types as types;
 extern crate r2d2;
 extern crate r2d2_sqlite;
