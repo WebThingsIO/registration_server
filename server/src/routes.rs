@@ -130,7 +130,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     match map.find(&["name"]) {
         Some(&Value::String(ref name)) => {
             let subdomain = name.trim().to_lowercase();
-            let re = Regex::new(r"([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])").unwrap();
+            let re = Regex::new(r"^([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$").unwrap();
 
             // Ensure that subdomain is valid:
             // - Contains only a-z, 0-9, and hyphens, but does not start or end with hyphen.
