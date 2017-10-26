@@ -183,7 +183,7 @@ impl Database {
 
         // Create the email management table if needed.
         conn.execute("CREATE TABLE IF NOT EXISTS emails (
-                      email  TEXT NOT NULL PRIMARY KEY,
+                      email  TEXT NOT NULL,
                       token  TEXT NOT NULL,
                       link   TEXT NOT NULL)",
                      &[])
