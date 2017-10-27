@@ -165,7 +165,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 }
 
-// Process the email confirmation links, that have the link as the "s" parameter.
+// Process email confirmation links that have the link as the "s" parameter.
 pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /verifyemail");
 

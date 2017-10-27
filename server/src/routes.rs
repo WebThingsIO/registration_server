@@ -27,8 +27,8 @@ fn domain_for_name(name: &str, config: &Config) -> String {
 }
 
 fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
-    // Extract the local_ip and token parameter,
-    // and the public IP from the socket.
+    // Extract the local_ip and token parameter, and get the public IP from the
+    // socket.
     let public_ip = format!("{}", req.remote_addr.ip());
 
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
@@ -133,7 +133,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
             let re = Regex::new(r"^([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$").unwrap();
 
             // Ensure that subdomain is valid:
-            // - Contains only a-z, 0-9, and hyphens, but does not start or end with hyphen.
+            // - Contains only a-z, 0-9, and hyphens, but does not start or end
+            //   with hyphen.
             // - Is not equal to "api", as that's reserved.
             if !re.is_match(&subdomain) || subdomain == "api" {
                 let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
@@ -155,7 +156,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     Ok(response)
                 }
                 Err(DatabaseError::NoRecord) => {
-                    // Create a token, create and store a record and finally return the token.
+                    // Create a token, create and store a record, and finally,
+                    // return the token.
                     let token = format!("{}", Uuid::new_v4());
                     let local_name = format!("local.{}", full_name);
 
@@ -174,8 +176,9 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                    0);
                     match config.db.add_record(record).recv().unwrap() {
                         Ok(()) => {
-                            // We don't want the full domain name or the dns challenge in the
-                            // response so we create a local struct.
+                            // We don't want the full domain name or the DNS
+                            // challenge in the response, so we create a local
+                            // struct.
                             let n_and_t = NameAndToken {
                                 name: subdomain.to_owned(),
                                 token: token,
@@ -348,16 +351,16 @@ mod tests {
         (response::extract_body_to_string(resp), status)
     }
 
-    // Triggers a request for a url on the router.
+    // Triggers a request for a URL on the router.
     fn request(method: method::Method,
                path: &str,
                body: &str,
                router: &Router)
                -> IronResult<Response> {
         let url = Url::parse(&format!("http://localhost/{}", path)).unwrap();
-        // From iron 0.5.x, iron::Request contains private field. So, it is not good to
-        // create iron::Request directly. Make http request and parse it with hyper,
-        // and make iron::Request from hyper::client::Request.
+        // From iron 0.5.x, iron::Request contains private field. So, it is not
+        // good to create iron::Request directly. Make HTTP request and parse
+        // it with hyper, and make iron::Request from hyper::client::Request.
         let mut buffer = String::new();
         buffer.push_str(&format!("{} {} HTTP/1.1\r\n", &method, url));
         buffer.push_str(&format!("Content-Length: {}\r\n", body.len() as u64));
@@ -547,7 +550,6 @@ r#"{"result":[{"qtype":"A","qname":"local.test.knilxof.org.","content":"10.0.0.1
                    (success.to_owned(), Status::Ok));
 
         // Test LE challenge queries.
-        // Test the "local" dns name.
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
@@ -735,7 +737,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         // 3. check that the email has been set on the domain record.
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
         assert_eq!(domain_record.email, Some(email.clone()));
-        // 4. email revokation
+        // 4. email revocation
         assert_eq!(get("revokeemail", &router), bad_request_error);
         assert_eq!(get("revokeemail?token=wrong_token", &router),
                    bad_request_error);
