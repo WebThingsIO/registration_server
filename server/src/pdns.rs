@@ -23,7 +23,7 @@ use std::thread;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct PdnsRequestParameters {
-    // intialize method
+    // initialize method
     path: Option<String>,
     timeout: Option<String>,
 
@@ -94,7 +94,7 @@ fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
     }
 }
 
-// Returns a SOA record for a given qname.
+// Returns an SOA record for a given qname.
 fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "SOA".to_owned(),
@@ -107,8 +107,8 @@ fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     }
 }
 
-fn pakegite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
-    // Pagekite sends dns requests to qnames like:
+fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
+    // PageKite sends DNS requests to qnames like:
     // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
     // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
@@ -198,15 +198,16 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         //                 "remote": "63.245.221.198",
         //                 "zone-id": -1}}
 
-        // If the qname ends up with .box.$domain.box.$domain. we consider that it's a
-        // PageKite request and process it separately.
+        // If the qname ends up with .box.$domain.box.$domain. we consider that
+        // it's a PageKite request and process it separately.
         let domain = &config.options.general.domain;
         if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
-            return pakegite_query(&qname, &qtype, config);
+            return pagekite_query(&qname, &qtype, config);
         }
 
-        // If the qname starts with `_acme-challenge.` this is a DNS-01 challenge verification,
-        // so remove that part of the domain to retrieve our record.
+        // If the qname starts with `_acme-challenge.` this is a DNS-01
+        // challenge verification, so remove that part of the domain to
+        // retrieve our record.
         // See https://tools.ietf.org/html/draft-ietf-acme-acme-06#section-8.4
         if qname.starts_with("_acme-challenge.") {
             qname = qname[16..].to_owned();
@@ -214,7 +215,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
         debug!("final qname={}", qname);
 
-        // Look for a record with for the qname.
+        // Look for a record with the qname.
         match config.db.get_record_by_name(&qname).recv().unwrap() {
             Ok(record) => {
                 if record.local_ip.is_none() && qtype == "A" {
@@ -222,14 +223,15 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                     return Err("No local_ip".to_owned());
                 }
 
-                // Choose either the local or public ip based on wether the qname matches
-                // the local_name or remote_name.
+                // Choose either the local or public IP based on whether the
+                // qname matches the local_name or remote_name.
                 let a_record = if record.local_ip.is_some() && qname == record.local_name {
-                    // We are inside of the home network, return the local ip for the A record.
+                    // We are inside of the home network, return the local IP
+                    // for the A record.
                     record.local_ip.unwrap()
                 } else {
-                    // We are outside of the home network, return the ip of the tunnel
-                    // for the A record.
+                    // We are outside of the home network, return the IP of the
+                    // tunnel for the A record.
                     config.options.general.tunnel_ip.to_owned()
                 };
 
@@ -258,7 +260,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 }
 
                 if (qtype == "ANY" || qtype == "TXT") && record.dns_challenge.is_some() {
-                    // Add a "TXT" record with the dns challenge content.
+                    // Add a "TXT" record with the DNS challenge content.
                     let ns_record = PdnsLookupResponse {
                         qtype: "TXT".to_owned(),
                         qname: original_qname.to_owned(),
@@ -274,7 +276,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 }
 
                 if qtype == "ANY" {
-                    // Add an "CAA" record.
+                    // Add a "CAA" record.
                     let ns_record = PdnsLookupResponse {
                         qtype: "CAA".to_owned(),
                         qname: original_qname.to_owned(),
@@ -301,7 +303,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
     Err(format!("Unsupported method: {}", req.method))
 }
 
-// Answers to an HTTP request when using the HTTP remote backend.
+// Answer an HTTP request when using the HTTP remote backend.
 pub fn pdns(req: &mut Request, config: &Config) -> IronResult<Response> {
     use std::net::SocketAddr::V4;
     use std::net::Ipv4Addr;
@@ -338,11 +340,10 @@ pub fn pdns(req: &mut Request, config: &Config) -> IronResult<Response> {
 
 }
 
-// Custom method to read just enough characters from the stream to
-// build a JSON object.
-// Directly using read_to_string or serde_json::from_reader cause
-// the stream to reach EOF and subsequent write fail with a
-// "Broken Pipe" error.
+// Custom method to read just enough characters from the stream to build a JSON
+// object.
+// Directly using read_to_string or serde_json::from_reader causes the stream
+// to reach EOF and subsequent write fail with a "Broken Pipe" error.
 fn read_json_from_stream(mut stream: &UnixStream) -> String {
     let mut buffer = [0; 1];
     let mut balance_count = 0;
@@ -396,8 +397,8 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
             }
         };
 
-        // Special case for the `initialize` method which is a no-op that
-        // just returns success.
+        // Special case for the `initialize` method which is a no-op that just
+        // returns success.
         if input.method == "initialize" {
             debug!("Answering to initialization request");
             send!(b"{\"result\":true}");
@@ -516,12 +517,13 @@ mod tests {
 
         start_socket_endpoint(&config);
 
-        // Let enough time for the socket thread to start up and bind the socket.
+        // Allow enough time for the socket thread to start up and bind the
+        // socket.
         thread::sleep(Duration::new(1, 0));
         // Connect to the socket.
         let mut stream = UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap())
             .unwrap();
-        // Build a initialization request and send it to the stream.
+        // Build an initialization request and send it to the stream.
         let request = build_request("initialize", None, None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
@@ -543,7 +545,7 @@ mod tests {
         assert_eq!(stream.read(&mut answer).unwrap(), 16);
         assert_eq!(&answer[..16], empty_error);
 
-        // Build a SOA lookup request and send it to the stream.
+        // Build an SOA lookup request and send it to the stream.
         let request = build_request("lookup", Some("SOA"), Some("example.org"));
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
@@ -552,8 +554,8 @@ mod tests {
         assert_eq!(stream.read(&mut answer).unwrap(), 16);
         assert_eq!(&answer[..16], empty_error);
 
-        // SOA pagekite query, to create a successfull response without
-        // having to setup records in the db.
+        // SOA PageKite query, to create a successful response without having
+        // to setup records in the db.
         let request = build_request("lookup",
                                     Some("A"),
                                     Some("1d48.https-4443.test.knilxof.org.knilxof.org."));

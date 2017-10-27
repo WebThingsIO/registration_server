@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 // Manages the SQL database that holds the list of registered domain names.
-// Each records is made of the name, the private token and the Let's Encrypt
+// Each record is made of the name, the private token, and the Let's Encrypt
 // challenge value.
 
 use types::ServerInfo;
@@ -333,7 +333,7 @@ impl Database {
                      -> Receiver<Result<ServerInfo, DatabaseError>> {
         let (tx, rx) = channel();
 
-        // Run the sql command on a pooled thread.
+        // Run the SQL command on a pooled thread.
         let pool = self.pool.clone();
         let value = value.to_owned();
         let request = request.to_owned();
@@ -358,7 +358,7 @@ impl Database {
                       -> Receiver<Result<Vec<ServerInfo>, DatabaseError>> {
         let (tx, rx) = channel();
 
-        // Run the sql command on a pooled thread.
+        // Run the SQL command on a pooled thread.
         let pool = self.pool.clone();
         let value = value.to_owned();
         let request = request.to_owned();
@@ -455,7 +455,7 @@ impl Database {
 
     // Evict records older than a given timestamp.
     // Returns the number of evicted records.
-    // Eviction means that we loose the local <-> public ip binding,
+    // Eviction means that we lose the local <-> public IP binding,
     // *not* that we remove the record from the database.
     pub fn evict_records(&self, timestamp: SqlParam) -> Receiver<Result<i32, DatabaseError>> {
         let (tx, rx) = channel();
@@ -531,7 +531,7 @@ fn test_domain_store() {
     assert_eq!(db.get_record_by_token("test-token").recv().unwrap(),
                Err(DatabaseError::NoRecord));
 
-    // Add a record without a dns challenge.
+    // Add a record without a DNS challenge.
     let no_challenge_record = DomainRecord::new("test-token",
                                                 "local.test.example.org",
                                                 "test.example.org",

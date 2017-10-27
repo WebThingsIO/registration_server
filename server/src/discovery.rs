@@ -20,8 +20,8 @@ macro_rules! remove_last {
     )
 }
 
-// Public ping endpoint, returning names of servers on the same
-// local network than the client.
+// Public ping endpoint, returning names of servers on the same local network
+// as the client.
 pub fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /ping");
 
@@ -124,7 +124,8 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
                       .recv()
                       .unwrap() {
                 Ok(records) => {
-                    // Filter out and only return the records that matches the token.
+                    // Filter out and only return the records that match the
+                    // token.
                     let results: Vec<Discovered> = records
                         .into_iter()
                         .filter(|item| item.token == token)
@@ -137,7 +138,8 @@ pub fn discovery(req: &mut Request, config: &Config) -> IronResult<Response> {
                         .collect();
 
                     if results.is_empty() {
-                        // If the result vector is empty, return the remote name for this token.
+                        // If the result vector is empty, return the remote
+                        // name for this token.
                         match config.db.get_record_by_token(&token).recv().unwrap() {
                             Ok(record) => {
                                 let result = vec![Discovered {
