@@ -12,6 +12,9 @@ eviction_delay = 2
 dns_ttl = 89
 soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
 socket_path = "/tmp/powerdns_tunnel.sock"
+mx_record = ""
+caa_record = "0 issue \"letsencrypt.org\""
+txt_record = ""
 
 [email]
 server = "mail.gandi.net"

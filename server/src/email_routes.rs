@@ -139,10 +139,9 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
                         Some(_) => "https",
                         None => "http",
                     };
-                    let full_link = format!("{}://{}:{}/confirmemail?s={}",
+                    let full_link = format!("{}://api.{}/verifyemail?s={}",
                                             scheme,
                                             config.options.general.domain,
-                                            config.options.general.port,
                                             link);
                     let body = config
                         .options

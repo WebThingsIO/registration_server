@@ -69,8 +69,12 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
         location /revokeemail {
                 proxy_pass http://127.0.0.1:81;
         }
-        
+
         location /setemail {
+                proxy_pass http://127.0.0.1:81;
+        }
+
+        location /verifyemail {
                 proxy_pass http://127.0.0.1:81;
         }
 
@@ -78,11 +82,11 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
                 if ($http_authorization) {
                     return 403;
                 }
-    
+
                 if ($request_method != GET) {
                      return 403;
                 }
-                    
+
                 return 301 https://$host$request_uri;
       	}
 ```

@@ -94,8 +94,20 @@ impl ArgsParser {
                     .value_of("soa-content")
                     .unwrap_or("_soa_not_configured_")
                     .to_owned(),
-                socket_path: matches.value_of("soa-content").map(|s| s.to_owned()),
+                socket_path: matches.value_of("socket_path").map(|s| s.to_owned()),
                 dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
+                mx_record: matches
+                    .value_of("mx_record")
+                    .unwrap_or("_mx_not_configured_")
+                    .to_owned(),
+                caa_record: matches
+                    .value_of("caa_record")
+                    .unwrap_or("_caa_not_configured_")
+                    .to_owned(),
+                txt_record: matches
+                    .value_of("txt_record")
+                    .unwrap_or("_txt_not_configured_")
+                    .to_owned(),
             },
             email: EmailOptions {
                 server: email_server,

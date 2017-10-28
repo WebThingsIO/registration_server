@@ -1,7 +1,7 @@
 # Domain specific configuration for pagekite.
 
 DOMAIN=box.knilxof.org
-SECRET=moziot 
+SECRET=moziot
 
 # Other variables useful for other purposes.
-export RUST_LOG=info
+export RUST_LOG=debug
