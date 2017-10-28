@@ -215,6 +215,30 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
         debug!("final qname={}", qname);
 
+        let mut pdns_response = PdnsResponse { result: Vec::new() };
+
+        if qtype == "SOA" {
+            pdns_response
+                .result
+                .push(PdnsResponseParams::Lookup(soa_response(&original_qname, config)));
+        }
+
+        if qtype == "ANY" {
+            // Add a "MX" record.
+            let ns_record = PdnsLookupResponse {
+                qtype: "MX".to_owned(),
+                qname: original_qname.to_owned(),
+                content: config.options.pdns.mx_record.to_owned(),
+                ttl: config.options.pdns.dns_ttl,
+                domain_id: None,
+                scope_mask: None,
+                auth: None,
+            };
+            pdns_response
+                .result
+                .push(PdnsResponseParams::Lookup(ns_record));
+        }
+
         // Look for a record with the qname.
         match config.db.get_record_by_name(&qname).recv().unwrap() {
             Ok(record) => {
@@ -234,14 +258,6 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                     // tunnel for the A record.
                     config.options.general.tunnel_ip.to_owned()
                 };
-
-                let mut pdns_response = PdnsResponse { result: Vec::new() };
-
-                if qtype == "SOA" {
-                    pdns_response
-                        .result
-                        .push(PdnsResponseParams::Lookup(soa_response(&original_qname, config)));
-                }
 
                 if qtype == "ANY" || qtype == "A" {
                     // Add an "A" record.
@@ -280,7 +296,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                     let ns_record = PdnsLookupResponse {
                         qtype: "CAA".to_owned(),
                         qname: original_qname.to_owned(),
-                        content: "0 issue \"letsencrypt.org\"".to_owned(),
+                        content: config.options.pdns.caa_record.to_owned(),
                         ttl: config.options.pdns.dns_ttl,
                         domain_id: None,
                         scope_mask: None,
@@ -290,14 +306,28 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         .result
                         .push(PdnsResponseParams::Lookup(ns_record));
                 }
-
-                return Ok(pdns_response);
             }
             Err(_) => {
-                // No such domain, return a `false` result to PowerDNS.
-                return Err("No record for this name.".to_owned());
+                info!("No record for this name {}", qname);
+                // If there's no record in the database
+                // we add a "TXT" record from the config file (if any).
+                if qtype == "ANY" {
+                    let ns_record = PdnsLookupResponse {
+                        qtype: "TXT".to_owned(),
+                        qname: original_qname.to_owned(),
+                        content: config.options.pdns.txt_record.to_owned(),
+                        ttl: config.options.pdns.dns_ttl,
+                        domain_id: None,
+                        scope_mask: None,
+                        auth: None,
+                    };
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(ns_record));
+                }
             }
         }
+        return Ok(pdns_response);
     }
 
     Err(format!("Unsupported method: {}", req.method))
@@ -530,7 +560,8 @@ mod tests {
         stream.write_all(b"\n").unwrap();
 
         let empty_success = b"{\"result\":true}";
-        let empty_error = b"{\"result\":false}";
+        let empty_error = b"{\"result\":[]}";
+        let soa_exampleorg =  b"{\"result\":[{\"qtype\":\"SOA\"";
 
         let mut answer: [u8; 256] = [0; 256];
         assert_eq!(stream.read(&mut answer).unwrap(), 15);
@@ -542,17 +573,17 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 16);
-        assert_eq!(&answer[..16], empty_error);
+        assert_eq!(stream.read(&mut answer).unwrap(), 13);
+        assert_eq!(&answer[..13], empty_error);
 
-        // Build an SOA lookup request and send it to the stream.
+        // Build a SOA lookup request and send it to the stream.
         let request = build_request("lookup", Some("SOA"), Some("example.org"));
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 16);
-        assert_eq!(&answer[..16], empty_error);
+        assert_eq!(stream.read(&mut answer).unwrap(), 143);
+        assert_eq!(&answer[..25], soa_exampleorg);
 
         // SOA PageKite query, to create a successful response without having
         // to setup records in the db.

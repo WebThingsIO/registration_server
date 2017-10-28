@@ -21,6 +21,9 @@ pub struct PdnsOptions {
     pub soa_content: String,
     pub socket_path: Option<String>,
     pub dns_ttl: u32,
+    pub mx_record: String,
+    pub caa_record: String,
+    pub txt_record: String,
 }
 
 #[derive(Clone, Deserialize)]

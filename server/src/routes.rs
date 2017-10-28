@@ -518,7 +518,7 @@ mod tests {
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
         assert_eq!(put("pdns", &body, &router),
-                   (r#"{"result":false}"#.to_owned(), Status::Ok));
+                   (r#"{"result":[]}"#.to_owned(), Status::Ok));
 
         // Test the "remote" dns name.
         let pdns_request = PdnsRequest {
