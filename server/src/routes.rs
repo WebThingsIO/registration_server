@@ -135,8 +135,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
             // Ensure that subdomain is valid:
             // - Contains only a-z, 0-9, and hyphens, but does not start or end
             //   with hyphen.
-            // - Is not equal to "api", as that's reserved.
-            if !re.is_match(&subdomain) || subdomain == "api" {
+            // - Is not equal to "api" or "www", as those are reserved.
+            if !re.is_match(&subdomain) || subdomain == "api" || subdomain == "www" {
                 let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
                 response.status = Some(Status::BadRequest);
                 response.headers.set(ContentType::json());
