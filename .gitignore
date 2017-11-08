@@ -1,5 +1,6 @@
-target
 *.bk
 *.rdb
 *.sqlite
+*.swp
 kcov
+target

@@ -1,10 +1,12 @@
-# Configuration used for tests.
+# Configuration sample.
 
 [general]
 host = "127.0.0.1"
-port = 4141
+http_port = 4141
+https_port = 4142
 domain = "knilxof.org"
 data_directory = "/tmp"
+cert_directory = "/tmp/certs"
 tunnel_ip = "1.2.3.4"
 eviction_delay = 2
 

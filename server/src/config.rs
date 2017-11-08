@@ -8,7 +8,8 @@ use std::path::PathBuf;
 #[derive(Clone, Deserialize)]
 pub struct GeneralOptions {
     pub host: String,
-    pub port: u16,
+    pub http_port: u16,
+    pub https_port: u16,
     pub data_directory: String,
     pub cert_directory: Option<PathBuf>,
     pub domain: String,

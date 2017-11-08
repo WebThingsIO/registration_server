@@ -12,7 +12,8 @@ use toml;
 const USAGE: &'static str = "--config-file=[path]     'Path to a toml configuration file.'
 --data-directory=[dir]   'The directory where the persistent data will be saved.'
 --host=[host]            'Set local hostname.'
---port=[port]            'Set port to listen on for HTTP connections.'
+--http-port=[port]       'Set port to listen on for HTTP connections (0 to prevent listening).'
+--https-port=[port]      'Set port to listen on for TLS connections (0 to prevent listening).'
 --cert-directory=[dir]   'Certificate directory.'
 --domain=[domain]        'The domain that will be tied to this registration server.'
 --dns-ttl=[ttl]          'TTL of the DNS records, in seconds.'
@@ -29,7 +30,7 @@ const USAGE: &'static str = "--config-file=[path]     'Path to a toml configurat
 --success-page=[s]       'HTML content of the email confirmation success page'
 --error-page=[s]         'HTML content of the email confirmation error page'";
 
-const DEFAULT_EVICTION_DELAY: u32 = 120; // In seconds.
+const DEFAULT_EVICTION_DELAY: u32 = 60 * 60 * 12; // 12 hours, in seconds.
 
 pub struct ArgsParser;
 
@@ -75,7 +76,8 @@ impl ArgsParser {
         Args {
             general: GeneralOptions {
                 host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
-                port: value_t!(matches, "port", u16).unwrap_or(4242),
+                http_port: value_t!(matches, "http-port", u16).unwrap_or(4242),
+                https_port: value_t!(matches, "https-port", u16).unwrap_or(4343),
                 cert_directory: cert_directory,
                 data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
                 domain: matches
@@ -142,7 +144,8 @@ impl ArgsParser {
 fn test_args() {
     let args = ArgsParser::from_vec(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
 
-    assert_eq!(args.general.port, 4242);
+    assert_eq!(args.general.http_port, 4242);
+    assert_eq!(args.general.https_port, 4343);
     assert_eq!(args.general.host, "0.0.0.0");
     assert_eq!(args.general.domain, "knilxof.org");
     assert_eq!(args.general.cert_directory, None);
@@ -153,18 +156,20 @@ fn test_args() {
 
     let args = ArgsParser::from_vec(vec!["registration_server",
                                          "--host=127.0.1.1",
-                                         "--port=4343",
+                                         "--http-port=4343",
+                                         "--https-port=4444",
                                          "--domain=example.com",
-                                         "--cert-directory=/tmp/certs",
+                                         "--cert-directory=/tmp/mycerts",
                                          "--dns-ttl=120",
                                          "--tunnel-ip=1.2.3.4",
                                          "--eviction-delay=60"]);
 
-    assert_eq!(args.general.port, 4343);
+    assert_eq!(args.general.http_port, 4343);
+    assert_eq!(args.general.https_port, 4444);
     assert_eq!(args.general.host, "127.0.1.1");
     assert_eq!(args.general.domain, "example.com");
     assert_eq!(args.general.cert_directory,
-               Some(PathBuf::from("/tmp/certs")));
+               Some(PathBuf::from("/tmp/mycerts")));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 120);
     assert_eq!(args.general.eviction_delay, 60);
@@ -172,11 +177,12 @@ fn test_args() {
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
     let args = ArgsParser::from_vec(vec!["registration_server",
-                                         "--config-file=./config.toml.sample"]);
-    assert_eq!(args.general.port, 4141);
-    assert_eq!(args.general.host, "127.0.1.1");
+                                         "--config-file=../config/config.toml"]);
+    assert_eq!(args.general.http_port, 4141);
+    assert_eq!(args.general.https_port, 4142);
+    assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.domain, "knilxof.org");
-    assert_eq!(args.general.cert_directory, None);
+    assert_eq!(args.general.cert_directory, Some(PathBuf::from("/tmp/certs")));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 89);
     assert_eq!(args.general.eviction_delay, 2);

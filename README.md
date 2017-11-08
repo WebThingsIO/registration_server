@@ -15,10 +15,10 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-        --config-file <path>  Path to a toml configuration file.
+    --config-file <path>  Path to a toml configuration file.
 ```
 
-See the `config.toml.sample` for an example of configuration file.
+See the `config/config.toml` for an example of configuration file.
 
 
 ## Building & testing

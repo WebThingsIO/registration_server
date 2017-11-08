@@ -14,6 +14,7 @@ extern crate registration_server;
 
 use hyper_openssl::OpensslServer;
 use iron::Iron;
+use std::thread;
 
 use registration_server::args::ArgsParser;
 use registration_server::config::Config;
@@ -32,28 +33,45 @@ fn main() {
 
     eviction::evict_old_entries(&config);
 
-    let iron_server = Iron::new(routes::create_chain("/", &config));
-    info!("Starting server on {}:{}",
-          args.general.host,
-          args.general.port);
-    let addr = format!("{}:{}", args.general.host, args.general.port);
-
     pdns::start_socket_endpoint(&config);
 
-    if args.general.cert_directory.is_none() {
-        iron_server.http(addr.as_ref() as &str).unwrap();
-    } else {
-        info!("Starting TLS server");
-        let certificate_directory = args.general.cert_directory.unwrap();
+    let mut threads = Vec::new();
 
-        let mut private_key = certificate_directory.clone();
-        private_key.push("privkey.pem");
+    if args.general.http_port != 0 {
+        let addr = format!("{}:{}", args.general.host, args.general.http_port);
+        let cfg = config.clone();
+        threads.push(thread::spawn(move || {
+            let iron_server = Iron::new(routes::create_chain("/", &cfg));
+            info!("Starting HTTP server on {}", addr);
+            iron_server.http(addr.as_ref() as &str).unwrap();
+        }));
+    }
 
-        let mut cert = certificate_directory.clone();
-        cert.push("fullchain.pem");
+    if args.general.https_port != 0 {
+        if args.general.cert_directory.is_none() {
+            error!("Certificate directory not set!");
+        } else {
+            let addr = format!("{}:{}", args.general.host, args.general.https_port);
+            let certificate_directory = args.general.cert_directory.unwrap();
+            let cfg = config.clone();
+            threads.push(thread::spawn(move || {
+                let iron_server = Iron::new(routes::create_chain("/", &cfg));
+                info!("Starting TLS server on {}", addr);
 
-        info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
-        let ssl = OpensslServer::from_files(private_key, cert).unwrap();
-        iron_server.https(addr.as_ref() as &str, ssl).unwrap();
+                let mut private_key = certificate_directory.clone();
+                private_key.push("privkey.pem");
+
+                let mut cert = certificate_directory.clone();
+                cert.push("fullchain.pem");
+
+                info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
+                let ssl = OpensslServer::from_files(private_key, cert).unwrap();
+                iron_server.https(addr.as_ref() as &str, ssl).unwrap();
+            }));
+        }
+    }
+
+    while let Some(t) = threads.pop() {
+        let _ = t.join();
     }
 }
