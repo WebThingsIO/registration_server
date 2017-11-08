@@ -5,7 +5,6 @@
 use types::NameAndToken;
 use config::Config;
 use database::{DatabaseError, DomainRecord};
-use discovery::{adddiscovery, discovery, ping, revokediscovery};
 use email_routes::{revokeemail, setemail, verifyemail};
 use errors::*;
 use iron::headers::ContentType;
@@ -26,29 +25,20 @@ fn domain_for_name(name: &str, config: &Config) -> String {
     format!("{}.{}.", name, config.options.general.domain).to_lowercase()
 }
 
-fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
-    // Extract the local_ip and token parameter, and get the public IP from the
-    // socket.
-    let public_ip = format!("{}", req.remote_addr.ip());
-
+fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
+    // Extract the token parameter.
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     let token = map.find(&["token"]);
-    let local_ip = map.find(&["local_ip"]);
 
-    // Both parameters are mandatory.
-    if token.is_none() || local_ip.is_none() {
+    if token.is_none() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
     let token = String::from_value(token.unwrap()).unwrap();
-    let local_ip = String::from_value(local_ip.unwrap()).unwrap();
 
-    info!("GET /register token={} local_ip={} public_ip={}",
-          token,
-          local_ip,
-          public_ip);
+    info!("GET /ping token={}", token);
 
-    // Save this registration in the database if we know about this token.
+    // Save this ping in the database if we know about this token.
     // Check if we have a record with this token, bail out if not.
     match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
@@ -70,8 +60,6 @@ fn register(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                &record.local_name,
                                                &record.remote_name,
                                                dns_challenge,
-                                               Some(&local_ip),
-                                               Some(&public_ip),
                                                &record.description,
                                                email,
                                                timestamp);
@@ -169,8 +157,6 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                    &local_name,
                                                    &full_name,
                                                    None,
-                                                   None,
-                                                   None,
                                                    &description,
                                                    None,
                                                    0);
@@ -217,14 +203,6 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
             // Update the record with the challenge.
-            let local_ip = match record.local_ip {
-                Some(ref ip) => Some(ip.as_str()),
-                None => None,
-            };
-            let public_ip = match record.public_ip {
-                Some(ref ip) => Some(ip.as_str()),
-                None => None,
-            };
             let email = match record.email {
                 Some(ref email) => Some(email.as_str()),
                 None => None,
@@ -233,8 +211,6 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                &record.local_name,
                                                &record.remote_name,
                                                Some(&challenge),
-                                               local_ip,
-                                               public_ip,
                                                &record.description,
                                                email,
                                                record.timestamp);
@@ -264,16 +240,11 @@ pub fn create_router(config: &Config) -> Router {
         )
     }
 
-    handler!(register);
+    handler!(ping);
     handler!(info);
     handler!(subscribe);
     handler!(unsubscribe);
     handler!(dnsconfig);
-
-    handler!(ping);
-    handler!(adddiscovery);
-    handler!(revokediscovery);
-    handler!(discovery);
 
     handler!(verifyemail);
     handler!(setemail);
@@ -302,12 +273,8 @@ pub fn create_chain(root_path: &str, config: &Config) -> Chain {
     let cors = CORS::new(vec![(vec![Method::Get], "info".to_owned()),
                               (vec![Method::Get], "subscribe".to_owned()),
                               (vec![Method::Get], "unsubscribe".to_owned()),
-                              (vec![Method::Get], "register".to_owned()),
-                              (vec![Method::Get], "dnsconfig".to_owned()),
                               (vec![Method::Get], "ping".to_owned()),
-                              (vec![Method::Get], "adddiscovery".to_owned()),
-                              (vec![Method::Get], "revokediscovery".to_owned()),
-                              (vec![Method::Get], "discovery".to_owned()),
+                              (vec![Method::Get], "dnsconfig".to_owned()),
                               (vec![Method::Get], "setemail".to_owned()),
                               (vec![Method::Get], "revokeemail".to_owned())]);
     chain.link_after(cors);
@@ -322,7 +289,7 @@ mod tests {
     use types::{NameAndToken, ServerInfo};
     use args::ArgsParser;
     use config::Config;
-    use database::{Database, SqlParam};
+    use database::Database;
     use iron::{Handler, Url};
     use iron::status::Status;
     use iron::method;
@@ -396,9 +363,6 @@ mod tests {
                                  Status::BadRequest);
         let empty_ok = ("".to_owned(), Status::Ok);
 
-        // Nothing is registered yet.
-        assert_eq!(get("ping", &router), ("[]".to_owned(), Status::Ok));
-
         // Subscribe a test user.
         assert_eq!(get("subscribe", &router), bad_request_error);
 
@@ -427,24 +391,15 @@ mod tests {
         assert_eq!(res,
                    (r#"{"error": "UnavailableName"}"#.to_owned(), Status::BadRequest));
 
-        // Register without the expected parameters.
-        assert_eq!(get("register", &router), bad_request_error);
-        assert_eq!(get("register?name=test", &router), bad_request_error);
-        assert_eq!(get(&format!("register?token={}", token), &router),
-                   bad_request_error);
-        assert_eq!(get("register?local_ip=10.0.0.1&token=wrong_token", &router),
+        // Ping without the expected parameters.
+        assert_eq!(get("ping", &router), bad_request_error);
+        assert_eq!(get("ping?name=test", &router), bad_request_error);
+        assert_eq!(get("ping?token=wrong_token", &router),
                    bad_request_error);
 
-        // Register properly.
-        assert_eq!(get(&format!("register?local_ip=10.0.0.1&token={}", token),
-                       &router),
+        // Ping properly.
+        assert_eq!(get(&format!("ping?token={}", token), &router),
                    empty_ok);
-
-        // Now retrieve our registered client.
-        assert_eq!(get("ping", &router),
-                   (r#"[{"href":"https://local.test.knilxof.org","desc":"test's server"}]"#
-                        .to_owned(),
-                    Status::Ok));
 
         // Get the full info
         assert_eq!(get("info", &router), bad_request_error);
@@ -456,8 +411,6 @@ mod tests {
         assert_eq!(record.token, token);
         assert_eq!(record.local_name, "local.test.knilxof.org.".to_owned());
         assert_eq!(record.remote_name, "test.knilxof.org.");
-        assert_eq!(record.local_ip, Some("10.0.0.1".to_owned()));
-        assert_eq!(record.public_ip, Some("127.0.0.1".to_owned()));
         assert_eq!(record.description, r#"test's server"#);
 
         // Test the LE challenge endpoints.
@@ -545,7 +498,7 @@ mod tests {
         let body = serde_json::to_string(&pdns_request).unwrap();
 
         let success =
-r#"{"result":[{"qtype":"A","qname":"local.test.knilxof.org.","content":"10.0.0.1","ttl":89}]}"#;
+r#"{"result":[{"qtype":"A","qname":"local.test.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
         assert_eq!(put("pdns", &body, &router),
                    (success.to_owned(), Status::Ok));
 
@@ -661,55 +614,6 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         let result = put("pdns", &body, &router);
         assert_eq!(result.1, Status::Ok);
         assert_eq!(result.0, r#"{"result":false}"#);
-
-        // Discovery tests.
-
-        // Add a discovery token
-        assert_eq!(get("adddiscovery", &router), bad_request_error);
-        assert_eq!(get("adddiscovery?token=wrong_token", &router),
-                   bad_request_error);
-        assert_eq!(get("adddiscovery?token=wrong_token&disco=disco_token", &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("adddiscovery?token={}&disco=disco_token", token),
-                       &router),
-                   empty_ok);
-
-        // Get records for a given token.
-        assert_eq!(get("discovery", &router), bad_request_error);
-        assert_eq!(get("discovery?disco=wrong_disco", &router),
-                   bad_request_error);
-        assert_eq!(get("discovery?disco=disco_token", &router),
-        (r#"[{"href":"https://local.test.knilxof.org","desc":"test's server"}]"#.to_owned(),
-        Status::Ok));
-
-        // Get the record with to evict it.
-        let db = Database::new("domain_db_test_routes.sqlite");
-        let timestamp = db.get_record_by_token(&token)
-            .recv()
-            .unwrap()
-            .unwrap()
-            .timestamp;
-        assert_eq!(db.evict_records(SqlParam::Integer(timestamp + 1))
-                       .recv()
-                       .unwrap(),
-                   Ok(1));
-
-        // Check that we discover it now as a remote server.
-        assert_eq!(get("discovery?disco=disco_token", &router),
-        (r#"[{"href":"https://test.knilxof.org","desc":"test's server"}]"#.to_owned(),
-        Status::Ok));
-
-        // Revoke the token.
-        assert_eq!(get("revokediscovery", &router), bad_request_error);
-        assert_eq!(get("revokediscovery?token=wrong_token", &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("revokediscovery?token={}", token), &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("revokediscovery?token={}&disco=disco_token", token),
-                       &router),
-                   empty_ok);
-        assert_eq!(get("discovery?disco=disco_token", &router),
-                   bad_request_error);
 
         // Email routes tests
         // 1. set an email address

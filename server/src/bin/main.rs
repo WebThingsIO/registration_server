@@ -18,7 +18,6 @@ use std::thread;
 
 use registration_server::args::ArgsParser;
 use registration_server::config::Config;
-use registration_server::eviction;
 use registration_server::routes;
 use registration_server::pdns;
 
@@ -30,8 +29,6 @@ fn main() {
     info!("Managing the domain {}", args.general.domain);
 
     let config = Config::from_args(args.clone());
-
-    eviction::evict_old_entries(&config);
 
     pdns::start_socket_endpoint(&config);
 

@@ -2,13 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-/// Simple server that manages foxbox registrations.
-/// Two end points are available:
-/// POST /register => to register a match between public IP and mesage.
-/// GET /ping => to get the list of public IP matches.
-///
-/// Boxes are supposed to register themselves at regular intervals so we
-/// discard data which is too old periodically.
 #[macro_use]
 extern crate clap;
 extern crate crypto;
@@ -71,9 +64,7 @@ macro_rules! ok_response {
 pub mod args;
 pub mod config;
 pub mod database;
-pub mod discovery;
 pub mod email_routes;
 pub mod errors;
-pub mod eviction;
 pub mod pdns;
 pub mod routes;

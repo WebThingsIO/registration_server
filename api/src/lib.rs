@@ -14,10 +14,6 @@ pub struct ServerInfo {
     pub remote_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_challenge: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub local_ip: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_ip: Option<String>,
     pub description: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,

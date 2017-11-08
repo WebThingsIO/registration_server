@@ -38,7 +38,7 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
                 proxy_pass http://127.0.0.1:81;
         }
 
-        location /register {
+        location /ping {
                 proxy_pass http://127.0.0.1:81;
         }
 
@@ -47,22 +47,6 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
         }
 
         location /info {
-                proxy_pass http://127.0.0.1:81;
-        }
-
-        location /ping {
-                proxy_pass http://127.0.0.1:81;
-        }
-
-        location /adddiscovery {
-                proxy_pass http://127.0.0.1:81;
-        }
-
-        location /revokediscovery {
-                proxy_pass http://127.0.0.1:81;
-        }
-
-        location /discovery {
                 proxy_pass http://127.0.0.1:81;
         }
 
@@ -130,8 +114,6 @@ data_directory = "/home/user/data"
 # Uncomment to use TLS (recommended)
 # cert_directory = "/home/user/config"
 tunnel_ip = "1.2.3.4"
-# Evict entries every 12 hours
-eviction_delay = 43200
 
 [pdns]
 dns_ttl = 1203
