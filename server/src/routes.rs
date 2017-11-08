@@ -388,7 +388,7 @@ mod tests {
         db.flush().recv().unwrap().expect("Flushing the db");
 
         let args = ArgsParser::from_vec(vec!["registration_server",
-                                             "--config-file=./config.toml.test"]);
+                                             "--config-file=../config/config.toml"]);
         let mut arg_config = Config::from_args(args);
         let router = create_router(&arg_config.with_db(db.clone()));
 

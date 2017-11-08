@@ -30,7 +30,7 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
 
 * Add the following script to your nginx.conf server directive in the host
 ```
- location /subscribe {
+        location /subscribe {
                 proxy_pass http://127.0.0.1:81;
         }
 
@@ -123,20 +123,24 @@ loglevel=5
 
 [general]
 host = "0.0.0.0"
-port = 81
+http_port = 81
+https_port = 4444
 domain = "yourdomain.org"
 data_directory = "/home/user/data"
 # Uncomment to use TLS (recommended)
 # cert_directory = "/home/user/config"
 tunnel_ip = "1.2.3.4"
-# Evict entries every 5 minutes
-eviction_delay = 300
+# Evict entries every 12 hours
+eviction_delay = 43200
 
 [pdns]
 dns_ttl = 1203
 # Check your DNS configuration to fill in this field.
 soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
 socket_path = "/tmp/powerdns_tunnel.sock"
+mx_record = ""
+caa_record = "0 issue \"letsencrypt.org\""
+txt_record = ""
 
 [email]
 server = "mail.gandi.net"
@@ -168,6 +172,6 @@ Once you have all your configuration files ready, you can use such a shell scrip
 ```
 #!/bin/bash
 set -x -e
-docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 81:81 -p 443:4443 -p 53:53 -p 53:53/udp tunnel_server
+docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 81:81 -p 444:4444 -p 443:4443 -p 53:53 -p 53:53/udp tunnel_server
 ```
 This script relays port 80 for the server, but it is recommended to instead relay port 443 and to setup TLS certificates. The gateway will be available on port 4443 from the public endpoint, over https.

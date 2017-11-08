@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn eviction_thread() {
         let args = ArgsParser::from_vec(vec!["registration_server",
-                                             "--config-file=./config.toml.test"]);
+                                             "--config-file=../config/config.toml"]);
 
         let db = Database::new("domain_db_test_eviction.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");

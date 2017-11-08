@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn test_socket() {
         let args = ArgsParser::from_vec(vec!["registration_server",
-                                             "--config-file=./config.toml.test"]);
+                                             "--config-file=../config/config.toml"]);
 
         let db = Database::new("domain_db_test_pdns.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
