@@ -36,6 +36,8 @@ RUN curl -s https://pagekite.net/pk/ | bash
 
 # Create a non privileged user to build the Rust code.
 RUN useradd -m -d /home/user -p user user
+COPY . /home/user
+RUN chown -R user /home/user
 USER user
 
 WORKDIR /home/user
@@ -43,7 +45,6 @@ WORKDIR /home/user
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 ENV PATH=/home/user/.cargo/bin:/home/user/bin:$PATH
 
-COPY . /home/user
 WORKDIR /home/user/server
 RUN cargo build --release
 WORKDIR /home/user
