@@ -8,7 +8,6 @@ domain = "knilxof.org"
 data_directory = "/tmp"
 cert_directory = "/tmp/certs"
 tunnel_ip = "1.2.3.4"
-eviction_delay = 2
 
 [pdns]
 dns_ttl = 89

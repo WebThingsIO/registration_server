@@ -17,7 +17,6 @@ const USAGE: &'static str = "--config-file=[path]     'Path to a toml configurat
 --cert-directory=[dir]   'Certificate directory.'
 --domain=[domain]        'The domain that will be tied to this registration server.'
 --dns-ttl=[ttl]          'TTL of the DNS records, in seconds.'
---eviction-delay=[secs]  'How often we purge old records.'
 --tunnel-ip=[ip]         'The IP address of the tunnel endpoint.'
 --soa-content=[dns]      'The content of the SOA record for this tunnel.'
 --socket-path=[path]     'The path to the socket used to communicate with PowerDNS'
@@ -29,8 +28,6 @@ const USAGE: &'static str = "--config-file=[path]     'Path to a toml configurat
 --confirmation-body=[s]  'The body of the confirmation email'
 --success-page=[s]       'HTML content of the email confirmation success page'
 --error-page=[s]         'HTML content of the email confirmation error page'";
-
-const DEFAULT_EVICTION_DELAY: u32 = 60 * 60 * 12; // 12 hours, in seconds.
 
 pub struct ArgsParser;
 
@@ -88,8 +85,6 @@ impl ArgsParser {
                     .value_of("tunnel-ip")
                     .unwrap_or("0.0.0.0")
                     .to_owned(),
-                eviction_delay: value_t!(matches, "eviction-delay", u32)
-                    .unwrap_or(DEFAULT_EVICTION_DELAY),
             },
             pdns: PdnsOptions {
                 soa_content: matches
@@ -151,7 +146,6 @@ fn test_args() {
     assert_eq!(args.general.cert_directory, None);
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 60);
-    assert_eq!(args.general.eviction_delay, DEFAULT_EVICTION_DELAY);
     assert_eq!(args.pdns.socket_path, None);
 
     let args = ArgsParser::from_vec(vec!["registration_server",
@@ -161,8 +155,7 @@ fn test_args() {
                                          "--domain=example.com",
                                          "--cert-directory=/tmp/mycerts",
                                          "--dns-ttl=120",
-                                         "--tunnel-ip=1.2.3.4",
-                                         "--eviction-delay=60"]);
+                                         "--tunnel-ip=1.2.3.4"]);
 
     assert_eq!(args.general.http_port, 4343);
     assert_eq!(args.general.https_port, 4444);
@@ -172,7 +165,6 @@ fn test_args() {
                Some(PathBuf::from("/tmp/mycerts")));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 120);
-    assert_eq!(args.general.eviction_delay, 60);
     assert_eq!(args.pdns.socket_path, None);
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
@@ -185,7 +177,6 @@ fn test_args() {
     assert_eq!(args.general.cert_directory, Some(PathBuf::from("/tmp/certs")));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 89);
-    assert_eq!(args.general.eviction_delay, 2);
     assert_eq!(args.pdns.soa_content, soa);
     assert_eq!(args.pdns.socket_path,
                Some("/tmp/powerdns_tunnel.sock".to_owned()));

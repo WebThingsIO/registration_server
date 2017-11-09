@@ -242,22 +242,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         // Look for a record with the qname.
         match config.db.get_record_by_name(&qname).recv().unwrap() {
             Ok(record) => {
-                if record.local_ip.is_none() && qtype == "A" {
-                    // No info on this domain, bail out.
-                    return Err("No local_ip".to_owned());
-                }
-
-                // Choose either the local or public IP based on whether the
-                // qname matches the local_name or remote_name.
-                let a_record = if record.local_ip.is_some() && qname == record.local_name {
-                    // We are inside of the home network, return the local IP
-                    // for the A record.
-                    record.local_ip.unwrap()
-                } else {
-                    // We are outside of the home network, return the IP of the
-                    // tunnel for the A record.
-                    config.options.general.tunnel_ip.to_owned()
-                };
+                let a_record = config.options.general.tunnel_ip.to_owned();
 
                 if qtype == "ANY" || qtype == "A" {
                     // Add an "A" record.

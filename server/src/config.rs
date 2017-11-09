@@ -14,7 +14,6 @@ pub struct GeneralOptions {
     pub cert_directory: Option<PathBuf>,
     pub domain: String,
     pub tunnel_ip: String,
-    pub eviction_delay: u32,
 }
 
 #[derive(Clone, Deserialize)]

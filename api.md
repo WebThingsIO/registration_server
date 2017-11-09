@@ -31,19 +31,16 @@ This endpoint let you remove from the registration server a previously subscribe
 
 An empty HTTP 200 response.
 
-# /register
+# /ping
 
-This needs to be called on a regular basis to let the system know what the local ip of the gateway is to assist with discovery. The server will evict old entries on a regular basis so the gateway needs to register itself often enough.
+This needs to be called on a regular basis to let the system know that the gateway is still active.
 
 *Parameters:*
 * `token`: the secret token assigned to this gateway.
-* `local_ip`: the local ip address of the gateway.
 
 *Returns:*
 
 An empty HTTP 200 response.
-
-The local ip is used to return results of the `/ping` endpoint.
 
 # /dnsconfig
 
@@ -65,49 +62,6 @@ An empty HTTP 200 response.
 *Returns:*
 
 A json representation of the database content for the gateway matching this token.
-
-# /ping
-
-*No parameters*
-
-*Returns:*
-
-An array of `{ "href": "...", "desc": "..." }` objects each describing a gateway that can be reached on this local network.
-
-# /adddiscovery
-
-This endpoints binds a gateway to a discovery token. Discovery tokens are meant to only be shared by one 3rd party that can use them to discover the gateway without knowing its secret token.
-
-*Parameters:*
-* `token`: the secret token assigned to this gateway.
-* `disco`: a secret discovery token.
-
-*Returns:*
-
-An empty HTTP 200 response.
-
-# /revokediscovery
-
-Remove a token <-> disco binding, making the gateway undiscoverable by a 3rd party holding on this discovery token.
-
-*Parameters:*
-* `token`: the secret token assigned to this gateway.
-* `disco`: a secret discovery token.
-
-*Returns:*
-
-An empty HTTP 200 response.
-
-# /discovery
-
-This endpoint will provide the best way to reach a gateway for a 3rd party application.
-
-*Parameters:*
-* `disco`: a secret discovery token.
-
-*Returns:*
-
-An array of `{ "href": "...", "desc": "..." }` objects each describing a way to reach the gateway.
 
 # /setemail
 
