@@ -40,6 +40,7 @@ impl DomainRecord {
             description: row.get(4),
             email: sqlstr!(row, 5),
             timestamp: row.get(6),
+            reclamation_token: sqlstr!(row, 7),
         }
     }
 
@@ -49,7 +50,8 @@ impl DomainRecord {
                dns_challenge: Option<&str>,
                description: &str,
                email: Option<&str>,
-               timestamp: i64)
+               timestamp: i64,
+               reclamation_token: Option<&str>)
                -> ServerInfo {
         macro_rules! str2sql {
             ($val:expr) => (
@@ -69,6 +71,7 @@ impl DomainRecord {
             description: description.to_owned(),
             email: str2sql!(email),
             timestamp: timestamp,
+            reclamation_token: str2sql!(reclamation_token),
         }
     }
 }
@@ -154,13 +157,14 @@ impl Database {
         }
         // Create the domains table if needed.
         conn.execute("CREATE TABLE IF NOT EXISTS domains (
-                      token         TEXT NOT NULL PRIMARY KEY,
-                      local_name    TEXT NOT NULL,
-                      remote_name   TEXT NOT NULL,
-                      dns_challenge TEXT NOT NULL,
-                      description   TEXT NOT NULL,
-                      email         TEXT NOT NULL,
-                      timestamp     INTEGER)",
+                      token             TEXT NOT NULL PRIMARY KEY,
+                      local_name        TEXT NOT NULL,
+                      remote_name       TEXT NOT NULL,
+                      dns_challenge     TEXT NOT NULL,
+                      description       TEXT NOT NULL,
+                      email             TEXT NOT NULL,
+                      timestamp         INTEGER,
+                      reclamation_token TEXT NOT NULL)",
                      &[])
             .unwrap_or_else(|err| {
                                 panic!("Unable to create the domains table: {}", err);
@@ -290,7 +294,7 @@ impl Database {
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
-                            description, email, timestamp \
+                            description, email, timestamp, reclamation_token \
                             FROM domains WHERE local_name=$1 or remote_name=$1",
                            name)
     }
@@ -299,7 +303,7 @@ impl Database {
                                token: &str)
                                -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record("SELECT token, local_name, remote_name, dns_challenge, \
-                            description, email, timestamp \
+                            description, email, timestamp, reclamation_token \
                             FROM domains WHERE token=$1",
                            token)
     }
@@ -311,14 +315,15 @@ impl Database {
         let record = record.clone();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
-            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            sqltry!(conn.execute("INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                                  &[&record.token,
                                    &record.local_name,
                                    &record.remote_name,
                                    &record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.description,
                                    &record.email.unwrap_or("".to_owned()),
-                                   &record.timestamp]),
+                                   &record.timestamp,
+                                   &record.reclamation_token.unwrap_or("".to_owned())]),
                     tx);
             tx.send(Ok(())).unwrap();
         });
@@ -335,15 +340,42 @@ impl Database {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
 
             sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, timestamp=$2, \
-                                  email=$3, description=$4 \
-                                  WHERE (local_name=$5 OR remote_name=$6) AND token=$7",
+                                  email=$3, description=$4, reclamation_token=$5 \
+                                  WHERE (local_name=$6 OR remote_name=$7) AND token=$8",
                                  &[&record.dns_challenge.unwrap_or("".to_owned()),
                                    &record.timestamp,
                                    &record.email.unwrap_or("".to_owned()),
                                    &record.description,
+                                   &record.reclamation_token.unwrap_or("".to_owned()),
                                    &record.local_name,
                                    &record.remote_name,
                                    &record.token]),
+                    tx);
+            tx.send(Ok(())).unwrap();
+        });
+
+        rx
+    }
+
+    pub fn update_record_by_name(&self, record: ServerInfo) -> Receiver<Result<(), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let record = record.clone();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+
+            sqltry!(conn.execute("UPDATE domains SET dns_challenge=$1, timestamp=$2, \
+                                  email=$3, description=$4, reclamation_token=$5, token=$6 \
+                                  WHERE local_name=$7 OR remote_name=$8",
+                                 &[&record.dns_challenge.unwrap_or("".to_owned()),
+                                   &record.timestamp,
+                                   &record.email.unwrap_or("".to_owned()),
+                                   &record.description,
+                                   &record.reclamation_token.unwrap_or("".to_owned()),
+                                   &record.token,
+                                   &record.local_name,
+                                   &record.remote_name]),
                     tx);
             tx.send(Ok(())).unwrap();
         });
@@ -411,7 +443,8 @@ fn test_domain_store() {
                                                 None,
                                                 "Test Server",
                                                 None,
-                                                0);
+                                                0,
+                                                None);
     assert_eq!(db.add_record(no_challenge_record.clone()).recv().unwrap(),
                Ok(()));
 
@@ -429,7 +462,8 @@ fn test_domain_store() {
                                              Some("dns-challenge"),
                                              "Test Server",
                                              None,
-                                             0);
+                                             0,
+                                             None);
     assert_eq!(db.update_record(challenge_record.clone()).recv().unwrap(),
                Ok(()));
 

@@ -38,6 +38,10 @@ Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for 
                 proxy_pass http://127.0.0.1:81;
         }
 
+        location /reclaim {
+                proxy_pass http://127.0.0.1:81;
+        }
+
         location /ping {
                 proxy_pass http://127.0.0.1:81;
         }
@@ -142,7 +146,7 @@ error_page = """<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Error!</title></head>
   <body>
-    <h1>An error happened while verifiying your email.</h1>
+    <h1>An error happened while verifying your email.</h1>
   </body>
 </html>"""
 

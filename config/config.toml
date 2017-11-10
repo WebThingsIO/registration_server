@@ -22,6 +22,8 @@ server = "mail.gandi.net"
 user = "accounts@knilxof.org"
 password = "******"
 sender = "accounts@knilxof.org"
+reclamation_title = "Reclaim your MozIoT Gateway Domain"
+reclamation_body = "Hello,\n\nYour reclamation token is: {token}\n\nIf you did not request to reclaim your gateway domain, you can ignore this email."
 confirmation_title = "Welcome to your MozIoT Gateway"
 confirmation_body = "Hello,\n\nWelcome to your MozIoT Gateway! To confirm your email address, follow this link: {link}"
 success_page = """<!DOCTYPE html>
@@ -35,6 +37,6 @@ error_page = """<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Error!</title></head>
   <body>
-    <h1>An error happened while verifiying your email.</h1>
+    <h1>An error happened while verifying your email.</h1>
   </body>
 </html>"""

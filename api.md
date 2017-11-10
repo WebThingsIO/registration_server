@@ -13,6 +13,7 @@ This endpoint reserves a new name for the gateway, as a subdomain managed by the
 *Parameters:*
 * `name`: the requested name to use as part of the subdomain assigned to the gateway.
 * `desc`: optional, a friendly description of this gateway. If this parameter is not present, a default description is generated including the gateway's name.
+* `reclamationToken`: optional, randomly generated token used to reclaim the domain.
 
 *Returns:*
 
@@ -30,6 +31,17 @@ This endpoint let you remove from the registration server a previously subscribe
 *Returns:*
 
 An empty HTTP 200 response.
+
+# /reclaim
+
+This endpoint is used to generate a reclamation token, which is used by the /subscribe API to reclaim a domain.
+
+*Parameters:*
+* `name`: the name being reclaimed
+
+*Returns:*
+
+An empty HTTP 200 response. This will trigger an email being sent to the registered email address with a reclaim token.
 
 # /ping
 
@@ -74,6 +86,17 @@ Adds a pending verification email to a gateway.
 *Returns:*
 
 An empty HTTP 200 response. This will trigger an email verification flow by sending a message to the email address with a link to follow in order to associate the email address with the gateway.
+
+# /verifyemail
+
+Verifies a pending email.
+
+*Parameters:*
+* `s`: verification uuid
+
+*Returns:*
+
+A success page in HTML (as this is meant to be clicked on by a user).
 
 # /revokeemail
 

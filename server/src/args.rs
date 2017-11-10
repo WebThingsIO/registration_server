@@ -10,24 +10,29 @@ use std::path::PathBuf;
 use toml;
 
 const USAGE: &'static str = "--config-file=[path]     'Path to a toml configuration file.'
---data-directory=[dir]   'The directory where the persistent data will be saved.'
 --host=[host]            'Set local hostname.'
 --http-port=[port]       'Set port to listen on for HTTP connections (0 to prevent listening).'
 --https-port=[port]      'Set port to listen on for TLS connections (0 to prevent listening).'
---cert-directory=[dir]   'Certificate directory.'
 --domain=[domain]        'The domain that will be tied to this registration server.'
---dns-ttl=[ttl]          'TTL of the DNS records, in seconds.'
+--data-directory=[dir]   'The directory where the persistent data will be saved.'
+--cert-directory=[dir]   'Certificate directory.'
 --tunnel-ip=[ip]         'The IP address of the tunnel endpoint.'
+--dns-ttl=[ttl]          'TTL of the DNS records, in seconds.'
 --soa-content=[dns]      'The content of the SOA record for this tunnel.'
---socket-path=[path]     'The path to the socket used to communicate with PowerDNS'
---email-server=[name]    'The name of the smpt server'
---email-user=[username]  'The username to authenticate with'
---email-password=[pass]  'The password for this email account'
---email-sender=[email]   'The email identity to use as a sender'
---confirmation-title=[s] 'The title of the confirmation email'
---confirmation-body=[s]  'The body of the confirmation email'
---success-page=[s]       'HTML content of the email confirmation success page'
---error-page=[s]         'HTML content of the email confirmation error page'";
+--socket-path=[path]     'The path to the socket used to communicate with PowerDNS.'
+--mx-record=[record]     'The MX record the PowerDNS server should return.'
+--caa-record=[record]    'The CAA record the PowerDNS server should return.'
+--txt-record=[record]    'The TXT record the PowerDNS server should return.'
+--email-server=[name]    'The name of the SMTP server.'
+--email-user=[username]  'The username to authenticate with.'
+--email-password=[pass]  'The password for this email account.'
+--email-sender=[email]   'The email identity to use as a sender.'
+--reclamation-title=[s]  'The title of the domain reclamation email.'
+--reclamation-body=[s]   'The body of the domain reclamation email.'
+--confirmation-title=[s] 'The title of the confirmation email.'
+--confirmation-body=[s]  'The body of the confirmation email.'
+--success-page=[s]       'HTML content of the email confirmation success page.'
+--error-page=[s]         'HTML content of the email confirmation error page.'";
 
 pub struct ArgsParser;
 
@@ -65,6 +70,8 @@ impl ArgsParser {
         optional!(email_user, "email-user");
         optional!(email_password, "email-password");
         optional!(email_sender, "email-sender");
+        optional!(reclamation_title, "reclamation-title");
+        optional!(reclamation_body, "reclamation-body");
         optional!(confirmation_title, "confirmation-title");
         optional!(confirmation_body, "confirmation-body");
         optional!(success_page, "success-page");
@@ -75,34 +82,34 @@ impl ArgsParser {
                 host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
                 http_port: value_t!(matches, "http-port", u16).unwrap_or(4242),
                 https_port: value_t!(matches, "https-port", u16).unwrap_or(4343),
-                cert_directory: cert_directory,
-                data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
                 domain: matches
                     .value_of("domain")
                     .unwrap_or("knilxof.org")
                     .to_owned(),
+                data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
+                cert_directory: cert_directory,
                 tunnel_ip: matches
                     .value_of("tunnel-ip")
                     .unwrap_or("0.0.0.0")
                     .to_owned(),
             },
             pdns: PdnsOptions {
+                dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
                 soa_content: matches
                     .value_of("soa-content")
                     .unwrap_or("_soa_not_configured_")
                     .to_owned(),
-                socket_path: matches.value_of("socket_path").map(|s| s.to_owned()),
-                dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
+                socket_path: matches.value_of("socket-path").map(|s| s.to_owned()),
                 mx_record: matches
-                    .value_of("mx_record")
+                    .value_of("mx-record")
                     .unwrap_or("_mx_not_configured_")
                     .to_owned(),
                 caa_record: matches
-                    .value_of("caa_record")
+                    .value_of("caa-record")
                     .unwrap_or("_caa_not_configured_")
                     .to_owned(),
                 txt_record: matches
-                    .value_of("txt_record")
+                    .value_of("txt-record")
                     .unwrap_or("_txt_not_configured_")
                     .to_owned(),
             },
@@ -111,6 +118,8 @@ impl ArgsParser {
                 user: email_user,
                 password: email_password,
                 sender: email_sender,
+                reclamation_title: reclamation_title,
+                reclamation_body: reclamation_body,
                 confirmation_title: confirmation_title,
                 confirmation_body: confirmation_body,
                 success_page: success_page,
@@ -139,45 +148,128 @@ impl ArgsParser {
 fn test_args() {
     let args = ArgsParser::from_vec(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
 
+    assert_eq!(args.general.host, "0.0.0.0");
     assert_eq!(args.general.http_port, 4242);
     assert_eq!(args.general.https_port, 4343);
-    assert_eq!(args.general.host, "0.0.0.0");
     assert_eq!(args.general.domain, "knilxof.org");
+    assert_eq!(args.general.data_directory, ".");
     assert_eq!(args.general.cert_directory, None);
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 60);
+    assert_eq!(args.pdns.soa_content, "_soa_not_configured_");
     assert_eq!(args.pdns.socket_path, None);
+    assert_eq!(args.pdns.mx_record, "_mx_not_configured_");
+    assert_eq!(args.pdns.caa_record, "_caa_not_configured_");
+    assert_eq!(args.pdns.txt_record, "_txt_not_configured_");
+    assert_eq!(args.email.server, None);
+    assert_eq!(args.email.user, None);
+    assert_eq!(args.email.password, None);
+    assert_eq!(args.email.sender, None);
+    assert_eq!(args.email.reclamation_title, None);
+    assert_eq!(args.email.reclamation_body, None);
+    assert_eq!(args.email.confirmation_title, None);
+    assert_eq!(args.email.confirmation_body, None);
+    assert_eq!(args.email.success_page, None);
+    assert_eq!(args.email.error_page, None);
 
     let args = ArgsParser::from_vec(vec!["registration_server",
                                          "--host=127.0.1.1",
                                          "--http-port=4343",
                                          "--https-port=4444",
                                          "--domain=example.com",
+                                         "--data-directory=/tmp/mydata",
                                          "--cert-directory=/tmp/mycerts",
+                                         "--tunnel-ip=1.2.3.4",
                                          "--dns-ttl=120",
-                                         "--tunnel-ip=1.2.3.4"]);
+                                         "--soa-content=_my_soa",
+                                         "--socket-path=/tmp/socket",
+                                         "--mx-record=_my_mx",
+                                         "--caa-record=_my_caa",
+                                         "--txt-record=_my_txt",
+                                         "--email-server=test.email.com",
+                                         "--email-user=my_email_user",
+                                         "--email-password=my_password",
+                                         "--email-sender=sender@email.com",
+                                         "--reclamation-title=Reclamation_Title",
+                                         "--reclamation-body=Reclamation_Body",
+                                         "--confirmation-title=Confirmation_Title",
+                                         "--confirmation-body=Confirmation_Body",
+                                         "--success-page=this is success",
+                                         "--error-page=this is error"]);
 
+    assert_eq!(args.general.host, "127.0.1.1");
     assert_eq!(args.general.http_port, 4343);
     assert_eq!(args.general.https_port, 4444);
-    assert_eq!(args.general.host, "127.0.1.1");
     assert_eq!(args.general.domain, "example.com");
-    assert_eq!(args.general.cert_directory,
-               Some(PathBuf::from("/tmp/mycerts")));
+    assert_eq!(args.general.data_directory, "/tmp/mydata");
+    assert_eq!(args.general.cert_directory, Some(PathBuf::from("/tmp/mycerts")));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 120);
-    assert_eq!(args.pdns.socket_path, None);
+    assert_eq!(args.pdns.soa_content, "_my_soa");
+    assert_eq!(args.pdns.socket_path, Some("/tmp/socket".to_owned()));
+    assert_eq!(args.pdns.mx_record, "_my_mx");
+    assert_eq!(args.pdns.caa_record, "_my_caa");
+    assert_eq!(args.pdns.txt_record, "_my_txt");
+    assert_eq!(args.email.server, Some("test.email.com".to_owned()));
+    assert_eq!(args.email.user, Some("my_email_user".to_owned()));
+    assert_eq!(args.email.password, Some("my_password".to_owned()));
+    assert_eq!(args.email.sender, Some("sender@email.com".to_owned()));
+    assert_eq!(args.email.reclamation_title, Some("Reclamation_Title".to_owned()));
+    assert_eq!(args.email.reclamation_body, Some("Reclamation_Body".to_owned()));
+    assert_eq!(args.email.confirmation_title, Some("Confirmation_Title".to_owned()));
+    assert_eq!(args.email.confirmation_body, Some("Confirmation_Body".to_owned()));
+    assert_eq!(args.email.success_page, Some("this is success".to_owned()));
+    assert_eq!(args.email.error_page, Some("this is error".to_owned()));
 
     let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
+    let mx = "";
+    let caa = "0 issue \"letsencrypt.org\"";
+    let txt = "";
+    let recl_title = "Reclaim your MozIoT Gateway Domain";
+    let recl_body = "Hello,\n\nYour reclamation token is: {token}\n\nIf you \
+                     did not request to reclaim your gateway domain, you can \
+                     ignore this email.";
+    let conf_title = "Welcome to your MozIoT Gateway";
+    let conf_body = "Hello,\n\nWelcome to your MozIoT Gateway! To confirm \
+                     your email address, follow this link: {link}";
+    let success = "<!DOCTYPE html>
+<html>
+  <head><title>Email Confirmation Successful!</title></head>
+  <body>
+    <h1>Thank you for verifying your email.</h1>
+  </body>
+</html>";
+    let error = "<!DOCTYPE html>
+<html>
+  <head><title>Email Confirmation Error!</title></head>
+  <body>
+    <h1>An error happened while verifying your email.</h1>
+  </body>
+</html>";
+
     let args = ArgsParser::from_vec(vec!["registration_server",
                                          "--config-file=../config/config.toml"]);
+    assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.http_port, 4141);
     assert_eq!(args.general.https_port, 4142);
-    assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.domain, "knilxof.org");
+    assert_eq!(args.general.data_directory, "/tmp");
     assert_eq!(args.general.cert_directory, Some(PathBuf::from("/tmp/certs")));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 89);
     assert_eq!(args.pdns.soa_content, soa);
-    assert_eq!(args.pdns.socket_path,
-               Some("/tmp/powerdns_tunnel.sock".to_owned()));
+    assert_eq!(args.pdns.socket_path, Some("/tmp/powerdns_tunnel.sock".to_owned()));
+    assert_eq!(args.pdns.mx_record, mx);
+    assert_eq!(args.pdns.caa_record, caa);
+    assert_eq!(args.pdns.txt_record, txt);
+    assert_eq!(args.email.server, Some("mail.gandi.net".to_owned()));
+    assert_eq!(args.email.user, Some("accounts@knilxof.org".to_owned()));
+    assert_eq!(args.email.password, Some("******".to_owned()));
+    assert_eq!(args.email.sender, Some("accounts@knilxof.org".to_owned()));
+    assert_eq!(args.email.reclamation_title, Some(recl_title.to_string()));
+    assert_eq!(args.email.reclamation_body, Some(recl_body.to_string()));
+    assert_eq!(args.email.confirmation_title, Some(conf_title.to_string()));
+    assert_eq!(args.email.confirmation_body, Some(conf_body.to_string()));
+    assert_eq!(args.email.success_page, Some(success.to_string()));
+    assert_eq!(args.email.error_page, Some(error.to_string()));
 }

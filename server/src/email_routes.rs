@@ -21,6 +21,7 @@ use params::{FromValue, Params};
 use std::str::FromStr;
 use uuid::Uuid;
 
+#[allow(dead_code)]
 pub struct EmailSender {
     connection: SmtpTransport,
     from: String,

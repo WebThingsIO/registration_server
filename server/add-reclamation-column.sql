@@ -11,7 +11,8 @@ CREATE TABLE domains (
     dns_challenge TEXT NOT NULL,
     description TEXT NOT NULL,
     email TEXT NOT NULL,
-    timestamp INTEGER
+    timestamp INTEGER,
+    reclamation_token TEXT NOT NULL
 );
 
 INSERT INTO domains (
@@ -21,7 +22,8 @@ INSERT INTO domains (
     dns_challenge,
     description,
     email,
-    timestamp
+    timestamp,
+    reclamation_token
 ) SELECT
     token,
     local_name,
@@ -29,7 +31,8 @@ INSERT INTO domains (
     dns_challenge,
     description,
     email,
-    timestamp
+    timestamp,
+    ""
 FROM temp_table;
 
 DROP TABLE temp_table;
