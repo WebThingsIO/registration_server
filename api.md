@@ -1,6 +1,6 @@
-# REST API
+# API
 
-The REST api follows these general rules:
+The API follows these general rules:
 * All the requests are GET requests.
 * CORS is enabled on endpoints that are meant to be queried by web browsers.
 * 400 is returned for any client error (missing parameter, incorrect parameter value).
@@ -8,7 +8,7 @@ The REST api follows these general rules:
 
 # /subscribe
 
-This endpoint reserves a new name for the gateway, as a subdomain managed by the registration server.
+This endpoint reserves a new name for the gateway as a subdomain managed by the registration server.
 
 *Parameters:*
 * `name`: the requested name to use as part of the subdomain assigned to the gateway.
@@ -17,13 +17,13 @@ This endpoint reserves a new name for the gateway, as a subdomain managed by the
 
 *Returns:*
 
-A json document: `{ "name": "demo", "token": "asd34q343krj3" }`
+A JSON document: `{"name": "demo", "token": "asd34q343krj3"}`
 
-The token is a secret identifier for this gateway, that must not be transmitted to any third party.
+The token is a secret identifier for this gateway that must not be transmitted to any third party.
 
 # /unsubscribe
 
-This endpoint let you remove from the registration server a previously subscribed gateway.
+This endpoint lets you remove a previously subscribed gateway.
 
 *Parameters:*
 * `token`: the secret token assigned to this gateway.
@@ -56,11 +56,11 @@ An empty HTTP 200 response.
 
 # /dnsconfig
 
-This endpoint is used to set the Let's Encrypt DNS challenge value when you need to retrieve or review certificates.
+This endpoint is used to set the Let's Encrypt DNS challenge value when creating or renewing certificates.
 
 *Parameters:*
 * `token`: the secret token assigned to this gateway.
-* `challenge`: the value of the challenge which will be return in TXT DNS requests with an _acme_challenge prefix.
+* `challenge`: the value of the challenge which will be returned in TXT DNS requests with an `_acme_challenge` prefix.
 
 *Returns:*
 
@@ -73,7 +73,7 @@ An empty HTTP 200 response.
 
 *Returns:*
 
-A json representation of the database content for the gateway matching this token.
+A JSON representation of the database content for the gateway matching this token.
 
 # /setemail
 
@@ -92,7 +92,7 @@ An empty HTTP 200 response. This will trigger an email verification flow by send
 Verifies a pending email.
 
 *Parameters:*
-* `s`: verification uuid
+* `s`: verification UUID
 
 *Returns:*
 

@@ -1,34 +1,34 @@
-# Deploying the tunnel server
+# Deploying the registration server
 
 The setup relies on 3 components:
-- this registration server.
-- a [PowerDNS](https://powerdns.com/) server.
+- This registration server.
+- A [PowerDNS](https://powerdns.com/) server.
 - [PageKite](https://pagekite.net/).
 
 To make it easier to deploy a working environment, a Docker file is provided which will build an image including all the needed dependencies.
 
 Getting a full setup ready involves the following:
-- build a Docker image.
-- Install nginx on the container's host
-- configure the DNS zone for the domain you want to use.
-- run the Docker image with the proper configuration.
+- Build a Docker image.
+- Install nginx on the container's host.
+- Configure the DNS zone for the domain you want to use.
+- Run the Docker image with the proper configuration.
 
 ## Docker configuration
 
-First, build the docker image with `docker build -t tunnel_server .` from the source directory.
+First, build the docker image with `docker build -t registration_server .` from the source directory.
 
 ## Running the Docker image
 
 You will have to mount a couple of directories and relay some ports for the Docker image to run properly:
-- mount `/home/user/config` to a directory where you will store the configuration files.
-- mount `/home/user/data` to a directory where the database will be stored.
+- Mount `/home/user/config` to a directory where you will store the configuration files.
+- Mount `/home/user/data` to a directory where the database will be stored.
 
-Port 53 over tcp and udp needs to be forwarded for PowerDNS. The ports used for the http server and the tunnel also need to be forwarded.
+Port 53 over TCP and UDP needs to be forwarded for PowerDNS. The ports used for the HTTP server and the tunnel also need to be forwarded.
 
 ## Configuration files
 
 
-* Add the following script to your nginx.conf server directive in the host
+* Add the following script to your nginx.conf server directive in the host:
 ```
         location /subscribe {
                 proxy_pass http://127.0.0.1:81;
@@ -105,7 +105,7 @@ loglevel=5
 
 ```
 
-* The `CONFIG_DIR/config.toml` file holds the registration server configuration. Here's a sample consistent with the `pdns.conf` showed above:
+* The `CONFIG_DIR/config.toml` file holds the registration server configuration. Here's a sample consistent with the `pdns.conf` shown above:
 ```
 # Configuration used for tests.
 
@@ -152,12 +152,14 @@ error_page = """<!DOCTYPE html>
 
 ```
 
-By default the PageKite tunnel listen on port 4443
+By default the PageKite tunnel listens on port 4443.
+
 Once you have all your configuration files ready, you can use such a shell script to start it:
 
 ```
 #!/bin/bash
+
 set -x -e
-docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 81:81 -p 444:4444 -p 443:4443 -p 53:53 -p 53:53/udp tunnel_server
+docker run -d -v /home/ec2-user/moziot/config:/home/user/config -v /home/ec2-user/moziot/data:/home/user/data -p 81:81 -p 444:4444 -p 443:4443 -p 53:53 -p 53:53/udp registration_server
 ```
-This script relays port 80 for the server, but it is recommended to instead relay port 443 and to setup TLS certificates. The gateway will be available on port 4443 from the public endpoint, over https.
+This script relays port 80 for the server, but it is recommended to instead relay port 443 and to setup TLS certificates. The gateway will be available on port 4443 from the public endpoint, over HTTPS.
