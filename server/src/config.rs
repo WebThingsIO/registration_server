@@ -32,6 +32,8 @@ pub struct EmailOptions {
     pub user: Option<String>,
     pub password: Option<String>,
     pub sender: Option<String>,
+    pub reclamation_title: Option<String>,
+    pub reclamation_body: Option<String>,
     pub confirmation_title: Option<String>,
     pub confirmation_body: Option<String>,
     pub success_page: Option<String>,

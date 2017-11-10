@@ -18,6 +18,7 @@ pub struct ServerInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     pub timestamp: i64,
+    pub reclamation_token: Option<String>,
 }
 
 unsafe impl Send for ServerInfo {}
