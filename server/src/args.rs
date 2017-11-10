@@ -130,17 +130,21 @@ impl ArgsParser {
 
     // Gets the args from the default command line.
     pub fn from_env() -> Args {
-        ArgsParser::from_matches(App::new("registration_server")
-                                     .args_from_usage(USAGE)
-                                     .get_matches())
+        ArgsParser::from_matches(
+            App::new("registration_server")
+                .args_from_usage(USAGE)
+                .get_matches(),
+        )
     }
 
     // Gets the args from a string array.
     #[cfg(test)]
     pub fn from_vec(params: Vec<&str>) -> Args {
-        ArgsParser::from_matches(App::new("registration_server")
-                                     .args_from_usage(USAGE)
-                                     .get_matches_from(params))
+        ArgsParser::from_matches(
+            App::new("registration_server")
+                .args_from_usage(USAGE)
+                .get_matches_from(params),
+        )
     }
 }
 
@@ -172,37 +176,42 @@ fn test_args() {
     assert_eq!(args.email.success_page, None);
     assert_eq!(args.email.error_page, None);
 
-    let args = ArgsParser::from_vec(vec!["registration_server",
-                                         "--host=127.0.1.1",
-                                         "--http-port=4343",
-                                         "--https-port=4444",
-                                         "--domain=example.com",
-                                         "--data-directory=/tmp/mydata",
-                                         "--cert-directory=/tmp/mycerts",
-                                         "--tunnel-ip=1.2.3.4",
-                                         "--dns-ttl=120",
-                                         "--soa-content=_my_soa",
-                                         "--socket-path=/tmp/socket",
-                                         "--mx-record=_my_mx",
-                                         "--caa-record=_my_caa",
-                                         "--txt-record=_my_txt",
-                                         "--email-server=test.email.com",
-                                         "--email-user=my_email_user",
-                                         "--email-password=my_password",
-                                         "--email-sender=sender@email.com",
-                                         "--reclamation-title=Reclamation_Title",
-                                         "--reclamation-body=Reclamation_Body",
-                                         "--confirmation-title=Confirmation_Title",
-                                         "--confirmation-body=Confirmation_Body",
-                                         "--success-page=this is success",
-                                         "--error-page=this is error"]);
+    let args = ArgsParser::from_vec(vec![
+        "registration_server",
+        "--host=127.0.1.1",
+        "--http-port=4343",
+        "--https-port=4444",
+        "--domain=example.com",
+        "--data-directory=/tmp/mydata",
+        "--cert-directory=/tmp/mycerts",
+        "--tunnel-ip=1.2.3.4",
+        "--dns-ttl=120",
+        "--soa-content=_my_soa",
+        "--socket-path=/tmp/socket",
+        "--mx-record=_my_mx",
+        "--caa-record=_my_caa",
+        "--txt-record=_my_txt",
+        "--email-server=test.email.com",
+        "--email-user=my_email_user",
+        "--email-password=my_password",
+        "--email-sender=sender@email.com",
+        "--reclamation-title=Reclamation_Title",
+        "--reclamation-body=Reclamation_Body",
+        "--confirmation-title=Confirmation_Title",
+        "--confirmation-body=Confirmation_Body",
+        "--success-page=this is success",
+        "--error-page=this is error",
+    ]);
 
     assert_eq!(args.general.host, "127.0.1.1");
     assert_eq!(args.general.http_port, 4343);
     assert_eq!(args.general.https_port, 4444);
     assert_eq!(args.general.domain, "example.com");
     assert_eq!(args.general.data_directory, "/tmp/mydata");
-    assert_eq!(args.general.cert_directory, Some(PathBuf::from("/tmp/mycerts")));
+    assert_eq!(
+        args.general.cert_directory,
+        Some(PathBuf::from("/tmp/mycerts"))
+    );
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 120);
     assert_eq!(args.pdns.soa_content, "_my_soa");
@@ -214,10 +223,22 @@ fn test_args() {
     assert_eq!(args.email.user, Some("my_email_user".to_owned()));
     assert_eq!(args.email.password, Some("my_password".to_owned()));
     assert_eq!(args.email.sender, Some("sender@email.com".to_owned()));
-    assert_eq!(args.email.reclamation_title, Some("Reclamation_Title".to_owned()));
-    assert_eq!(args.email.reclamation_body, Some("Reclamation_Body".to_owned()));
-    assert_eq!(args.email.confirmation_title, Some("Confirmation_Title".to_owned()));
-    assert_eq!(args.email.confirmation_body, Some("Confirmation_Body".to_owned()));
+    assert_eq!(
+        args.email.reclamation_title,
+        Some("Reclamation_Title".to_owned())
+    );
+    assert_eq!(
+        args.email.reclamation_body,
+        Some("Reclamation_Body".to_owned())
+    );
+    assert_eq!(
+        args.email.confirmation_title,
+        Some("Confirmation_Title".to_owned())
+    );
+    assert_eq!(
+        args.email.confirmation_body,
+        Some("Confirmation_Body".to_owned())
+    );
     assert_eq!(args.email.success_page, Some("this is success".to_owned()));
     assert_eq!(args.email.error_page, Some("this is error".to_owned()));
 
@@ -247,18 +268,26 @@ fn test_args() {
   </body>
 </html>";
 
-    let args = ArgsParser::from_vec(vec!["registration_server",
-                                         "--config-file=../config/config.toml"]);
+    let args = ArgsParser::from_vec(vec![
+        "registration_server",
+        "--config-file=../config/config.toml",
+    ]);
     assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.http_port, 4141);
     assert_eq!(args.general.https_port, 4142);
     assert_eq!(args.general.domain, "knilxof.org");
     assert_eq!(args.general.data_directory, "/tmp");
-    assert_eq!(args.general.cert_directory, Some(PathBuf::from("/tmp/certs")));
+    assert_eq!(
+        args.general.cert_directory,
+        Some(PathBuf::from("/tmp/certs"))
+    );
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 89);
     assert_eq!(args.pdns.soa_content, soa);
-    assert_eq!(args.pdns.socket_path, Some("/tmp/powerdns_tunnel.sock".to_owned()));
+    assert_eq!(
+        args.pdns.socket_path,
+        Some("/tmp/powerdns_tunnel.sock".to_owned())
+    );
     assert_eq!(args.pdns.mx_record, mx);
     assert_eq!(args.pdns.caa_record, caa);
     assert_eq!(args.pdns.txt_record, txt);

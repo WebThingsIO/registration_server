@@ -5,7 +5,7 @@
 use types::NameAndToken;
 use config::Config;
 use database::{DatabaseError, DomainRecord};
-use email_routes::{EmailSender, revokeemail, setemail, verifyemail};
+use email_routes::{revokeemail, setemail, verifyemail, EmailSender};
 use errors::*;
 use iron::headers::ContentType;
 use iron::method::Method;
@@ -60,14 +60,16 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Some(ref reclamation_token) => Some(reclamation_token.as_str()),
                 None => None,
             };
-            let new_record = DomainRecord::new(&record.token,
-                                               &record.local_name,
-                                               &record.remote_name,
-                                               dns_challenge,
-                                               &record.description,
-                                               email,
-                                               timestamp,
-                                               reclamation_token);
+            let new_record = DomainRecord::new(
+                &record.token,
+                &record.local_name,
+                &record.remote_name,
+                dns_challenge,
+                &record.description,
+                email,
+                timestamp,
+                reclamation_token,
+            );
             match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
@@ -138,14 +140,16 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
                     };
                     let token = format!("{}", Uuid::new_v4());
                     let reclamation_token = Some(token.as_str());
-                    let new_record = DomainRecord::new(&record.token,
-                                                       &record.local_name,
-                                                       &record.remote_name,
-                                                       dns_challenge,
-                                                       &record.description,
-                                                       Some(email),
-                                                       record.timestamp,
-                                                       reclamation_token);
+                    let new_record = DomainRecord::new(
+                        &record.token,
+                        &record.local_name,
+                        &record.remote_name,
+                        dns_challenge,
+                        &record.description,
+                        Some(email),
+                        record.timestamp,
+                        reclamation_token,
+                    );
                     if let Err(_) = config.db.update_record(new_record).recv().unwrap() {
                         return EndpointError::with(status::InternalServerError, 501);
                     }
@@ -160,14 +164,16 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
                                 .reclamation_body
                                 .unwrap()
                                 .replace("{token}", &token);
-                            match sender.send(&email,
-                                              &body,
-                                              &config.options.email.clone().reclamation_title.unwrap()) {
+                            match sender.send(
+                                &email,
+                                &body,
+                                &config.options.email.clone().reclamation_title.unwrap(),
+                            ) {
                                 Ok(_) => ok_response!(),
-                                Err(_) => EndpointError::with(status::InternalServerError, 501)
+                                Err(_) => EndpointError::with(status::InternalServerError, 501),
                             }
                         }
-                        Err(_) => EndpointError::with(status::InternalServerError, 501)
+                        Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
                 }
                 None => {
@@ -187,7 +193,7 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
             Ok(response)
         }
         // Other error, like a db issue.
-        Err(_) => EndpointError::with(status::InternalServerError, 501)
+        Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
 
@@ -235,15 +241,22 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                             Some(ref email) => Some(email.as_str()),
                                             None => None,
                                         };
-                                        let new_record = DomainRecord::new(&token,
-                                                                           &record.local_name,
-                                                                           &record.remote_name,
-                                                                           None,
-                                                                           &record.description,
-                                                                           email,
-                                                                           timestamp,
-                                                                           None);
-                                        match config.db.update_record_by_name(new_record).recv().unwrap() {
+                                        let new_record = DomainRecord::new(
+                                            &token,
+                                            &record.local_name,
+                                            &record.remote_name,
+                                            None,
+                                            &record.description,
+                                            email,
+                                            timestamp,
+                                            None,
+                                        );
+                                        match config
+                                            .db
+                                            .update_record_by_name(new_record)
+                                            .recv()
+                                            .unwrap()
+                                        {
                                             Ok(()) => {
                                                 // We don't want the full domain name or the DNS
                                                 // challenge in the response, so we create a local
@@ -254,10 +267,15 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                                 };
                                                 json_response!(&n_and_t)
                                             }
-                                            Err(_) => EndpointError::with(status::InternalServerError, 501)
+                                            Err(_) => EndpointError::with(
+                                                status::InternalServerError,
+                                                501,
+                                            ),
                                         }
                                     } else {
-                                        let mut response = Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
+                                        let mut response = Response::with(
+                                            r#"{"error": "ReclamationTokenMismatch"}"#,
+                                        );
                                         response.status = Some(status::BadRequest);
                                         response.headers.set(ContentType::json());
                                         Ok(response)
@@ -265,7 +283,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                 }
                                 None => {
                                     // No reclamation token stored in database.
-                                    let mut response = Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
+                                    let mut response =
+                                        Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
                                     response.status = Some(status::BadRequest);
                                     response.headers.set(ContentType::json());
                                     Ok(response)
@@ -291,14 +310,16 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                         Some(&Value::String(ref desc)) => desc.to_owned(),
                         _ => format!("{}'s server", name),
                     };
-                    let record = DomainRecord::new(&token,
-                                                   &local_name,
-                                                   &full_name,
-                                                   None,
-                                                   &description,
-                                                   None,
-                                                   timestamp,
-                                                   None);
+                    let record = DomainRecord::new(
+                        &token,
+                        &local_name,
+                        &full_name,
+                        None,
+                        &description,
+                        None,
+                        timestamp,
+                        None,
+                    );
                     match config.db.add_record(record).recv().unwrap() {
                         Ok(()) => {
                             // We don't want the full domain name or the DNS
@@ -350,14 +371,16 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                 Some(ref reclamation_token) => Some(reclamation_token.as_str()),
                 None => None,
             };
-            let new_record = DomainRecord::new(&record.token,
-                                               &record.local_name,
-                                               &record.remote_name,
-                                               Some(&challenge),
-                                               &record.description,
-                                               email,
-                                               record.timestamp,
-                                               reclamation_token);
+            let new_record = DomainRecord::new(
+                &record.token,
+                &record.local_name,
+                &record.remote_name,
+                Some(&challenge),
+                &record.description,
+                email,
+                record.timestamp,
+                reclamation_token,
+            );
             match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
                     // Everything went fine, return an empty 200 OK for now.
@@ -415,13 +438,15 @@ pub fn create_chain(root_path: &str, config: &Config) -> Chain {
     mount.mount(root_path, create_router(&config));
 
     let mut chain = Chain::new(mount);
-    let cors = CORS::new(vec![(vec![Method::Get], "info".to_owned()),
-                              (vec![Method::Get], "subscribe".to_owned()),
-                              (vec![Method::Get], "unsubscribe".to_owned()),
-                              (vec![Method::Get], "ping".to_owned()),
-                              (vec![Method::Get], "dnsconfig".to_owned()),
-                              (vec![Method::Get], "setemail".to_owned()),
-                              (vec![Method::Get], "revokeemail".to_owned())]);
+    let cors = CORS::new(vec![
+        (vec![Method::Get], "info".to_owned()),
+        (vec![Method::Get], "subscribe".to_owned()),
+        (vec![Method::Get], "unsubscribe".to_owned()),
+        (vec![Method::Get], "ping".to_owned()),
+        (vec![Method::Get], "dnsconfig".to_owned()),
+        (vec![Method::Get], "setemail".to_owned()),
+        (vec![Method::Get], "revokeemail".to_owned()),
+    ]);
     chain.link_after(cors);
     chain
 }
@@ -464,11 +489,12 @@ mod tests {
     }
 
     // Triggers a request for a URL on the router.
-    fn request(method: method::Method,
-               path: &str,
-               body: &str,
-               router: &Router)
-               -> IronResult<Response> {
+    fn request(
+        method: method::Method,
+        path: &str,
+        body: &str,
+        router: &Router,
+    ) -> IronResult<Response> {
         let url = Url::parse(&format!("http://localhost/{}", path)).unwrap();
         // From iron 0.5.x, iron::Request contains private field. So, it is not
         // good to create iron::Request directly. Make HTTP request and parse
@@ -499,13 +525,17 @@ mod tests {
         let db = Database::new("domain_db_test_routes.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
 
-        let args = ArgsParser::from_vec(vec!["registration_server",
-                                             "--config-file=../config/config.toml"]);
+        let args = ArgsParser::from_vec(vec![
+            "registration_server",
+            "--config-file=../config/config.toml",
+        ]);
         let mut arg_config = Config::from_args(args);
         let router = create_router(&arg_config.with_db(db.clone()));
 
-        let bad_request_error = (r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
-                                 status::BadRequest);
+        let bad_request_error = (
+            r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
+            status::BadRequest,
+        );
         let empty_ok = ("".to_owned(), status::Ok);
 
         // Subscribe a test user.
@@ -519,10 +549,14 @@ mod tests {
 
         // Unsubscribe
         assert_eq!(get("unsubscribe", &router), bad_request_error);
-        assert_eq!(get("unsubscribe?token=wrong_token", &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("unsubscribe?token={}", token), &router),
-                   empty_ok);
+        assert_eq!(
+            get("unsubscribe?token=wrong_token", &router),
+            bad_request_error
+        );
+        assert_eq!(
+            get(&format!("unsubscribe?token={}", token), &router),
+            empty_ok
+        );
 
         // Subscribe again
         let resp = get("subscribe?name=test", &router);
@@ -533,27 +567,34 @@ mod tests {
 
         // Fail to register twice the same user.
         let res = get("subscribe?name=test", &router);
-        assert_eq!(res,
-                   (r#"{"error": "UnavailableName"}"#.to_owned(), status::BadRequest));
+        assert_eq!(
+            res,
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
 
         // Test reclaiming domain
         assert_eq!(get("reclaim", &router), bad_request_error);
         let res = get("reclaim?name=nonexistent", &router);
-        assert_eq!(res,
-                   (r#"{"error": "NoSuchName"}"#.to_owned(), status::BadRequest));
+        assert_eq!(
+            res,
+            (r#"{"error": "NoSuchName"}"#.to_owned(), status::BadRequest)
+        );
         let res = get("reclaim?name=test", &router);
-        assert_eq!(res,
-                   (r#"{"error": "NoEmail"}"#.to_owned(), status::BadRequest));
+        assert_eq!(
+            res,
+            (r#"{"error": "NoEmail"}"#.to_owned(), status::BadRequest)
+        );
 
         // Ping without the expected parameters.
         assert_eq!(get("ping", &router), bad_request_error);
         assert_eq!(get("ping?name=test", &router), bad_request_error);
-        assert_eq!(get("ping?token=wrong_token", &router),
-                   bad_request_error);
+        assert_eq!(get("ping?token=wrong_token", &router), bad_request_error);
 
         // Ping properly.
-        assert_eq!(get(&format!("ping?token={}", token), &router),
-                   empty_ok);
+        assert_eq!(get(&format!("ping?token={}", token), &router), empty_ok);
 
         // Get the full info
         assert_eq!(get("info", &router), bad_request_error);
@@ -569,16 +610,28 @@ mod tests {
 
         // Test the LE challenge endpoints.
         assert_eq!(get("dnsconfig", &router), bad_request_error);
-        assert_eq!(get("dnsconfig?token=wrong_token", &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("dnsconfig?token={}", token), &router),
-                   bad_request_error);
-        assert_eq!(get("dnsconfig?token=wrong_token&challenge=test_challenge",
-                       &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("dnsconfig?token={}&challenge=test_challenge", token),
-                       &router),
-                   empty_ok);
+        assert_eq!(
+            get("dnsconfig?token=wrong_token", &router),
+            bad_request_error
+        );
+        assert_eq!(
+            get(&format!("dnsconfig?token={}", token), &router),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                "dnsconfig?token=wrong_token&challenge=test_challenge",
+                &router
+            ),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!("dnsconfig?token={}&challenge=test_challenge", token),
+                &router
+            ),
+            empty_ok
+        );
 
         // Tests for the pdns endpoint.
 
@@ -586,10 +639,14 @@ mod tests {
         assert_eq!(put("pdns", r#"{"foo": true}"#, &router), bad_request_error);
 
         // Unsupported method.
-        assert_eq!(put("pdns",
-                       r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#,
-                       &router),
-                   (r#"{"result":false}"#.to_owned(), status::Ok));
+        assert_eq!(
+            put(
+                "pdns",
+                r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#,
+                &router
+            ),
+            (r#"{"result":false}"#.to_owned(), status::Ok)
+        );
 
         // Simplified local redeclaration of the pdns data structures since
         // we don't need them to be public.
@@ -624,8 +681,10 @@ mod tests {
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
-        assert_eq!(put("pdns", &body, &router),
-                   (r#"{"result":[]}"#.to_owned(), status::Ok));
+        assert_eq!(
+            put("pdns", &body, &router),
+            (r#"{"result":[]}"#.to_owned(), status::Ok)
+        );
 
         // Test the "remote" dns name.
         let pdns_request = PdnsRequest {
@@ -637,9 +696,12 @@ mod tests {
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success = r#"{"result":[{"qtype":"A","qname":"test.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &router),
-                   (success.to_owned(), status::Ok));
+        let success = "{\"result\":[{\"qtype\":\"A\",\"qname\":\"test.knilxof.org.\",\
+                       \"content\":\"1.2.3.4\",\"ttl\":89}]}";
+        assert_eq!(
+            put("pdns", &body, &router),
+            (success.to_owned(), status::Ok)
+        );
 
         // Test the "local" dns name.
         let pdns_request = PdnsRequest {
@@ -651,10 +713,12 @@ mod tests {
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success =
-r#"{"result":[{"qtype":"A","qname":"local.test.knilxof.org.","content":"1.2.3.4","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &router),
-                   (success.to_owned(), status::Ok));
+        let success = "{\"result\":[{\"qtype\":\"A\",\"qname\":\"local.test.knilxof.org.\",\
+                       \"content\":\"1.2.3.4\",\"ttl\":89}]}";
+        assert_eq!(
+            put("pdns", &body, &router),
+            (success.to_owned(), status::Ok)
+        );
 
         // Test LE challenge queries.
         let pdns_request = PdnsRequest {
@@ -666,10 +730,14 @@ r#"{"result":[{"qtype":"A","qname":"local.test.knilxof.org.","content":"1.2.3.4"
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success =
-r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.knilxof.org.","content":"test_challenge","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &router),
-                   (success.to_owned(), status::Ok));
+        let success = "{\"result\":[{\"qtype\":\"TXT\",\
+                       \"qname\":\"_acme-challenge.local.test.knilxof.org.\",\
+                       \"content\":\"test_challenge\",\
+                       \"ttl\":89}]}";
+        assert_eq!(
+            put("pdns", &body, &router),
+            (success.to_owned(), status::Ok)
+        );
 
         // Test SOA queries.
         let pdns_request = PdnsRequest {
@@ -681,10 +749,14 @@ r#"{"result":[{"qtype":"TXT","qname":"_acme-challenge.local.test.knilxof.org.","
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success =
-r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800","ttl":89}]}"#;
-        assert_eq!(put("pdns", &body, &router),
-                   (success.to_owned(), status::Ok));
+        let success = "{\"result\":[{\"qtype\":\"SOA\",\"qname\":\"test.knilxof.org.\",\
+                       \"content\":\
+                       \"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800\",\
+                       \"ttl\":89}]}";
+        assert_eq!(
+            put("pdns", &body, &router),
+            (success.to_owned(), status::Ok)
+        );
 
         // PageKite queries
         #[derive(Deserialize)]
@@ -699,7 +771,7 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
             #[allow(dead_code)]
             domain_id: Option<String>,
             #[allow(dead_code)]
-            #[serde(rename="scopeMask")]
+            #[serde(rename = "scopeMask")]
             scope_mask: Option<String>,
             #[allow(dead_code)]
             auth: Option<String>,
@@ -710,7 +782,9 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         }
 
         // A request with a bogus domain.
-        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.knilxof.org.knilxof.org.";
+        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.\
+                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.knilxof.org.knilxof.\
+                     org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
@@ -726,7 +800,9 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         assert_eq!(response.result[0].content, "255.255.255.0");
 
         // A request with a correct domain.
-        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.knilxof.org.knilxof.org.";
+        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.\
+                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.knilxof.org.knilxof.\
+                     org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
@@ -753,8 +829,10 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         let result = put("pdns", &body, &router);
         assert_eq!(result.1, status::Ok);
         let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
-        assert_eq!(response.result[0].content,
-                   "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800");
+        assert_eq!(
+            response.result[0].content,
+            "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+        );
 
         // TXT request.
         let pdns_request = PdnsRequest {
@@ -773,26 +851,42 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         // 1. set an email address
         let email = "test@example.com".to_owned();
         assert_eq!(get("setemail", &router), bad_request_error);
-        assert_eq!(get("setemail?token=wrong_token", &router),
-                   bad_request_error);
-        assert_eq!(get("setemail?token=wrong_token&email=me@example.com", &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("setemail?token={}&email=not_an_email", token),
-                       &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("setemail?token={}&email={}", token, email),
-                       &router),
-                   empty_ok);
+        assert_eq!(
+            get("setemail?token=wrong_token", &router),
+            bad_request_error
+        );
+        assert_eq!(
+            get("setemail?token=wrong_token&email=me@example.com", &router),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!("setemail?token={}&email=not_an_email", token),
+                &router
+            ),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!("setemail?token={}&email={}", token, email),
+                &router
+            ),
+            empty_ok
+        );
         let email_record = db.get_email_by_token(&token).recv().unwrap().unwrap();
         assert_eq!(email_record.0, email);
         let link = email_record.1;
 
         // 2. verify the email
         assert_eq!(get("verifyemail", &router), bad_request_error);
-        assert_eq!(get("verifyemail?s=wrong_link", &router),
-                   (arg_config.options.email.error_page.unwrap(), status::Ok));
-        assert_eq!(get(&format!("verifyemail?s={}", link), &router),
-                   (arg_config.options.email.success_page.unwrap(), status::Ok));
+        assert_eq!(
+            get("verifyemail?s=wrong_link", &router),
+            (arg_config.options.email.error_page.unwrap(), status::Ok)
+        );
+        assert_eq!(
+            get(&format!("verifyemail?s={}", link), &router),
+            (arg_config.options.email.success_page.unwrap(), status::Ok)
+        );
 
         // 3. check that the email has been set on the domain record.
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
@@ -802,28 +896,51 @@ r#"{"result":[{"qtype":"SOA","qname":"test.knilxof.org.","content":"a.dns.gandi.
         assert_eq!(get("reclaim?name=test", &router), empty_ok);
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
         let res = get("subscribe?name=test&reclamationToken=wrongtoken", &router);
-        assert_eq!(res,
-                   (r#"{"error": "ReclamationTokenMismatch"}"#.to_owned(), status::BadRequest));
-        let res = get(&format!("subscribe?name=test&reclamationToken={}",
-                               &domain_record.reclamation_token.unwrap()),
-                      &router);
+        assert_eq!(
+            res,
+            (
+                r#"{"error": "ReclamationTokenMismatch"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        let res = get(
+            &format!(
+                "subscribe?name=test&reclamationToken={}",
+                &domain_record.reclamation_token.unwrap()
+            ),
+            &router,
+        );
         let registration: NameAndToken = serde_json::from_str(&res.0).unwrap();
         let token = registration.token;
         assert_eq!(registration.name, "test".to_owned());
 
         // 4. email revocation
         assert_eq!(get("revokeemail", &router), bad_request_error);
-        assert_eq!(get("revokeemail?token=wrong_token", &router),
-                   bad_request_error);
-        assert_eq!(get("revokeemail?token=wrong_token&email=me@example.com",
-                       &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("revokeemail?token={}&email=not_an_email", token),
-                       &router),
-                   bad_request_error);
-        assert_eq!(get(&format!("revokeemail?token={}&email={}", token, email),
-                       &router),
-                   empty_ok);
+        assert_eq!(
+            get("revokeemail?token=wrong_token", &router),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                "revokeemail?token=wrong_token&email=me@example.com",
+                &router
+            ),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!("revokeemail?token={}&email=not_an_email", token),
+                &router
+            ),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!("revokeemail?token={}&email={}", token, email),
+                &router
+            ),
+            empty_ok
+        );
 
         // 5. Verify we don't have this email record anymore.
         let email_record = db.get_email_by_token(&token).recv().unwrap();

@@ -41,8 +41,10 @@ impl EndpointError {
             error: error.clone(),
         };
 
-        Err(IronError::new(StringError(error),
-                           (status, serde_json::to_string(&body).unwrap())))
+        Err(IronError::new(
+            StringError(error),
+            (status, serde_json::to_string(&body).unwrap()),
+        ))
     }
 }
 
