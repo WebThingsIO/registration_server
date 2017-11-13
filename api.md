@@ -13,20 +13,21 @@ This endpoint reserves a new name for the gateway as a subdomain managed by the 
 *Parameters:*
 * `name`: the requested name to use as part of the subdomain assigned to the gateway.
 * `desc`: optional, a friendly description of this gateway. If this parameter is not present, a default description is generated including the gateway's name.
-* `reclamationToken`: optional, randomly generated token used to reclaim the domain.
+* `reclamationToken`: optional, the reclamation token assigned to this domain.
 
 *Returns:*
 
 A JSON document: `{"name": "demo", "token": "asd34q343krj3"}`
 
-The token is a secret identifier for this gateway that must not be transmitted to any third party.
+The token is a secret identifier for this domain that must not be transmitted to any third party.
 
 # /unsubscribe
 
-This endpoint lets you remove a previously subscribed gateway.
+This endpoint lets you remove a previously subscribed domain.
 
 *Parameters:*
-* `token`: the secret token assigned to this gateway.
+* `token`: optional, the secret token assigned to this domain.
+* `reclamationToken`: optional, the reclamation token assigned to this domain.
 
 *Returns:*
 
@@ -48,7 +49,7 @@ An empty HTTP 200 response. This will trigger an email being sent to the registe
 This needs to be called on a regular basis to let the system know that the gateway is still active.
 
 *Parameters:*
-* `token`: the secret token assigned to this gateway.
+* `token`: the secret token assigned to this domain.
 
 *Returns:*
 
@@ -59,7 +60,7 @@ An empty HTTP 200 response.
 This endpoint is used to set the Let's Encrypt DNS challenge value when creating or renewing certificates.
 
 *Parameters:*
-* `token`: the secret token assigned to this gateway.
+* `token`: the secret token assigned to this domain.
 * `challenge`: the value of the challenge which will be returned in TXT DNS requests with an `_acme_challenge` prefix.
 
 *Returns:*
@@ -69,23 +70,23 @@ An empty HTTP 200 response.
 # /info
 
 *Parameters:*
-* `token`: the secret token assigned to this gateway.
+* `token`: the secret token assigned to this domain.
 
 *Returns:*
 
-A JSON representation of the database content for the gateway matching this token.
+A JSON representation of the database content for the domain matching this token.
 
 # /setemail
 
-Adds a pending verification email to a gateway.
+Adds a pending verification email to a domain.
 
 *Parameters:*
-* `token`: the secret token assigned to this gateway.
+* `token`: the secret token assigned to this domain.
 * `email`: the email to verify.
 
 *Returns:*
 
-An empty HTTP 200 response. This will trigger an email verification flow by sending a message to the email address with a link to follow in order to associate the email address with the gateway.
+An empty HTTP 200 response. This will trigger an email verification flow by sending a message to the email address with a link to follow in order to associate the email address with the domain.
 
 # /verifyemail
 
@@ -103,7 +104,7 @@ A success page in HTML (as this is meant to be clicked on by a user).
 Calling this endpoint will cancel an ongoing email verification flow.
 
 *Parameters:*
-* `token`: the secret token assigned to this gateway.
+* `token`: the secret token assigned to this domain.
 * `email`: the email being verified.
 
 *Returns:*
