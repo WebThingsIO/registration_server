@@ -445,6 +445,16 @@ impl Database {
         )
     }
 
+    pub fn delete_record_by_reclamation_token(
+        &self,
+        token: &str,
+    ) -> Receiver<Result<i32, DatabaseError>> {
+        self.execute_1param_sql(
+            "DELETE FROM domains WHERE reclamation_token=$1",
+            SqlParam::Text(token.to_owned()),
+        )
+    }
+
     #[cfg(test)]
     pub fn flush(&self) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
@@ -535,6 +545,55 @@ fn test_domain_store() {
     // Remove by token.
     assert_eq!(
         db.delete_record_by_token(&challenge_record.token)
+            .recv()
+            .unwrap(),
+        Ok(1)
+    );
+
+    assert_eq!(
+        db.get_record_by_name(&challenge_record.local_name)
+            .recv()
+            .unwrap(),
+        Err(DatabaseError::NoRecord)
+    );
+
+    // Add a record without a reclamation token.
+    let no_challenge_record = DomainRecord::new(
+        "test-token",
+        "local.test.example.org",
+        "test.example.org",
+        None,
+        "Test Server",
+        None,
+        0,
+        None,
+    );
+    assert_eq!(
+        db.add_record(no_challenge_record.clone()).recv().unwrap(),
+        Ok(())
+    );
+
+    // Update the record by name to have a reclamation token.
+    let challenge_record = DomainRecord::new(
+        "test-token",
+        "local.test.example.org",
+        "test.example.org",
+        None,
+        "Test Server",
+        None,
+        0,
+        Some("test-reclamation-token"),
+    );
+    assert_eq!(
+        db.update_record_by_name(challenge_record.clone())
+            .recv()
+            .unwrap(),
+        Ok(())
+    );
+
+    // Remove by reclamation token.
+    assert_eq!(
+        db.delete_record_by_reclamation_token(&challenge_record.reclamation_token.unwrap())
             .recv()
             .unwrap(),
         Ok(1)

@@ -106,7 +106,28 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     let token = map.find(&["token"]);
     if token.is_none() {
-        return EndpointError::with(status::BadRequest, 400);
+        let reclamation_token = map.find(&["reclamationToken"]);
+        match reclamation_token {
+            Some(&Value::String(ref reclamation_token)) => {
+                return match config
+                    .db
+                    .delete_record_by_reclamation_token(&reclamation_token)
+                    .recv()
+                    .unwrap()
+                {
+                    Ok(0) => {
+                        // No record found for this token.
+                        EndpointError::with(status::BadRequest, 400)
+                    }
+                    Ok(_) => ok_response!(),
+                    Err(_) => EndpointError::with(status::InternalServerError, 501),
+                };
+            }
+            _ => {
+                // No token or reclamation token provided.
+                return EndpointError::with(status::BadRequest, 400);
+            }
+        }
     }
     let token = String::from_value(token.unwrap()).unwrap();
 
