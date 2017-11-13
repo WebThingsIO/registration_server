@@ -314,6 +314,19 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                         }
                         _ => {
                             // We already have a record for this name, return an error.
+                            let email = map.find(&["email"]);
+                            if !email.is_none() {
+                                let email = String::from_value(email.unwrap()).unwrap();
+                                if email == record.email.unwrap() {
+                                    let mut response = Response::with(
+                                        r#"{"error": "UnavailableNameReclamationPossible"}"#,
+                                    );
+                                    response.status = Some(status::BadRequest);
+                                    response.headers.set(ContentType::json());
+                                    return Ok(response);
+                                }
+                            }
+
                             let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
                             response.status = Some(status::BadRequest);
                             response.headers.set(ContentType::json());
