@@ -10,7 +10,7 @@ use email::Mailbox;
 use errors::*;
 use iron::headers::ContentType;
 use lettre::email::EmailBuilder;
-use lettre::transport::smtp::{SUBMISSION_PORT, SecurityLevel, SmtpTransport, SmtpTransportBuilder};
+use lettre::transport::smtp::{SecurityLevel, SmtpTransport, SmtpTransportBuilder, SUBMISSION_PORT};
 use lettre::transport::smtp::authentication::Mechanism;
 use lettre::transport::EmailTransport;
 #[cfg(test)]
@@ -29,24 +29,25 @@ pub struct EmailSender {
 
 impl EmailSender {
     pub fn new(config: &Config) -> Result<EmailSender, ()> {
-
         let options = &config.options;
 
-        if options.email.server.is_none() || options.email.user.is_none() ||
-           options.email.password.is_none() || options.email.sender.is_none() {
+        if options.email.server.is_none() || options.email.user.is_none()
+            || options.email.password.is_none() || options.email.sender.is_none()
+        {
             error!("All email fields need to be set.");
             return Err(());
         }
 
-        let builder =
-            match SmtpTransportBuilder::new((options.clone().email.server.unwrap().as_str(),
-                                             SUBMISSION_PORT)) {
-                Ok(builder) => builder,
-                Err(error) => {
-                    error!("{:?}", error);
-                    return Err(());
-                }
-            };
+        let builder = match SmtpTransportBuilder::new((
+            options.clone().email.server.unwrap().as_str(),
+            SUBMISSION_PORT,
+        )) {
+            Ok(builder) => builder,
+            Err(error) => {
+                error!("{:?}", error);
+                return Err(());
+            }
+        };
 
         let user = options.clone().email.user.unwrap().clone();
         let password = options.clone().email.password.unwrap().clone();
@@ -60,18 +61,19 @@ impl EmailSender {
             .build();
 
         Ok(EmailSender {
-               connection: connection,
-               from: options.clone().email.sender.unwrap().clone(),
-           })
+            connection: connection,
+            from: options.clone().email.sender.unwrap().clone(),
+        })
     }
 
     pub fn send(&mut self, to: &str, body: &str, subject: &str) -> Result<(), ()> {
         let email = match EmailBuilder::new()
-                  .to(to)
-                  .from(&*self.from)
-                  .body(body)
-                  .subject(subject)
-                  .build() {
+            .to(to)
+            .from(&*self.from)
+            .body(body)
+            .subject(subject)
+            .build()
+        {
             Ok(email) => email,
             Err(error) => {
                 error!("{:?}", error);
@@ -124,43 +126,46 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     // Check that this is a valid token.
     if config
-           .db
-           .get_record_by_token(&token)
-           .recv()
-           .unwrap()
-           .is_err() {
+        .db
+        .get_record_by_token(&token)
+        .recv()
+        .unwrap()
+        .is_err()
+    {
         return EndpointError::with(status::BadRequest, 400);
     }
 
     match config.db.add_email(&email, &token, &link).recv().unwrap() {
-        Ok(_) => {
-            match EmailSender::new(config) {
-                Ok(mut sender) => {
-                    let scheme = match config.options.general.cert_directory {
-                        Some(_) => "https",
-                        None => "http",
-                    };
-                    let full_link = format!("{}://api.{}/verifyemail?s={}",
-                                            scheme,
-                                            config.options.general.domain,
-                                            link);
-                    let body = config
-                        .options
-                        .email
-                        .clone()
-                        .confirmation_body
-                        .unwrap()
-                        .replace("{link}", &full_link);
-                    match sender.send(&email,
-                                      &body,
-                                      &config.options.email.clone().confirmation_title.unwrap()) {
-                        Ok(_) => ok_response!(),
-                        Err(_) => EndpointError::with(status::InternalServerError, 501),
-                    }
+        Ok(_) => match EmailSender::new(config) {
+            Ok(mut sender) => {
+                let scheme = match config.options.general.cert_directory {
+                    Some(_) => "https",
+                    None => "http",
+                };
+                let full_link = format!(
+                    "{}://api.{}/verifyemail?s={}",
+                    scheme,
+                    config.options.general.domain,
+                    link
+                );
+                let body = config
+                    .options
+                    .email
+                    .clone()
+                    .confirmation_body
+                    .unwrap()
+                    .replace("{link}", &full_link);
+                match sender.send(
+                    &email,
+                    &body,
+                    &config.options.email.clone().confirmation_title.unwrap(),
+                ) {
+                    Ok(_) => ok_response!(),
+                    Err(_) => EndpointError::with(status::InternalServerError, 501),
                 }
-                Err(_) => EndpointError::with(status::InternalServerError, 501),
             }
-        }
+            Err(_) => EndpointError::with(status::InternalServerError, 501),
+        },
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
@@ -224,11 +229,12 @@ pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     // Check that this is a valid token.
     if config
-           .db
-           .get_record_by_token(&token)
-           .recv()
-           .unwrap()
-           .is_err() {
+        .db
+        .get_record_by_token(&token)
+        .recv()
+        .unwrap()
+        .is_err()
+    {
         return EndpointError::with(status::BadRequest, 400);
     }
 

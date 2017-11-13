@@ -30,7 +30,7 @@ struct PdnsRequestParameters {
     // lookup method
     qtype: Option<String>,
     qname: Option<String>,
-    #[serde(rename="zone-id")]
+    #[serde(rename = "zone-id")]
     zone_id: Option<i32>,
     remote: Option<String>,
     local: Option<String>,
@@ -51,7 +51,7 @@ struct PdnsLookupResponse {
     ttl: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     domain_id: Option<String>,
-    #[serde(rename="scopeMask")]
+    #[serde(rename = "scopeMask")]
     #[serde(skip_serializing_if = "Option::is_none")]
     scope_mask: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -218,9 +218,9 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         let mut pdns_response = PdnsResponse { result: Vec::new() };
 
         if qtype == "SOA" {
-            pdns_response
-                .result
-                .push(PdnsResponseParams::Lookup(soa_response(&original_qname, config)));
+            pdns_response.result.push(PdnsResponseParams::Lookup(
+                soa_response(&original_qname, config),
+            ));
         }
 
         if qtype == "ANY" {
@@ -326,11 +326,9 @@ pub fn pdns(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /pdns");
     // Only allow clients from localhost.
     match req.remote_addr {
-        V4(addr) => {
-            if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
-                return EndpointError::with(status::BadRequest, 400);
-            }
-        }
+        V4(addr) => if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
+            return EndpointError::with(status::BadRequest, 400);
+        },
         _ => return EndpointError::with(status::BadRequest, 400),
     }
 
@@ -352,7 +350,6 @@ pub fn pdns(req: &mut Request, config: &Config) -> IronResult<Response> {
         Ok(ref response) => pdns_response_as_iron(response),
         Err(err) => pdns_failure_as_iron(&err),
     }
-
 }
 
 // Custom method to read just enough characters from the stream to build a JSON
@@ -421,18 +418,16 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
         }
 
         match process_request(input, config) {
-            Ok(ref response) => {
-                match serde_json::to_string(response) {
-                    Ok(serialized) => {
-                        debug!("Response is: {}", serialized);
-                        send!(serialized.as_bytes());
-                    }
-                    Err(err) => {
-                        error!("Error serializing JSON: {}", err);
-                        send!(error_response);
-                    }
+            Ok(ref response) => match serde_json::to_string(response) {
+                Ok(serialized) => {
+                    debug!("Response is: {}", serialized);
+                    send!(serialized.as_bytes());
                 }
-            }
+                Err(err) => {
+                    error!("Error serializing JSON: {}", err);
+                    send!(error_response);
+                }
+            },
             Err(err) => {
                 error!("Error processing request: {}", err);
                 send!(error_response);
@@ -521,8 +516,10 @@ mod tests {
 
     #[test]
     fn test_socket() {
-        let args = ArgsParser::from_vec(vec!["registration_server",
-                                             "--config-file=../config/config.toml"]);
+        let args = ArgsParser::from_vec(vec![
+            "registration_server",
+            "--config-file=../config/config.toml",
+        ]);
 
         let db = Database::new("domain_db_test_pdns.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
@@ -536,8 +533,8 @@ mod tests {
         // socket.
         thread::sleep(Duration::new(1, 0));
         // Connect to the socket.
-        let mut stream = UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap())
-            .unwrap();
+        let mut stream =
+            UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap()).unwrap();
         // Build an initialization request and send it to the stream.
         let request = build_request("initialize", None, None);
         let body = serde_json::to_string(&request).unwrap();
@@ -546,7 +543,7 @@ mod tests {
 
         let empty_success = b"{\"result\":true}";
         let empty_error = b"{\"result\":[]}";
-        let soa_exampleorg =  b"{\"result\":[{\"qtype\":\"SOA\"";
+        let soa_exampleorg = b"{\"result\":[{\"qtype\":\"SOA\"";
 
         let mut answer: [u8; 256] = [0; 256];
         assert_eq!(stream.read(&mut answer).unwrap(), 15);
@@ -572,17 +569,20 @@ mod tests {
 
         // SOA PageKite query, to create a successful response without having
         // to setup records in the db.
-        let request = build_request("lookup",
-                                    Some("A"),
-                                    Some("1d48.https-4443.test.knilxof.org.knilxof.org."));
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("1d48.https-4443.test.knilxof.org.knilxof.org."),
+        );
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
         assert_eq!(stream.read(&mut answer).unwrap(), 117);
         let result = String::from_utf8(answer[..117].to_vec()).unwrap();
-        let soa_success =
-r#"{"result":[{"qtype":"A","qname":"1d48.https-4443.test.knilxof.org.knilxof.org.","content":"255.255.255.0","ttl":89}]}"#;
+        let soa_success = "{\"result\":[{\"qtype\":\"A\",\
+                           \"qname\":\"1d48.https-4443.test.knilxof.org.knilxof.org.\",\
+                           \"content\":\"255.255.255.0\",\"ttl\":89}]}";
         assert_eq!(&result, soa_success);
     }
 }
