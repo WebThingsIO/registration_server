@@ -62,8 +62,7 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
             };
             let new_record = DomainRecord::new(
                 &record.token,
-                &record.local_name,
-                &record.remote_name,
+                &record.name,
                 dns_challenge,
                 &record.description,
                 email,
@@ -163,8 +162,7 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
                     let reclamation_token = Some(token.as_str());
                     let new_record = DomainRecord::new(
                         &record.token,
-                        &record.local_name,
-                        &record.remote_name,
+                        &record.name,
                         dns_challenge,
                         &record.description,
                         Some(email),
@@ -264,8 +262,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                         };
                                         let new_record = DomainRecord::new(
                                             &token,
-                                            &record.local_name,
-                                            &record.remote_name,
+                                            &record.name,
                                             None,
                                             &record.description,
                                             email,
@@ -338,7 +335,6 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // Create a token, create and store a record, and finally,
                     // return the token.
                     let token = format!("{}", Uuid::new_v4());
-                    let local_name = format!("local.{}", full_name);
 
                     let description = match map.find(&["desc"]) {
                         Some(&Value::String(ref desc)) => desc.to_owned(),
@@ -346,7 +342,6 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     };
                     let record = DomainRecord::new(
                         &token,
-                        &local_name,
                         &full_name,
                         None,
                         &description,
@@ -407,8 +402,7 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
             };
             let new_record = DomainRecord::new(
                 &record.token,
-                &record.local_name,
-                &record.remote_name,
+                &record.name,
                 Some(&challenge),
                 &record.description,
                 email,
@@ -563,8 +557,8 @@ mod tests {
             "registration_server",
             "--config-file=../config/config.toml",
         ]);
-        let mut arg_config = Config::from_args(args);
-        let router = create_router(&arg_config.with_db(db.clone()));
+        let config = Config::from_args_with_db(args, db.clone());
+        let router = create_router(&config);
 
         let bad_request_error = (
             r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
@@ -638,8 +632,7 @@ mod tests {
         assert_eq!(response.1, status::Ok);
         let record: ServerInfo = serde_json::from_str(&response.0).unwrap();
         assert_eq!(record.token, token);
-        assert_eq!(record.local_name, "local.test.knilxof.org.".to_owned());
-        assert_eq!(record.remote_name, "test.knilxof.org.");
+        assert_eq!(record.name, "test.knilxof.org.");
         assert_eq!(record.description, r#"test's server"#);
 
         // Test the LE challenge endpoints.
@@ -737,35 +730,18 @@ mod tests {
             (success.to_owned(), status::Ok)
         );
 
-        // Test the "local" dns name.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("A".to_owned()),
-                qname: Some("local.test.knilxof.org.".to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-
-        let success = "{\"result\":[{\"qtype\":\"A\",\"qname\":\"local.test.knilxof.org.\",\
-                       \"content\":\"1.2.3.4\",\"ttl\":89}]}";
-        assert_eq!(
-            put("pdns", &body, &router),
-            (success.to_owned(), status::Ok)
-        );
-
         // Test LE challenge queries.
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("TXT".to_owned()),
-                qname: Some("_acme-challenge.local.test.knilxof.org.".to_owned()),
+                qname: Some("_acme-challenge.test.knilxof.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
         let success = "{\"result\":[{\"qtype\":\"TXT\",\
-                       \"qname\":\"_acme-challenge.local.test.knilxof.org.\",\
+                       \"qname\":\"_acme-challenge.test.knilxof.org.\",\
                        \"content\":\"test_challenge\",\
                        \"ttl\":89}]}";
         assert_eq!(
@@ -915,11 +891,11 @@ mod tests {
         assert_eq!(get("verifyemail", &router), bad_request_error);
         assert_eq!(
             get("verifyemail?s=wrong_link", &router),
-            (arg_config.options.email.error_page.unwrap(), status::Ok)
+            (config.options.email.error_page.unwrap(), status::Ok)
         );
         assert_eq!(
             get(&format!("verifyemail?s={}", link), &router),
-            (arg_config.options.email.success_page.unwrap(), status::Ok)
+            (config.options.email.success_page.unwrap(), status::Ok)
         );
 
         // 3. check that the email has been set on the domain record.

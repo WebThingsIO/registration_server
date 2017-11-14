@@ -62,8 +62,10 @@ impl Config {
     }
 
     #[cfg(test)]
-    pub fn with_db(&mut self, db: Database) -> &mut Self {
-        self.db = db;
-        self
+    pub fn from_args_with_db(args: Args, db: Database) -> Self {
+        Config {
+            db: db,
+            options: args
+        }
     }
 }
