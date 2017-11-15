@@ -13,6 +13,7 @@ This endpoint reserves a new name for the gateway as a subdomain managed by the 
 *Parameters:*
 * `name`: the requested name to use as part of the subdomain assigned to the gateway.
 * `desc`: optional, a friendly description of this gateway. If this parameter is not present, a default description is generated including the gateway's name.
+* `email`: optional, used to determine if an existing domain is associated with the provided email or not.
 * `reclamationToken`: optional, the reclamation token assigned to this domain.
 
 *Returns:*
