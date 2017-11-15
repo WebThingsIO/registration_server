@@ -61,8 +61,8 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
                 None => None,
             };
             let new_record = DomainRecord::new(
-                &record.token,
                 &record.name,
+                &record.token,
                 dns_challenge,
                 &record.description,
                 email,
@@ -161,8 +161,8 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
                     let token = format!("{}", Uuid::new_v4());
                     let reclamation_token = Some(token.as_str());
                     let new_record = DomainRecord::new(
-                        &record.token,
                         &record.name,
+                        &record.token,
                         dns_challenge,
                         &record.description,
                         Some(email),
@@ -261,8 +261,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                                             None => None,
                                         };
                                         let new_record = DomainRecord::new(
-                                            &token,
                                             &record.name,
+                                            &token,
                                             None,
                                             &record.description,
                                             email,
@@ -341,8 +341,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                         _ => format!("{}'s server", name),
                     };
                     let record = DomainRecord::new(
-                        &token,
                         &full_name,
+                        &token,
                         None,
                         &description,
                         None,
@@ -401,8 +401,8 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
                 None => None,
             };
             let new_record = DomainRecord::new(
-                &record.token,
                 &record.name,
+                &record.token,
                 Some(&challenge),
                 &record.description,
                 email,

@@ -65,7 +65,7 @@ impl Config {
     pub fn from_args_with_db(args: Args, db: Database) -> Self {
         Config {
             db: db,
-            options: args
+            options: args,
         }
     }
 }
