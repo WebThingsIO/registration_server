@@ -122,29 +122,31 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    let link = format!("{}", Uuid::new_v4());
-
     // Check that this is a valid token.
-    if config
-        .db
-        .get_record_by_token(&token)
-        .recv()
-        .unwrap()
-        .is_err()
-    {
+    let record = config.db.get_record_by_token(&token).recv().unwrap();
+    if record.is_err() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    let result = match config.db.get_email_by_token(&token).recv().unwrap() {
-        Ok(_) => config
-            .db
-            .update_email(&email, &token, &link)
-            .recv()
-            .unwrap(),
-        Err(_) => config.db.add_email(&email, &token, &link).recv().unwrap(),
+    let mut record = record.unwrap();
+
+    let account_id = match config.db.get_account_id_by_email(&email).recv().unwrap() {
+        Ok(id) => id,
+        Err(_) => match config.db.add_email(&email).recv().unwrap() {
+            Ok(id) => id,
+            Err(_) => {
+                return EndpointError::with(status::InternalServerError, 501);
+            }
+        },
     };
 
-    match result {
+    // Update the record.
+    let verification_token = format!("{}", Uuid::new_v4());
+    record.account_id = account_id;
+    record.verification_token = verification_token.clone();
+    record.verified = false;
+
+    match config.db.update_record(record).recv().unwrap() {
         Ok(_) => match EmailSender::new(config) {
             Ok(mut sender) => {
                 let scheme = match config.options.general.cert_directory {
@@ -155,7 +157,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
                     "{}://api.{}/verifyemail?s={}",
                     scheme,
                     config.options.general.domain,
-                    link
+                    verification_token
                 );
                 let body = config
                     .options
@@ -191,20 +193,18 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let link = String::from_value(link.unwrap()).unwrap();
 
-    match config.db.get_email_by_link(&link).recv().unwrap() {
-        Ok((email, token)) => {
-            match config.db.get_record_by_token(&token).recv().unwrap() {
-                Ok(mut record) => {
-                    // Update the record to set the email address.
-                    record.email = Some(email);
-                    match config.db.update_record(record).recv().unwrap() {
-                        Ok(_) => html_response!(config.options.email.clone().success_page.unwrap()),
-                        Err(DatabaseError::NoRecord) => {
-                            html_response!(config.options.email.clone().error_page.unwrap())
-                        }
-                        Err(_) => EndpointError::with(status::InternalServerError, 501),
-                    }
-                }
+    match config
+        .db
+        .get_record_by_verification_token(&link)
+        .recv()
+        .unwrap()
+    {
+        Ok(mut record) => {
+            // Update the record's verification state.
+            record.verified = true;
+            record.verification_token = "".to_owned();
+            match config.db.update_record(record).recv().unwrap() {
+                Ok(_) => html_response!(config.options.email.clone().success_page.unwrap()),
                 Err(DatabaseError::NoRecord) => {
                     html_response!(config.options.email.clone().error_page.unwrap())
                 }
@@ -223,33 +223,26 @@ pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
     let token = map.find(&["token"]);
-    let email = map.find(&["email"]);
 
-    if token.is_none() || email.is_none() {
+    if token.is_none() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
     let token = String::from_value(token.unwrap()).unwrap();
-    let email = String::from_value(email.unwrap()).unwrap();
-    // Check that this is a valid email address.
-    if Mailbox::from_str(&email).is_err() {
-        return EndpointError::with(status::BadRequest, 400);
-    }
 
     // Check that this is a valid token.
-    if config
-        .db
-        .get_record_by_token(&token)
-        .recv()
-        .unwrap()
-        .is_err()
-    {
+    let record = config.db.get_record_by_token(&token).recv().unwrap();
+    if record.is_err() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    if config.db.delete_email(&email).recv().unwrap().is_err() {
-        return EndpointError::with(status::BadRequest, 400);
-    }
+    // Update the record's verification state.
+    let mut record = record.unwrap();
+    record.verified = false;
+    record.verification_token = "".to_owned();
 
-    ok_response!()
+    match config.db.update_record(record).recv().unwrap() {
+        Ok(_) => ok_response!(),
+        Err(_) => EndpointError::with(status::InternalServerError, 501),
+    }
 }

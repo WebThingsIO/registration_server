@@ -42,32 +42,22 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Check if we have a record with this token, bail out if not.
     match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
-            // Update the record with the challenge.
-            let dns_challenge = match record.dns_challenge {
-                Some(ref challenge) => Some(challenge.as_str()),
-                None => None,
-            };
             // Update the timestamp to be current.
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs() as i64;
-            let email = match record.email {
-                Some(ref email) => Some(email.as_str()),
-                None => None,
-            };
-            let reclamation_token = match record.reclamation_token {
-                Some(ref reclamation_token) => Some(reclamation_token.as_str()),
-                None => None,
-            };
+
             let new_record = DomainRecord::new(
-                &record.token,
                 &record.name,
-                dns_challenge,
+                record.account_id,
+                &record.token,
                 &record.description,
-                email,
                 timestamp,
-                reclamation_token,
+                &record.dns_challenge,
+                &record.reclamation_token,
+                &record.verification_token,
+                record.verified,
             );
             match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
@@ -151,23 +141,32 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     match config.db.get_record_by_name(&full_name).recv().unwrap() {
         Ok(record) => {
-            match record.email {
-                Some(ref email) => {
-                    // Update the record with a reclamation token.
-                    let dns_challenge = match record.dns_challenge {
-                        Some(ref challenge) => Some(challenge.as_str()),
-                        None => None,
-                    };
+            match config
+                .db
+                .get_email_by_account_id(record.account_id)
+                .recv()
+                .unwrap()
+            {
+                Ok(ref email) => {
+                    if email == "" {
+                        let mut response = Response::with(r#"{"error": "NoEmail"}"#);
+                        response.status = Some(status::BadRequest);
+                        response.headers.set(ContentType::json());
+                        return Ok(response);
+                    }
+
                     let token = format!("{}", Uuid::new_v4());
-                    let reclamation_token = Some(token.as_str());
+                    let reclamation_token = token.as_str();
                     let new_record = DomainRecord::new(
-                        &record.token,
                         &record.name,
-                        dns_challenge,
+                        record.account_id,
+                        &record.token,
                         &record.description,
-                        Some(email),
                         record.timestamp,
+                        &record.dns_challenge,
                         reclamation_token,
+                        &record.verification_token,
+                        record.verified,
                     );
                     if let Err(_) = config.db.update_record(new_record).recv().unwrap() {
                         return EndpointError::with(status::InternalServerError, 501);
@@ -195,8 +194,8 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
                         Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
                 }
-                None => {
-                    // This name doesn't have an associate email address.
+                Err(_) => {
+                    // This name doesn't have an associated email address.
                     let mut response = Response::with(r#"{"error": "NoEmail"}"#);
                     response.status = Some(status::BadRequest);
                     response.headers.set(ContentType::json());
@@ -251,76 +250,70 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     let reclamation_token = map.find(&["reclamationToken"]);
                     match reclamation_token {
                         Some(&Value::String(ref reclamation_token)) => {
-                            match record.reclamation_token {
-                                Some(ref stored_token) => {
-                                    if reclamation_token == stored_token {
-                                        // Create a new token and update the existing record.
-                                        let token = format!("{}", Uuid::new_v4());
-                                        let email = match record.email {
-                                            Some(ref email) => Some(email.as_str()),
-                                            None => None,
+                            if reclamation_token.to_string() == record.reclamation_token {
+                                // Create a new token and update the existing record.
+                                let token = format!("{}", Uuid::new_v4());
+                                let new_record = DomainRecord::new(
+                                    &record.name,
+                                    record.account_id,
+                                    &token,
+                                    &record.description,
+                                    timestamp,
+                                    &record.dns_challenge,
+                                    &record.reclamation_token,
+                                    &record.verification_token,
+                                    record.verified,
+                                );
+                                match config.db.update_record_by_name(new_record).recv().unwrap() {
+                                    Ok(()) => {
+                                        // We don't want the full domain name or the DNS
+                                        // challenge in the response, so we create a local
+                                        // struct.
+                                        let n_and_t = NameAndToken {
+                                            name: subdomain.to_owned(),
+                                            token: token,
                                         };
-                                        let new_record = DomainRecord::new(
-                                            &token,
-                                            &record.name,
-                                            None,
-                                            &record.description,
-                                            email,
-                                            timestamp,
-                                            None,
-                                        );
-                                        match config
-                                            .db
-                                            .update_record_by_name(new_record)
-                                            .recv()
-                                            .unwrap()
-                                        {
-                                            Ok(()) => {
-                                                // We don't want the full domain name or the DNS
-                                                // challenge in the response, so we create a local
-                                                // struct.
-                                                let n_and_t = NameAndToken {
-                                                    name: subdomain.to_owned(),
-                                                    token: token,
-                                                };
-                                                json_response!(&n_and_t)
-                                            }
-                                            Err(_) => EndpointError::with(
-                                                status::InternalServerError,
-                                                501,
-                                            ),
-                                        }
-                                    } else {
-                                        let mut response = Response::with(
-                                            r#"{"error": "ReclamationTokenMismatch"}"#,
-                                        );
-                                        response.status = Some(status::BadRequest);
-                                        response.headers.set(ContentType::json());
-                                        Ok(response)
+                                        json_response!(&n_and_t)
                                     }
+                                    Err(_) => EndpointError::with(status::InternalServerError, 501),
                                 }
-                                None => {
-                                    // No reclamation token stored in database.
-                                    let mut response =
-                                        Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
-                                    response.status = Some(status::BadRequest);
-                                    response.headers.set(ContentType::json());
-                                    Ok(response)
-                                }
+                            } else {
+                                let mut response =
+                                    Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
+                                response.status = Some(status::BadRequest);
+                                response.headers.set(ContentType::json());
+                                Ok(response)
                             }
                         }
                         _ => {
                             // We already have a record for this name, return an error.
                             let email = map.find(&["email"]);
                             if !email.is_none() {
-                                let email = String::from_value(email.unwrap()).unwrap();
-                                if email == record.email.unwrap() {
-                                    let mut response = Response::with(
-                                        r#"{"error": "UnavailableNameReclamationPossible"}"#,
-                                    );
-                                    response.status = Some(status::BadRequest);
-                                    response.headers.set(ContentType::json());
-                                    return Ok(response);
+                                match config
+                                    .db
+                                    .get_email_by_account_id(record.account_id)
+                                    .recv()
+                                    .unwrap()
+                                {
+                                    Ok(ref stored_email) => {
+                                        let email = String::from_value(email.unwrap()).unwrap();
+                                        if email == stored_email.to_string() {
+                                            let mut response = Response::with(
+                                                "{\"error\": \
+                                                 \"UnavailableNameReclamationPossible\"}",
+                                            );
+                                            response.status = Some(status::BadRequest);
+                                            response.headers.set(ContentType::json());
+                                            return Ok(response);
+                                        }
+                                    }
+                                    Err(_) => {
+                                        let mut response =
+                                            Response::with(r#"{"error": "UnavailableName"}"#);
+                                        response.status = Some(status::BadRequest);
+                                        response.headers.set(ContentType::json());
+                                        return Ok(response);
+                                    }
                                 }
                             }
 
@@ -340,14 +333,23 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                         Some(&Value::String(ref desc)) => desc.to_owned(),
                         _ => format!("{}'s server", name),
                     };
+
+                    let result = config.db.get_unknown_account_id().recv().unwrap();
+                    if result.is_err() {
+                        return EndpointError::with(status::InternalServerError, 501);
+                    }
+
+                    let account_id = result.unwrap();
                     let record = DomainRecord::new(
-                        &token,
                         &full_name,
-                        None,
+                        account_id,
+                        &token,
                         &description,
-                        None,
                         timestamp,
-                        None,
+                        "",
+                        "",
+                        "",
+                        false,
                     );
                     match config.db.add_record(record).recv().unwrap() {
                         Ok(()) => {
@@ -391,23 +393,16 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Check if we have a record with this token, bail out if not.
     match config.db.get_record_by_token(&token).recv().unwrap() {
         Ok(record) => {
-            // Update the record with the challenge.
-            let email = match record.email {
-                Some(ref email) => Some(email.as_str()),
-                None => None,
-            };
-            let reclamation_token = match record.reclamation_token {
-                Some(ref reclamation_token) => Some(reclamation_token.as_str()),
-                None => None,
-            };
             let new_record = DomainRecord::new(
-                &record.token,
                 &record.name,
-                Some(&challenge),
+                record.account_id,
+                &record.token,
                 &record.description,
-                email,
                 record.timestamp,
-                reclamation_token,
+                &challenge,
+                &record.reclamation_token,
+                &record.verification_token,
+                record.verified,
             );
             match config.db.update_record(new_record).recv().unwrap() {
                 Ok(()) => {
@@ -883,9 +878,14 @@ mod tests {
             ),
             empty_ok
         );
-        let email_record = db.get_email_by_token(&token).recv().unwrap().unwrap();
-        assert_eq!(email_record.0, email);
-        let link = email_record.1;
+        let record = db.get_record_by_token(&token).recv().unwrap().unwrap();
+        let email_record = db.get_email_by_account_id(record.account_id)
+            .recv()
+            .unwrap()
+            .unwrap();
+        assert_eq!(email_record, email);
+        assert!(!record.verified);
+        let link = record.verification_token;
 
         // 2. verify the email
         assert_eq!(get("verifyemail", &router), bad_request_error);
@@ -900,7 +900,7 @@ mod tests {
 
         // 3. check that the email has been set on the domain record.
         let domain_record = db.get_record_by_token(&token).recv().unwrap().unwrap();
-        assert_eq!(domain_record.email, Some(email.clone()));
+        assert!(domain_record.verified);
 
         // 3a. Before revoking, finish testing domain reclamation.
         assert_eq!(get("reclaim?name=test", &router), empty_ok);
@@ -916,7 +916,7 @@ mod tests {
         let res = get(
             &format!(
                 "subscribe?name=test&reclamationToken={}",
-                &domain_record.reclamation_token.unwrap()
+                &domain_record.reclamation_token
             ),
             &router,
         );
@@ -931,29 +931,13 @@ mod tests {
             bad_request_error
         );
         assert_eq!(
-            get(
-                "revokeemail?token=wrong_token&email=me@example.com",
-                &router
-            ),
-            bad_request_error
-        );
-        assert_eq!(
-            get(
-                &format!("revokeemail?token={}&email=not_an_email", token),
-                &router
-            ),
-            bad_request_error
-        );
-        assert_eq!(
-            get(
-                &format!("revokeemail?token={}&email={}", token, email),
-                &router
-            ),
+            get(&format!("revokeemail?token={}", token), &router),
             empty_ok
         );
 
-        // 5. Verify we don't have this email record anymore.
-        let email_record = db.get_email_by_token(&token).recv().unwrap();
-        assert_eq!(email_record, Err(DatabaseError::NoRecord));
+        // 5. Verify the verification link is empty.
+        let record = db.get_record_by_token(&token).recv().unwrap().unwrap();
+        assert_eq!(record.verification_token, "");
+        assert!(!record.verified);
     }
 }
