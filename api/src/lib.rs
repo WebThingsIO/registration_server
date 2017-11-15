@@ -9,8 +9,8 @@ extern crate serde_derive;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServerInfo {
-    pub token: String,
     pub name: String,
+    pub token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_challenge: Option<String>,
     pub description: String,
@@ -30,7 +30,7 @@ pub struct NameAndToken {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Discovered {
-    pub href: String,
-    pub desc: String,
+pub struct PendingDomain {
+    pub token: String,
+    pub link: String,
 }

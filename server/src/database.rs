@@ -6,12 +6,13 @@
 // Each record is made of the name, the private token, and the Let's Encrypt
 // challenge value.
 
-use types::ServerInfo;
+use types::{PendingDomain, ServerInfo};
 use r2d2_sqlite::SqliteConnectionManager;
 use r2d2;
 use rusqlite::Row;
 use rusqlite::Result as SqlResult;
 use rusqlite::types::{ToSql, ToSqlOutput};
+use serde_json;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
@@ -33,8 +34,8 @@ pub struct DomainRecord;
 impl DomainRecord {
     fn from_sql(row: Row) -> ServerInfo {
         ServerInfo {
-            token: row.get(0),
-            name: row.get(1),
+            name: row.get(0),
+            token: row.get(1),
             dns_challenge: sqlstr!(row, 2),
             description: row.get(3),
             email: sqlstr!(row, 4),
@@ -44,8 +45,8 @@ impl DomainRecord {
     }
 
     pub fn new(
-        token: &str,
         name: &str,
+        token: &str,
         dns_challenge: Option<&str>,
         description: &str,
         email: Option<&str>,
@@ -153,16 +154,34 @@ impl Database {
                             });
             )
         }
+
+        // Enable foreign key support.
+        conn.execute("PRAGMA foreign_keys = ON", &[])
+            .unwrap_or_else(|err| {
+                panic!("Unable to enable foreign key support: {}", err);
+            });
+
+        // Create the email management table if needed.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS emails (
+                  email   TEXT NOT NULL UNIQUE PRIMARY KEY,
+                  pending TEXT NOT NULL)",
+            &[],
+        ).unwrap_or_else(|err| {
+                panic!("Unable to create the email table: {}", err);
+            });
+
         // Create the domains table if needed.
         conn.execute(
             "CREATE TABLE IF NOT EXISTS domains (
-                      token             TEXT NOT NULL PRIMARY KEY,
-                      name              TEXT NOT NULL,
-                      dns_challenge     TEXT NOT NULL,
-                      description       TEXT NOT NULL,
-                      email             TEXT NOT NULL,
-                      timestamp         INTEGER,
-                      reclamation_token TEXT NOT NULL)",
+                  name              TEXT NOT NULL UNIQUE PRIMARY KEY,
+                  token             TEXT NOT NULL,
+                  dns_challenge     TEXT NOT NULL,
+                  description       TEXT NOT NULL,
+                  email             TEXT NOT NULL,
+                  timestamp         INTEGER NOT NULL,
+                  reclamation_token TEXT NOT NULL,
+                  FOREIGN KEY(email) REFERENCES emails(email) ON UPDATE CASCADE ON DELETE CASCADE)",
             &[],
         ).unwrap_or_else(|err| {
                 panic!("Unable to create the domains table: {}", err);
@@ -171,18 +190,6 @@ impl Database {
         index!("domains", "name");
         nonuniqueindex!("domains", "timestamp");
         nonuniqueindex!("domains", "email");
-
-        // Create the email management table if needed.
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS emails (
-                      email  TEXT NOT NULL,
-                      token  TEXT NOT NULL,
-                      link   TEXT NOT NULL)",
-            &[],
-        ).unwrap_or_else(|err| {
-                panic!("Unable to create the email table: {}", err);
-            });
-        index!("emails", "link");
 
         Database { pool: pool }
     }
@@ -199,15 +206,20 @@ impl Database {
 
         let pool = self.pool.clone();
         let email = email.to_owned();
-        let token = token.to_owned();
-        let link = link.to_owned();
+
+        // Convert the list of pending domain verifications to JSON.
+        let pending = vec![
+            PendingDomain {
+                token: token.to_owned(),
+                link: link.to_owned(),
+            },
+        ];
+        let pending = serde_json::to_string(&pending).unwrap();
+
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(
-                conn.execute(
-                    "INSERT INTO emails VALUES ($1, $2, $3)",
-                    &[&email, &token, &link]
-                ),
+                conn.execute("INSERT INTO emails VALUES ($1, $2)", &[&email, &pending]),
                 tx
             );
             tx.send(Ok(())).unwrap();
@@ -225,30 +237,145 @@ impl Database {
     ) -> Receiver<Result<(), DatabaseError>> {
         let (tx, rx) = channel();
 
+        let result = self.get_email_by_email(&email);
         let pool = self.pool.clone();
         let email = email.to_owned();
         let token = token.to_owned();
         let link = link.to_owned();
-        thread::spawn(move || {
-            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
-            sqltry!(
-                conn.execute(
-                    "UPDATE emails SET link = $1 WHERE email = $2 AND token = $3",
-                    &[&link, &email, &token]
-                ),
-                tx
-            );
-            tx.send(Ok(())).unwrap();
+
+        thread::spawn(move || match result.recv().unwrap() {
+            Ok(record) => {
+                // Found a record with this email. Get its list of pending verifications.
+                let mut pending: Vec<PendingDomain> = match serde_json::from_str(&record.1) {
+                    Ok(val) => val,
+                    Err(_) => Vec::new(),
+                };
+
+                let mut found = false;
+                for i in &mut pending {
+                    // If the token is already in the list, update the verification link.
+                    if i.token == token {
+                        i.link = link.to_owned();
+                        found = true;
+                        break;
+                    }
+                }
+
+                // Add the new verification if the token wasn't already found.
+                if !found {
+                    pending.push(PendingDomain {
+                        token: token.to_owned(),
+                        link: link.to_owned(),
+                    });
+                }
+
+                // Convert the list of pending domain verifications to JSON.
+                let pending = serde_json::to_string(&pending).unwrap();
+                let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+                sqltry!(
+                    conn.execute(
+                        "UPDATE emails SET pending=$1 WHERE email=$2",
+                        &[&pending, &email]
+                    ),
+                    tx
+                );
+                tx.send(Ok(())).unwrap();
+            }
+            Err(_) => {
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            }
         });
 
         rx
     }
 
-    pub fn delete_email(&self, email: &str) -> Receiver<Result<i32, DatabaseError>> {
-        self.execute_1param_sql(
-            "DELETE FROM emails WHERE email=$1",
-            SqlParam::Text(email.to_owned()),
-        )
+    pub fn delete_pending_domain_from_email(
+        &self,
+        email: &str,
+        token: &str,
+    ) -> Receiver<Result<(), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let result = self.get_email_by_email(&email);
+        let pool = self.pool.clone();
+        let email = email.to_owned();
+        let token = token.to_owned();
+
+        thread::spawn(move || match result.recv().unwrap() {
+            Ok(record) => {
+                // Found a record with this email. Get its list of pending verifications.
+                let pending = serde_json::from_str(&record.1);
+                if pending.is_err() {
+                    // Pending list is empty, nothing to do.
+                    tx.send(Ok(())).unwrap();
+                    return;
+                }
+
+                let mut pending: Vec<PendingDomain> = pending.unwrap();
+                let mut index = pending.len() + 1;
+
+                // Look for the token in the pending list.
+                for (i, item) in pending.iter().enumerate() {
+                    if item.token == token {
+                        index = i;
+                        break;
+                    }
+                }
+
+                if index > pending.len() {
+                    // Token not found in pending list, nothing to do.
+                    tx.send(Ok(())).unwrap();
+                    return;
+                }
+
+                // Remove this token from the list.
+                pending.remove(index);
+
+                // Convert the list of pending domain verifications to JSON.
+                let pending = serde_json::to_string(&pending).unwrap();
+                let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+                sqltry!(
+                    conn.execute(
+                        "UPDATE emails SET pending=$1 WHERE email=$2",
+                        &[&pending, &email]
+                    ),
+                    tx
+                );
+                tx.send(Ok(())).unwrap();
+            }
+            Err(_) => {
+                // Nothing to delete.
+                tx.send(Ok(())).unwrap();
+            }
+        });
+
+        rx
+    }
+
+    pub fn get_email_by_email(
+        &self,
+        email: &str,
+    ) -> Receiver<Result<(String, String), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let email = email.to_owned();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+            let mut stmt = sqltry!(
+                conn.prepare("SELECT email, pending FROM emails WHERE email=$1"),
+                tx
+            );
+            let mut rows = sqltry!(stmt.query(&[&email]), tx);
+            if let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
+            } else {
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            }
+        });
+
+        rx
     }
 
     pub fn get_email_by_link(
@@ -261,16 +388,32 @@ impl Database {
         let link = link.to_owned();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
-            let mut stmt = sqltry!(
-                conn.prepare("SELECT email, token from emails WHERE link=$1"),
-                tx
-            );
-            let mut rows = sqltry!(stmt.query(&[&link]), tx);
-            if let Some(result_row) = rows.next() {
-                let row = sqltry!(result_row, tx);
-                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
-            } else {
-                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            let mut stmt = sqltry!(conn.prepare("SELECT email, pending FROM emails"), tx);
+            let mut rows = sqltry!(stmt.query(&[]), tx);
+
+            // Since the links are nested into a column, we have to loop over every row.
+            'outer: loop {
+                if let Some(result_row) = rows.next() {
+                    let row = sqltry!(result_row, tx);
+                    let email: String = row.get(0);
+                    let pending: String = row.get(1);
+                    let result = serde_json::from_str(&pending);
+                    if result.is_err() {
+                        continue;
+                    }
+
+                    // Look for the link in this record's list of pending verifications.
+                    let pending: Vec<PendingDomain> = result.unwrap();
+                    'inner: for i in pending {
+                        if i.link == link {
+                            tx.send(Ok((email, i.token))).unwrap();
+                            break 'outer;
+                        }
+                    }
+                } else {
+                    tx.send(Err(DatabaseError::NoRecord)).unwrap();
+                    break;
+                }
             }
         });
 
@@ -287,16 +430,32 @@ impl Database {
         let token = token.to_owned();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
-            let mut stmt = sqltry!(
-                conn.prepare("SELECT email, link from emails WHERE token=$1"),
-                tx
-            );
-            let mut rows = sqltry!(stmt.query(&[&token]), tx);
-            if let Some(result_row) = rows.next() {
-                let row = sqltry!(result_row, tx);
-                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
-            } else {
-                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            let mut stmt = sqltry!(conn.prepare("SELECT email, pending FROM emails"), tx);
+            let mut rows = sqltry!(stmt.query(&[]), tx);
+
+            // Since the tokens are nested into a column, we have to loop over every row.
+            'outer: loop {
+                if let Some(result_row) = rows.next() {
+                    let row = sqltry!(result_row, tx);
+                    let email: String = row.get(0);
+                    let pending: String = row.get(1);
+                    let result = serde_json::from_str(&pending);
+                    if result.is_err() {
+                        continue;
+                    }
+
+                    // Look for the token in this record's list of pending verifications.
+                    let pending: Vec<PendingDomain> = result.unwrap();
+                    'inner: for i in pending {
+                        if i.token == token {
+                            tx.send(Ok((email, i.link))).unwrap();
+                            break 'outer;
+                        }
+                    }
+                } else {
+                    tx.send(Err(DatabaseError::NoRecord)).unwrap();
+                    break;
+                }
             }
         });
 
@@ -331,7 +490,7 @@ impl Database {
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record(
-            "SELECT token, name, dns_challenge, \
+            "SELECT  name, token, dns_challenge, \
              description, email, timestamp, reclamation_token \
              FROM domains WHERE name=$1",
             name,
@@ -340,7 +499,7 @@ impl Database {
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record(
-            "SELECT token, name, dns_challenge, \
+            "SELECT name, token, dns_challenge, \
              description, email, timestamp, reclamation_token \
              FROM domains WHERE token=$1",
             token,
@@ -358,8 +517,8 @@ impl Database {
                 conn.execute(
                     "INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7)",
                     &[
-                        &record.token,
                         &record.name,
+                        &record.token,
                         &record.dns_challenge.unwrap_or("".to_owned()),
                         &record.description,
                         &record.email.unwrap_or("".to_owned()),
@@ -509,8 +668,8 @@ fn test_domain_store() {
 
     // Add a record without a DNS challenge.
     let no_challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
+        "test-token",
         None,
         "Test Server",
         None,
@@ -535,8 +694,8 @@ fn test_domain_store() {
 
     // Update the record to have challenge.
     let challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
+        "test-token",
         Some("dns-challenge"),
         "Test Server",
         None,
@@ -576,8 +735,8 @@ fn test_domain_store() {
 
     // Add a record without a reclamation token.
     let no_challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
+        "test-token",
         None,
         "Test Server",
         None,
@@ -591,8 +750,8 @@ fn test_domain_store() {
 
     // Update the record by name to have a reclamation token.
     let challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
+        "test-token",
         None,
         "Test Server",
         None,
@@ -646,7 +805,12 @@ fn test_email() {
         db.get_email_by_token(&token).recv().unwrap(),
         Ok((email.clone(), link.clone()))
     );
-    assert_eq!(db.delete_email(&email).recv().unwrap(), Ok(1));
+    assert_eq!(
+        db.delete_pending_domain_from_email(&email, &token)
+            .recv()
+            .unwrap(),
+        Ok(())
+    );
     assert_eq!(
         db.get_email_by_link(&link).recv().unwrap(),
         Err(DatabaseError::NoRecord)

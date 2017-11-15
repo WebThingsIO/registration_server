@@ -195,6 +195,17 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         Ok((email, token)) => {
             match config.db.get_record_by_token(&token).recv().unwrap() {
                 Ok(mut record) => {
+                    // Delete the pending verification.
+                    if config
+                        .db
+                        .delete_pending_domain_from_email(&email, &token)
+                        .recv()
+                        .unwrap()
+                        .is_err()
+                    {
+                        return EndpointError::with(status::InternalServerError, 501);
+                    }
+
                     // Update the record to set the email address.
                     record.email = Some(email);
                     match config.db.update_record(record).recv().unwrap() {
@@ -247,7 +258,13 @@ pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    if config.db.delete_email(&email).recv().unwrap().is_err() {
+    if config
+        .db
+        .delete_pending_domain_from_email(&email, &token)
+        .recv()
+        .unwrap()
+        .is_err()
+    {
         return EndpointError::with(status::BadRequest, 400);
     }
 
