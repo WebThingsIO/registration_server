@@ -260,12 +260,12 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         .push(PdnsResponseParams::Lookup(ns_record));
                 }
 
-                if (qtype == "ANY" || qtype == "TXT") && record.dns_challenge.is_some() {
+                if (qtype == "ANY" || qtype == "TXT") && !record.dns_challenge.is_empty() {
                     // Add a "TXT" record with the DNS challenge content.
                     let ns_record = PdnsLookupResponse {
                         qtype: "TXT".to_owned(),
                         qname: original_qname.to_owned(),
-                        content: record.dns_challenge.unwrap(),
+                        content: record.dns_challenge,
                         ttl: config.options.pdns.dns_ttl,
                         domain_id: None,
                         scope_mask: None,

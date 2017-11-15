@@ -15,61 +15,44 @@ use rusqlite::types::{ToSql, ToSqlOutput};
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
-macro_rules! sqlstr {
-    ($row:ident, $index:expr) => (
-        {
-            let raw = $row.get::<i32, String>($index);
-            if raw.is_empty() {
-                None
-            } else {
-                Some(raw)
-            }
-        }
-    )
-}
-
 pub struct DomainRecord;
 
 impl DomainRecord {
     fn from_sql(row: Row) -> ServerInfo {
         ServerInfo {
-            token: row.get(0),
-            name: row.get(1),
-            dns_challenge: sqlstr!(row, 2),
+            name: row.get(0),
+            account_id: row.get(1),
+            token: row.get(2),
             description: row.get(3),
-            email: sqlstr!(row, 4),
-            timestamp: row.get(5),
-            reclamation_token: sqlstr!(row, 6),
+            timestamp: row.get(4),
+            dns_challenge: row.get(5),
+            reclamation_token: row.get(6),
+            verification_token: row.get(7),
+            verified: row.get(8),
         }
     }
 
     pub fn new(
-        token: &str,
         name: &str,
-        dns_challenge: Option<&str>,
+        account_id: i64,
+        token: &str,
         description: &str,
-        email: Option<&str>,
         timestamp: i64,
-        reclamation_token: Option<&str>,
+        dns_challenge: &str,
+        reclamation_token: &str,
+        verification_token: &str,
+        verified: bool,
     ) -> ServerInfo {
-        macro_rules! str2sql {
-            ($val:expr) => (
-                if $val.is_some() {
-                    Some($val.unwrap().to_owned())
-                } else {
-                    None
-                }
-            )
-        }
-
         ServerInfo {
             name: name.to_owned(),
+            account_id: account_id,
             token: token.to_owned(),
-            dns_challenge: str2sql!(dns_challenge),
             description: description.to_owned(),
-            email: str2sql!(email),
             timestamp: timestamp,
-            reclamation_token: str2sql!(reclamation_token),
+            dns_challenge: dns_challenge.to_owned(),
+            reclamation_token: reclamation_token.to_owned(),
+            verification_token: verification_token.to_owned(),
+            verified: verified,
         }
     }
 }
@@ -153,16 +136,39 @@ impl Database {
                             });
             )
         }
+
+        // Enable foreign key support.
+        conn.execute("PRAGMA foreign_keys = ON", &[])
+            .unwrap_or_else(|err| {
+                panic!("Unable to enable foreign key support: {}", err);
+            });
+
+        // Create the email management table if needed.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS accounts (
+                  id    INTEGER PRIMARY KEY,
+                  email TEXT NOT NULL UNIQUE)",
+            &[],
+        ).unwrap_or_else(|err| {
+                panic!("Unable to create the email table: {}", err);
+            });
+
+        index!("accounts", "email");
+
         // Create the domains table if needed.
         conn.execute(
             "CREATE TABLE IF NOT EXISTS domains (
-                      token             TEXT NOT NULL PRIMARY KEY,
-                      name              TEXT NOT NULL,
-                      dns_challenge     TEXT NOT NULL,
-                      description       TEXT NOT NULL,
-                      email             TEXT NOT NULL,
-                      timestamp         INTEGER,
-                      reclamation_token TEXT NOT NULL)",
+                  name               TEXT NOT NULL UNIQUE PRIMARY KEY,
+                  account_id         INTEGER NOT NULL,
+                  token              TEXT NOT NULL,
+                  description        TEXT NOT NULL,
+                  timestamp          INTEGER NOT NULL,
+                  dns_challenge      TEXT NOT NULL DEFAULT '',
+                  reclamation_token  TEXT NOT NULL DEFAULT '',
+                  verification_token TEXT NOT NULL DEFAULT '',
+                  verified           BOOLEAN NOT NULL DEFAULT FALSE,
+                  FOREIGN KEY(account_id) REFERENCES accounts(id)
+                      ON UPDATE CASCADE ON DELETE CASCADE)",
             &[],
         ).unwrap_or_else(|err| {
                 panic!("Unable to create the domains table: {}", err);
@@ -170,47 +176,32 @@ impl Database {
 
         index!("domains", "name");
         nonuniqueindex!("domains", "timestamp");
-        nonuniqueindex!("domains", "email");
-
-        // Create the email management table if needed.
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS emails (
-                      email  TEXT NOT NULL,
-                      token  TEXT NOT NULL,
-                      link   TEXT NOT NULL)",
-            &[],
-        ).unwrap_or_else(|err| {
-                panic!("Unable to create the email table: {}", err);
-            });
-        index!("emails", "link");
+        nonuniqueindex!("domains", "account_id");
 
         Database { pool: pool }
     }
 
     // Add a new email.
-    // TODO: ensure that the token matches a domain token?
-    pub fn add_email(
-        &self,
-        email: &str,
-        token: &str,
-        link: &str,
-    ) -> Receiver<Result<(), DatabaseError>> {
+    pub fn add_email(&self, email: &str) -> Receiver<Result<(i64), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
         let email = email.to_owned();
-        let token = token.to_owned();
-        let link = link.to_owned();
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(
-                conn.execute(
-                    "INSERT INTO emails VALUES ($1, $2, $3)",
-                    &[&email, &token, &link]
-                ),
+                conn.execute("INSERT INTO accounts (email) VALUES ($1)", &[&email]),
                 tx
             );
-            tx.send(Ok(())).unwrap();
+
+            let mut stmt = sqltry!(conn.prepare("SELECT id FROM accounts WHERE email=$1"), tx);
+            let mut rows = sqltry!(stmt.query(&[&email]), tx);
+            if let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                tx.send(Ok(row.get(0))).unwrap();
+            } else {
+                tx.send(Err(DatabaseError::NoRecord)).unwrap();
+            }
         });
 
         rx
@@ -233,7 +224,7 @@ impl Database {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(
                 conn.execute(
-                    "UPDATE emails SET link = $1 WHERE email = $2 AND token = $3",
+                    "UPDATE accounts SET link = $1 WHERE email = $2 AND token = $3",
                     &[&link, &email, &token]
                 ),
                 tx
@@ -246,29 +237,71 @@ impl Database {
 
     pub fn delete_email(&self, email: &str) -> Receiver<Result<i32, DatabaseError>> {
         self.execute_1param_sql(
-            "DELETE FROM emails WHERE email=$1",
+            "DELETE FROM accounts WHERE email=$1",
             SqlParam::Text(email.to_owned()),
         )
     }
 
-    pub fn get_email_by_link(
+    pub fn get_record_by_verification_token(
         &self,
-        link: &str,
-    ) -> Receiver<Result<(String, String), DatabaseError>> {
+        verification_token: &str,
+    ) -> Receiver<Result<ServerInfo, DatabaseError>> {
+        self.select_record(
+            "SELECT name, account_id, token, description, timestamp, dns_challenge, \
+             reclamation_token, verification_token, verified
+             FROM domains WHERE verification_token=$1",
+            verification_token,
+        )
+    }
+
+    pub fn get_unknown_account_id(&self) -> Receiver<Result<(i64), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
-        let link = link.to_owned();
+
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
-            let mut stmt = sqltry!(
-                conn.prepare("SELECT email, token from emails WHERE link=$1"),
-                tx
-            );
-            let mut rows = sqltry!(stmt.query(&[&link]), tx);
+            let mut stmt = sqltry!(conn.prepare("SELECT id FROM accounts WHERE email=''"), tx);
+            let mut rows = sqltry!(stmt.query(&[]), tx);
             if let Some(result_row) = rows.next() {
                 let row = sqltry!(result_row, tx);
-                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
+                tx.send(Ok(row.get(0))).unwrap();
+            } else {
+                // If the unknown account is not yet present, create it.
+                sqltry!(
+                    conn.execute("INSERT INTO accounts (email) VALUES ('')", &[]),
+                    tx
+                );
+
+                // Now, get the account ID.
+                let mut stmt = sqltry!(conn.prepare("SELECT id FROM accounts WHERE email=''"), tx);
+                let mut rows = sqltry!(stmt.query(&[]), tx);
+                if let Some(result_row) = rows.next() {
+                    let row = sqltry!(result_row, tx);
+                    tx.send(Ok(row.get(0))).unwrap();
+                } else {
+                    tx.send(Err(DatabaseError::NoRecord)).unwrap();
+                }
+            }
+        });
+
+        rx
+    }
+
+    pub fn get_email_by_account_id(
+        &self,
+        account_id: i64,
+    ) -> Receiver<Result<(String), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+            let mut stmt = sqltry!(conn.prepare("SELECT email FROM accounts WHERE id=$1"), tx);
+            let mut rows = sqltry!(stmt.query(&[&account_id]), tx);
+            if let Some(result_row) = rows.next() {
+                let row = sqltry!(result_row, tx);
+                tx.send(Ok(row.get(0))).unwrap();
             } else {
                 tx.send(Err(DatabaseError::NoRecord)).unwrap();
             }
@@ -277,24 +310,19 @@ impl Database {
         rx
     }
 
-    pub fn get_email_by_token(
-        &self,
-        token: &str,
-    ) -> Receiver<Result<(String, String), DatabaseError>> {
+    pub fn get_account_id_by_email(&self, email: &str) -> Receiver<Result<(i64), DatabaseError>> {
         let (tx, rx) = channel();
 
         let pool = self.pool.clone();
-        let token = token.to_owned();
+        let email = email.to_owned();
+
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
-            let mut stmt = sqltry!(
-                conn.prepare("SELECT email, link from emails WHERE token=$1"),
-                tx
-            );
-            let mut rows = sqltry!(stmt.query(&[&token]), tx);
+            let mut stmt = sqltry!(conn.prepare("SELECT id FROM accounts WHERE email=$1"), tx);
+            let mut rows = sqltry!(stmt.query(&[&email]), tx);
             if let Some(result_row) = rows.next() {
                 let row = sqltry!(result_row, tx);
-                tx.send(Ok((row.get(0), row.get(1)))).unwrap();
+                tx.send(Ok(row.get(0))).unwrap();
             } else {
                 tx.send(Err(DatabaseError::NoRecord)).unwrap();
             }
@@ -331,8 +359,8 @@ impl Database {
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record(
-            "SELECT token, name, dns_challenge, \
-             description, email, timestamp, reclamation_token \
+            "SELECT name, account_id, token, description, timestamp, dns_challenge, \
+             reclamation_token, verification_token, verified
              FROM domains WHERE name=$1",
             name,
         )
@@ -340,8 +368,8 @@ impl Database {
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record(
-            "SELECT token, name, dns_challenge, \
-             description, email, timestamp, reclamation_token \
+            "SELECT name, account_id, token, description, timestamp, dns_challenge, \
+             reclamation_token, verification_token, verified
              FROM domains WHERE token=$1",
             token,
         )
@@ -356,15 +384,17 @@ impl Database {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(
                 conn.execute(
-                    "INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    "INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
                     &[
-                        &record.token,
                         &record.name,
-                        &record.dns_challenge.unwrap_or("".to_owned()),
+                        &record.account_id,
+                        &record.token,
                         &record.description,
-                        &record.email.unwrap_or("".to_owned()),
                         &record.timestamp,
-                        &record.reclamation_token.unwrap_or("".to_owned())
+                        &record.dns_challenge,
+                        &record.reclamation_token,
+                        &record.verification_token,
+                        &record.verified
                     ]
                 ),
                 tx
@@ -385,15 +415,17 @@ impl Database {
 
             sqltry!(
                 conn.execute(
-                    "UPDATE domains SET dns_challenge=$1, timestamp=$2, \
-                     email=$3, description=$4, reclamation_token=$5 \
-                     WHERE name=$6 AND token=$7",
+                    "UPDATE domains SET account_id=$1, description=$2, timestamp=$3, \
+                     dns_challenge=$4, reclamation_token=$5, verification_token=$6, \
+                     verified=$7 WHERE name=$8 AND token=$9",
                     &[
-                        &record.dns_challenge.unwrap_or("".to_owned()),
-                        &record.timestamp,
-                        &record.email.unwrap_or("".to_owned()),
+                        &record.account_id,
                         &record.description,
-                        &record.reclamation_token.unwrap_or("".to_owned()),
+                        &record.timestamp,
+                        &record.dns_challenge,
+                        &record.reclamation_token,
+                        &record.verification_token,
+                        &record.verified,
                         &record.name,
                         &record.token
                     ]
@@ -416,16 +448,18 @@ impl Database {
 
             sqltry!(
                 conn.execute(
-                    "UPDATE domains SET dns_challenge=$1, timestamp=$2, \
-                     email=$3, description=$4, reclamation_token=$5, token=$6 \
-                     WHERE name=$7",
+                    "UPDATE domains SET account_id=$1, token=$2, description=$3, \
+                     timestamp=$4, dns_challenge=$5, reclamation_token=$6, \
+                     verification_token=$7, verified=$8 WHERE name=$9",
                     &[
-                        &record.dns_challenge.unwrap_or("".to_owned()),
-                        &record.timestamp,
-                        &record.email.unwrap_or("".to_owned()),
-                        &record.description,
-                        &record.reclamation_token.unwrap_or("".to_owned()),
+                        &record.account_id,
                         &record.token,
+                        &record.description,
+                        &record.timestamp,
+                        &record.dns_challenge,
+                        &record.reclamation_token,
+                        &record.verification_token,
+                        &record.verified,
                         &record.name
                     ]
                 ),
@@ -482,7 +516,7 @@ impl Database {
         thread::spawn(move || {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(conn.execute("DELETE FROM domains", &[]), tx);
-            sqltry!(conn.execute("DELETE FROM emails", &[]), tx);
+            sqltry!(conn.execute("DELETE FROM accounts", &[]), tx);
             tx.send(Ok(())).unwrap();
         });
         rx
@@ -509,13 +543,15 @@ fn test_domain_store() {
 
     // Add a record without a DNS challenge.
     let no_challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
-        None,
-        "Test Server",
-        None,
         0,
-        None,
+        "test-token",
+        "Test Server",
+        0,
+        "",
+        "",
+        "",
+        false,
     );
     assert_eq!(
         db.add_record(no_challenge_record.clone()).recv().unwrap(),
@@ -535,13 +571,15 @@ fn test_domain_store() {
 
     // Update the record to have challenge.
     let challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
-        Some("dns-challenge"),
-        "Test Server",
-        None,
         0,
-        None,
+        "test-token",
+        "Test Server",
+        0,
+        "dns-challenge",
+        "",
+        "",
+        false,
     );
     assert_eq!(
         db.update_record(challenge_record.clone()).recv().unwrap(),
@@ -576,13 +614,15 @@ fn test_domain_store() {
 
     // Add a record without a reclamation token.
     let no_challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
-        None,
-        "Test Server",
-        None,
         0,
-        None,
+        "test-token",
+        "Test Server",
+        0,
+        "",
+        "",
+        "",
+        false,
     );
     assert_eq!(
         db.add_record(no_challenge_record.clone()).recv().unwrap(),
@@ -591,13 +631,15 @@ fn test_domain_store() {
 
     // Update the record by name to have a reclamation token.
     let challenge_record = DomainRecord::new(
-        "test-token",
         "test.example.org",
-        None,
-        "Test Server",
-        None,
         0,
-        Some("test-reclamation-token"),
+        "test-token",
+        "Test Server",
+        0,
+        "",
+        "test-reclamation-token",
+        "",
+        false,
     );
     assert_eq!(
         db.update_record_by_name(challenge_record.clone())
@@ -608,7 +650,7 @@ fn test_domain_store() {
 
     // Remove by reclamation token.
     assert_eq!(
-        db.delete_record_by_reclamation_token(&challenge_record.reclamation_token.unwrap())
+        db.delete_record_by_reclamation_token(&challenge_record.reclamation_token)
             .recv()
             .unwrap(),
         Ok(1)
@@ -630,25 +672,16 @@ fn test_email() {
     db.flush().recv().unwrap().expect("Flushing the db");
 
     let email = "test@example.com".to_owned();
-    let link = "secret-link".to_owned();
-    let token = "domain-token".to_owned();
 
     assert_eq!(
-        db.get_email_by_link(&link).recv().unwrap(),
+        db.get_account_id_by_email(&email).recv().unwrap(),
         Err(DatabaseError::NoRecord)
     );
-    assert_eq!(db.add_email(&email, &token, &link).recv().unwrap(), Ok(()));
-    assert_eq!(
-        db.get_email_by_link(&link).recv().unwrap(),
-        Ok((email.clone(), token.clone()))
-    );
-    assert_eq!(
-        db.get_email_by_token(&token).recv().unwrap(),
-        Ok((email.clone(), link.clone()))
-    );
+    assert_eq!(db.add_email(&email).recv().unwrap(), Ok((1)));
+    assert_eq!(db.get_account_id_by_email(&email).recv().unwrap(), Ok(1));
     assert_eq!(db.delete_email(&email).recv().unwrap(), Ok(1));
     assert_eq!(
-        db.get_email_by_link(&link).recv().unwrap(),
+        db.get_account_id_by_email(&email).recv().unwrap(),
         Err(DatabaseError::NoRecord)
     );
 }

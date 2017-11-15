@@ -79,11 +79,11 @@ A JSON representation of the database content for the domain matching this token
 
 # /setemail
 
-Adds a pending verification email to a domain.
+Sets the email associated with a domain.
 
 *Parameters:*
 * `token`: the secret token assigned to this domain.
-* `email`: the email to verify.
+* `email`: the email address to assign.
 
 *Returns:*
 
@@ -106,7 +106,6 @@ Calling this endpoint will cancel an ongoing email verification flow.
 
 *Parameters:*
 * `token`: the secret token assigned to this domain.
-* `email`: the email being verified.
 
 *Returns:*
 

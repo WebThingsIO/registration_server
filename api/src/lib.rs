@@ -9,15 +9,15 @@ extern crate serde_derive;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServerInfo {
-    pub token: String,
     pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dns_challenge: Option<String>,
+    pub account_id: i64,
+    pub token: String,
     pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
     pub timestamp: i64,
-    pub reclamation_token: Option<String>,
+    pub dns_challenge: String,
+    pub reclamation_token: String,
+    pub verification_token: String,
+    pub verified: bool,
 }
 
 unsafe impl Send for ServerInfo {}
@@ -27,10 +27,4 @@ unsafe impl Sync for ServerInfo {}
 pub struct NameAndToken {
     pub name: String,
     pub token: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Discovered {
-    pub href: String,
-    pub desc: String,
 }
