@@ -6,8 +6,7 @@ ALTER TABLE domains RENAME TO temp_table;
 
 CREATE TABLE domains (
     token TEXT NOT NULL PRIMARY KEY,
-    local_name TEXT NOT NULL,
-    remote_name TEXT NOT NULL,
+    name TEXT NOT NULL,
     dns_challenge TEXT NOT NULL,
     description TEXT NOT NULL,
     email TEXT NOT NULL,
@@ -17,8 +16,7 @@ CREATE TABLE domains (
 
 INSERT INTO domains (
     token,
-    local_name,
-    remote_name,
+    name,
     dns_challenge,
     description,
     email,
@@ -26,13 +24,12 @@ INSERT INTO domains (
     reclamation_token
 ) SELECT
     token,
-    local_name,
     remote_name,
     dns_challenge,
     description,
     email,
     timestamp,
-    ""
+    reclamation_token
 FROM temp_table;
 
 DROP TABLE temp_table;

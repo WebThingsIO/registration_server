@@ -34,20 +34,18 @@ impl DomainRecord {
     fn from_sql(row: Row) -> ServerInfo {
         ServerInfo {
             token: row.get(0),
-            local_name: row.get(1),
-            remote_name: row.get(2),
-            dns_challenge: sqlstr!(row, 3),
-            description: row.get(4),
-            email: sqlstr!(row, 5),
-            timestamp: row.get(6),
-            reclamation_token: sqlstr!(row, 7),
+            name: row.get(1),
+            dns_challenge: sqlstr!(row, 2),
+            description: row.get(3),
+            email: sqlstr!(row, 4),
+            timestamp: row.get(5),
+            reclamation_token: sqlstr!(row, 6),
         }
     }
 
     pub fn new(
         token: &str,
-        local_name: &str,
-        remote_name: &str,
+        name: &str,
         dns_challenge: Option<&str>,
         description: &str,
         email: Option<&str>,
@@ -65,8 +63,7 @@ impl DomainRecord {
         }
 
         ServerInfo {
-            local_name: local_name.to_owned(),
-            remote_name: remote_name.to_owned(),
+            name: name.to_owned(),
             token: token.to_owned(),
             dns_challenge: str2sql!(dns_challenge),
             description: description.to_owned(),
@@ -148,7 +145,7 @@ impl Database {
         }
 
 
-        macro_rules! nouniqueindex {
+        macro_rules! nonuniqueindex {
             ($table:expr, $index:expr) => (
                 conn.execute(&format!("CREATE INDEX IF NOT EXISTS {}_{} ON {}({})",
                                       $table, $index, $table, $index), &[]).unwrap_or_else(|err| {
@@ -160,8 +157,7 @@ impl Database {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS domains (
                       token             TEXT NOT NULL PRIMARY KEY,
-                      local_name        TEXT NOT NULL,
-                      remote_name       TEXT NOT NULL,
+                      name              TEXT NOT NULL,
                       dns_challenge     TEXT NOT NULL,
                       description       TEXT NOT NULL,
                       email             TEXT NOT NULL,
@@ -172,10 +168,9 @@ impl Database {
                 panic!("Unable to create the domains table: {}", err);
             });
 
-        index!("domains", "local_name");
-        index!("domains", "remote_name");
-        nouniqueindex!("domains", "timestamp");
-        nouniqueindex!("domains", "email");
+        index!("domains", "name");
+        nonuniqueindex!("domains", "timestamp");
+        nonuniqueindex!("domains", "email");
 
         // Create the email management table if needed.
         conn.execute(
@@ -336,16 +331,16 @@ impl Database {
 
     pub fn get_record_by_name(&self, name: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record(
-            "SELECT token, local_name, remote_name, dns_challenge, \
+            "SELECT token, name, dns_challenge, \
              description, email, timestamp, reclamation_token \
-             FROM domains WHERE local_name=$1 or remote_name=$1",
+             FROM domains WHERE name=$1",
             name,
         )
     }
 
     pub fn get_record_by_token(&self, token: &str) -> Receiver<Result<ServerInfo, DatabaseError>> {
         self.select_record(
-            "SELECT token, local_name, remote_name, dns_challenge, \
+            "SELECT token, name, dns_challenge, \
              description, email, timestamp, reclamation_token \
              FROM domains WHERE token=$1",
             token,
@@ -361,11 +356,10 @@ impl Database {
             let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
             sqltry!(
                 conn.execute(
-                    "INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                    "INSERT INTO domains VALUES ($1, $2, $3, $4, $5, $6, $7)",
                     &[
                         &record.token,
-                        &record.local_name,
-                        &record.remote_name,
+                        &record.name,
                         &record.dns_challenge.unwrap_or("".to_owned()),
                         &record.description,
                         &record.email.unwrap_or("".to_owned()),
@@ -393,15 +387,14 @@ impl Database {
                 conn.execute(
                     "UPDATE domains SET dns_challenge=$1, timestamp=$2, \
                      email=$3, description=$4, reclamation_token=$5 \
-                     WHERE (local_name=$6 OR remote_name=$7) AND token=$8",
+                     WHERE name=$6 AND token=$7",
                     &[
                         &record.dns_challenge.unwrap_or("".to_owned()),
                         &record.timestamp,
                         &record.email.unwrap_or("".to_owned()),
                         &record.description,
                         &record.reclamation_token.unwrap_or("".to_owned()),
-                        &record.local_name,
-                        &record.remote_name,
+                        &record.name,
                         &record.token
                     ]
                 ),
@@ -425,7 +418,7 @@ impl Database {
                 conn.execute(
                     "UPDATE domains SET dns_challenge=$1, timestamp=$2, \
                      email=$3, description=$4, reclamation_token=$5, token=$6 \
-                     WHERE local_name=$7 OR remote_name=$8",
+                     WHERE name=$7",
                     &[
                         &record.dns_challenge.unwrap_or("".to_owned()),
                         &record.timestamp,
@@ -433,8 +426,7 @@ impl Database {
                         &record.description,
                         &record.reclamation_token.unwrap_or("".to_owned()),
                         &record.token,
-                        &record.local_name,
-                        &record.remote_name
+                        &record.name
                     ]
                 ),
                 tx
@@ -518,7 +510,6 @@ fn test_domain_store() {
     // Add a record without a DNS challenge.
     let no_challenge_record = DomainRecord::new(
         "test-token",
-        "local.test.example.org",
         "test.example.org",
         None,
         "Test Server",
@@ -545,7 +536,6 @@ fn test_domain_store() {
     // Update the record to have challenge.
     let challenge_record = DomainRecord::new(
         "test-token",
-        "local.test.example.org",
         "test.example.org",
         Some("dns-challenge"),
         "Test Server",
@@ -578,7 +568,7 @@ fn test_domain_store() {
     );
 
     assert_eq!(
-        db.get_record_by_name(&challenge_record.local_name)
+        db.get_record_by_name(&challenge_record.name)
             .recv()
             .unwrap(),
         Err(DatabaseError::NoRecord)
@@ -587,7 +577,6 @@ fn test_domain_store() {
     // Add a record without a reclamation token.
     let no_challenge_record = DomainRecord::new(
         "test-token",
-        "local.test.example.org",
         "test.example.org",
         None,
         "Test Server",
@@ -603,7 +592,6 @@ fn test_domain_store() {
     // Update the record by name to have a reclamation token.
     let challenge_record = DomainRecord::new(
         "test-token",
-        "local.test.example.org",
         "test.example.org",
         None,
         "Test Server",
@@ -627,7 +615,7 @@ fn test_domain_store() {
     );
 
     assert_eq!(
-        db.get_record_by_name(&challenge_record.local_name)
+        db.get_record_by_name(&challenge_record.name)
             .recv()
             .unwrap(),
         Err(DatabaseError::NoRecord)

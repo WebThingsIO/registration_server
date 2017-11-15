@@ -524,8 +524,7 @@ mod tests {
         let db = Database::new("domain_db_test_pdns.sqlite");
         db.flush().recv().unwrap().expect("Flushing the db");
 
-        let mut arg_config = Config::from_args(args);
-        let config = arg_config.with_db(db.clone());
+        let config = Config::from_args_with_db(args, db.clone());
 
         start_socket_endpoint(&config);
 
