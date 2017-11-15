@@ -221,6 +221,34 @@ impl Database {
         rx
     }
 
+    // Update an existing email.
+    pub fn update_email(
+        &self,
+        email: &str,
+        token: &str,
+        link: &str,
+    ) -> Receiver<Result<(), DatabaseError>> {
+        let (tx, rx) = channel();
+
+        let pool = self.pool.clone();
+        let email = email.to_owned();
+        let token = token.to_owned();
+        let link = link.to_owned();
+        thread::spawn(move || {
+            let conn = sqltry!(pool.get(), tx, DatabaseError::DbUnavailable);
+            sqltry!(
+                conn.execute(
+                    "UPDATE emails SET link = $1 WHERE email = $2 AND token = $3",
+                    &[&link, &email, &token]
+                ),
+                tx
+            );
+            tx.send(Ok(())).unwrap();
+        });
+
+        rx
+    }
+
     pub fn delete_email(&self, email: &str) -> Receiver<Result<i32, DatabaseError>> {
         self.execute_1param_sql(
             "DELETE FROM emails WHERE email=$1",
@@ -254,7 +282,6 @@ impl Database {
         rx
     }
 
-    #[cfg(test)]
     pub fn get_email_by_token(
         &self,
         token: &str,

@@ -135,7 +135,16 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    match config.db.add_email(&email, &token, &link).recv().unwrap() {
+    let result = match config.db.get_email_by_token(&token).recv().unwrap() {
+        Ok(_) => config
+            .db
+            .update_email(&email, &token, &link)
+            .recv()
+            .unwrap(),
+        Err(_) => config.db.add_email(&email, &token, &link).recv().unwrap(),
+    };
+
+    match result {
         Ok(_) => match EmailSender::new(config) {
             Ok(mut sender) => {
                 let scheme = match config.options.general.cert_directory {
