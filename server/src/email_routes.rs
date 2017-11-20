@@ -9,12 +9,13 @@ use database::DatabaseError;
 use email::Mailbox;
 use errors::*;
 use iron::headers::ContentType;
-use lettre::email::EmailBuilder;
-use lettre::transport::smtp::{SecurityLevel, SmtpTransport, SmtpTransportBuilder, SUBMISSION_PORT};
-use lettre::transport::smtp::authentication::Mechanism;
-use lettre::transport::EmailTransport;
+use lettre_email::EmailBuilder;
+use lettre::{EmailTransport, SmtpTransport};
+use lettre::smtp::ConnectionReuseParameters;
+use lettre::smtp::authentication::{Credentials, Mechanism};
+use lettre::smtp::extension::ClientId;
 #[cfg(test)]
-use lettre::transport::stub::StubEmailTransport;
+use lettre::stub::StubEmailTransport;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use params::{FromValue, Params};
@@ -38,10 +39,7 @@ impl EmailSender {
             return Err(());
         }
 
-        let builder = match SmtpTransportBuilder::new((
-            options.clone().email.server.unwrap().as_str(),
-            SUBMISSION_PORT,
-        )) {
+        let builder = match SmtpTransport::simple_builder(options.clone().email.server.unwrap()) {
             Ok(builder) => builder,
             Err(error) => {
                 error!("{:?}", error);
@@ -52,12 +50,11 @@ impl EmailSender {
         let user = options.clone().email.user.unwrap().clone();
         let password = options.clone().email.password.unwrap().clone();
         let connection = builder
-            .hello_name("localhost")
-            .credentials(&user, &password)
-            .security_level(SecurityLevel::AlwaysEncrypt)
+            .hello_name(ClientId::Domain("localhost".to_owned()))
+            .credentials(Credentials::new(user, password))
             .smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
-            .connection_reuse(true)
+            .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
             .build();
 
         Ok(EmailSender {
@@ -70,7 +67,7 @@ impl EmailSender {
         let email = match EmailBuilder::new()
             .to(to)
             .from(&*self.from)
-            .body(body)
+            .html(body)
             .subject(subject)
             .build()
         {
@@ -82,7 +79,7 @@ impl EmailSender {
         };
 
         #[cfg(not(test))]
-        match self.connection.send(email.clone()) {
+        match self.connection.send(&email.clone()) {
             Ok(_) => Ok(()),
             Err(error) => {
                 error!("{:?}", error);
@@ -92,8 +89,8 @@ impl EmailSender {
 
         #[cfg(test)]
         {
-            let mut transport = StubEmailTransport;
-            match transport.send(email.clone()) {
+            let mut transport = StubEmailTransport::new_positive();
+            match transport.send(&email.clone()) {
                 Ok(_) => Ok(()),
                 Err(error) => {
                     error!("{:?}", error);
@@ -149,7 +146,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     match config.db.update_record(record).recv().unwrap() {
         Ok(_) => match EmailSender::new(config) {
             Ok(mut sender) => {
-                let scheme = match config.options.general.cert_directory {
+                let scheme = match config.options.general.identity_directory {
                     Some(_) => "https",
                     None => "http",
                 };

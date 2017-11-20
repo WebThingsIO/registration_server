@@ -11,7 +11,8 @@ pub struct GeneralOptions {
     pub http_port: u16,
     pub https_port: u16,
     pub data_directory: String,
-    pub cert_directory: Option<PathBuf>,
+    pub identity_directory: Option<PathBuf>,
+    pub identity_password: Option<String>,
     pub domain: String,
     pub tunnel_ip: String,
 }

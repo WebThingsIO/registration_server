@@ -6,7 +6,8 @@ http_port = 4141
 https_port = 4142
 domain = "knilxof.org"
 data_directory = "/tmp"
-cert_directory = "/tmp/certs"
+identity_directory = "/tmp/certs"
+identity_password = "mypassword"
 tunnel_ip = "1.2.3.4"
 
 [pdns]
