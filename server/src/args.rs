@@ -246,12 +246,12 @@ fn test_args() {
     let mx = "";
     let caa = "0 issue \"letsencrypt.org\"";
     let txt = "";
-    let recl_title = "Reclaim your MozIoT Gateway Domain";
+    let recl_title = "Reclaim your Mozilla IoT Gateway Domain";
     let recl_body = "Hello,\n\nYour reclamation token is: {token}\n\nIf you \
                      did not request to reclaim your gateway domain, you can \
                      ignore this email.";
-    let conf_title = "Welcome to your MozIoT Gateway";
-    let conf_body = "Hello,\n\nWelcome to your MozIoT Gateway! To confirm \
+    let conf_title = "Welcome to your Mozilla IoT Gateway";
+    let conf_body = "Hello,\n\nWelcome to your Mozilla IoT Gateway! To confirm \
                      your email address, follow this link: {link}";
     let success = "<!DOCTYPE html>
 <html>
