@@ -462,12 +462,14 @@ pub fn create_chain(root_path: &str, config: &Config) -> Chain {
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![
-        (vec![Method::Get], "info".to_owned()),
         (vec![Method::Get], "subscribe".to_owned()),
         (vec![Method::Get], "unsubscribe".to_owned()),
+        (vec![Method::Get], "reclaim".to_owned()),
         (vec![Method::Get], "ping".to_owned()),
         (vec![Method::Get], "dnsconfig".to_owned()),
+        (vec![Method::Get], "info".to_owned()),
         (vec![Method::Get], "setemail".to_owned()),
+        (vec![Method::Get], "verifyemail".to_owned()),
         (vec![Method::Get], "revokeemail".to_owned()),
     ]);
     chain.link_after(cors);
