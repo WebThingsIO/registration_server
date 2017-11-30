@@ -5,6 +5,9 @@
 #[macro_use]
 extern crate clap;
 extern crate crypto;
+#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+#[macro_use]
+extern crate diesel;
 extern crate email;
 #[macro_use]
 extern crate iron;
@@ -18,11 +21,10 @@ extern crate log;
 extern crate mount;
 extern crate params;
 extern crate r2d2;
-extern crate r2d2_sqlite;
+#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+extern crate r2d2_diesel;
 extern crate regex;
-extern crate registration_types as types;
 extern crate router;
-extern crate rusqlite;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -67,5 +69,10 @@ pub mod config;
 pub mod database;
 pub mod email_routes;
 pub mod errors;
+pub mod models;
 pub mod pdns;
 pub mod routes;
+pub mod schema;
+
+// unsafe impl Send for ServerInfo {}
+// unsafe impl Sync for ServerInfo {}

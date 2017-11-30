@@ -1,0 +1,7 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS accounts (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    email VARCHAR(254) NOT NULL UNIQUE);
+
+CREATE UNIQUE INDEX accounts_email ON accounts(email);

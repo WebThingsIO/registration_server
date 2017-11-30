@@ -127,10 +127,16 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
         return Err(format!("Unsupported PageKite request type: {}", qtype));
     }
 
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        return Err("Failed to get database connection.".to_owned());
+    }
+    let conn = conn.unwrap();
+
     // Split up the qname.
     let parts: Vec<&str> = qname.split('.').collect();
     let subdomain = format!("{}.{}.", parts[4], config.options.general.domain);
-    let ip = match config.db.get_record_by_name(&subdomain).recv().unwrap() {
+    let ip = match conn.get_domain_by_name(&subdomain) {
         Ok(record) => {
             let srand = parts[0];
             let token = parts[1];
@@ -239,8 +245,14 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 .push(PdnsResponseParams::Lookup(ns_record));
         }
 
+        let conn = config.db.get_connection();
+        if conn.is_err() {
+            return Ok(pdns_response);
+        }
+        let conn = conn.unwrap();
+
         // Look for a record with the qname.
-        match config.db.get_record_by_name(&qname).recv().unwrap() {
+        match conn.get_domain_by_name(&qname) {
             Ok(record) => {
                 let a_record = config.options.general.tunnel_ip.to_owned();
 
@@ -485,7 +497,7 @@ mod tests {
     use super::*;
     use args::ArgsParser;
     use config::Config;
-    use database::Database;
+    use database::DatabasePool;
     use std::time::Duration;
 
     fn build_request(method: &str, qtype: Option<&str>, qname: Option<&str>) -> PdnsRequest {
@@ -518,11 +530,17 @@ mod tests {
     fn test_socket() {
         let args = ArgsParser::from_vec(vec![
             "registration_server",
-            "--config-file=../config/config.toml",
+            "--config-file=./config/config.toml",
         ]);
 
-        let db = Database::new("domain_db_test_pdns.sqlite");
-        db.flush().recv().unwrap().expect("Flushing the db");
+        #[cfg(feature = "mysql")]
+        let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_pdns");
+        #[cfg(feature = "postgres")]
+        let db = DatabasePool::new("postgres://postgres@127.0.0.1/domain_db_test_pdns");
+        #[cfg(feature = "sqlite")]
+        let db = DatabasePool::new("domain_db_test_pdns.sqlite");
+        let conn = db.get_connection().expect("Getting connection.");
+        conn.flush().expect("Flushing the db");
 
         let config = Config::from_args_with_db(args, db.clone());
 

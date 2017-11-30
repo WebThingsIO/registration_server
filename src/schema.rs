@@ -1,0 +1,25 @@
+table! {
+    accounts (id) {
+        id -> Integer,
+        email -> Text,
+    }
+}
+
+table! {
+    domains (name) {
+        id -> Integer,
+        name -> Text,
+        account_id -> Integer,
+        token -> Text,
+        description -> Text,
+        timestamp -> BigInt,
+        dns_challenge -> Text,
+        reclamation_token -> Text,
+        verification_token -> Text,
+        verified -> Bool,
+    }
+}
+
+joinable!(domains -> accounts (account_id));
+
+allow_tables_to_appear_in_same_query!(accounts, domains,);
