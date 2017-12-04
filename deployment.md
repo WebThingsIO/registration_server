@@ -116,7 +116,8 @@ https_port = 4444
 domain = "yourdomain.org"
 data_directory = "/home/user/data"
 # Uncomment to use TLS (recommended)
-# cert_directory = "/home/user/config"
+# identity_directory = "/home/user/config"
+# identity_password = "mypassword"
 tunnel_ip = "1.2.3.4"
 
 [pdns]

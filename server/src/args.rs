@@ -10,29 +10,30 @@ use std::path::PathBuf;
 use toml;
 
 const USAGE: &'static str = "--config-file=[path]     'Path to a toml configuration file.'
---host=[host]            'Set local hostname.'
---http-port=[port]       'Set port to listen on for HTTP connections (0 to prevent listening).'
---https-port=[port]      'Set port to listen on for TLS connections (0 to prevent listening).'
---domain=[domain]        'The domain that will be tied to this registration server.'
---data-directory=[dir]   'The directory where the persistent data will be saved.'
---cert-directory=[dir]   'Certificate directory.'
---tunnel-ip=[ip]         'The IP address of the tunnel endpoint.'
---dns-ttl=[ttl]          'TTL of the DNS records, in seconds.'
---soa-content=[dns]      'The content of the SOA record for this tunnel.'
---socket-path=[path]     'The path to the socket used to communicate with PowerDNS.'
---mx-record=[record]     'The MX record the PowerDNS server should return.'
---caa-record=[record]    'The CAA record the PowerDNS server should return.'
---txt-record=[record]    'The TXT record the PowerDNS server should return.'
---email-server=[name]    'The name of the SMTP server.'
---email-user=[username]  'The username to authenticate with.'
---email-password=[pass]  'The password for this email account.'
---email-sender=[email]   'The email identity to use as a sender.'
---reclamation-title=[s]  'The title of the domain reclamation email.'
---reclamation-body=[s]   'The body of the domain reclamation email.'
---confirmation-title=[s] 'The title of the confirmation email.'
---confirmation-body=[s]  'The body of the confirmation email.'
---success-page=[s]       'HTML content of the email confirmation success page.'
---error-page=[s]         'HTML content of the email confirmation error page.'";
+--host=[host]                   'Set local hostname.'
+--http-port=[port]              'Set port to listen on for HTTP connections (0 to turn off).'
+--https-port=[port]             'Set port to listen on for TLS connections (0 to turn off).'
+--domain=[domain]               'The domain that will be tied to this registration server.'
+--data-directory=[dir]          'The directory where the persistent data will be saved.'
+--identity-directory=[dir]      'Identity directory.'
+--identity-password=[password]  'Identity password.'
+--tunnel-ip=[ip]                'The IP address of the tunnel endpoint.'
+--dns-ttl=[ttl]                 'TTL of the DNS records, in seconds.'
+--soa-content=[dns]             'The content of the SOA record for this tunnel.'
+--socket-path=[path]            'The path to the socket used to communicate with PowerDNS.'
+--mx-record=[record]            'The MX record the PowerDNS server should return.'
+--caa-record=[record]           'The CAA record the PowerDNS server should return.'
+--txt-record=[record]           'The TXT record the PowerDNS server should return.'
+--email-server=[name]           'The name of the SMTP server.'
+--email-user=[username]         'The username to authenticate with.'
+--email-password=[pass]         'The password for this email account.'
+--email-sender=[email]          'The email identity to use as a sender.'
+--reclamation-title=[s]         'The title of the domain reclamation email.'
+--reclamation-body=[s]          'The body of the domain reclamation email.'
+--confirmation-title=[s]        'The title of the confirmation email.'
+--confirmation-body=[s]         'The body of the confirmation email.'
+--success-page=[s]              'HTML content of the email confirmation success page.'
+--error-page=[s]                'HTML content of the email confirmation error page.'";
 
 pub struct ArgsParser;
 
@@ -60,12 +61,13 @@ impl ArgsParser {
             )
         }
 
-        optional!(cert_dir, "cert-directory");
-        let cert_directory = match cert_dir {
+        optional!(identity_dir, "identity-directory");
+        let identity_directory = match identity_dir {
             Some(dir) => Some(PathBuf::from(dir)),
             None => None,
         };
 
+        optional!(identity_password, "identity-password");
         optional!(email_server, "email-server");
         optional!(email_user, "email-user");
         optional!(email_password, "email-password");
@@ -87,7 +89,8 @@ impl ArgsParser {
                     .unwrap_or("knilxof.org")
                     .to_owned(),
                 data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
-                cert_directory: cert_directory,
+                identity_directory: identity_directory,
+                identity_password: identity_password,
                 tunnel_ip: matches
                     .value_of("tunnel-ip")
                     .unwrap_or("0.0.0.0")
@@ -157,7 +160,8 @@ fn test_args() {
     assert_eq!(args.general.https_port, 4343);
     assert_eq!(args.general.domain, "knilxof.org");
     assert_eq!(args.general.data_directory, ".");
-    assert_eq!(args.general.cert_directory, None);
+    assert_eq!(args.general.identity_directory, None);
+    assert_eq!(args.general.identity_password, None);
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 60);
     assert_eq!(args.pdns.soa_content, "_soa_not_configured_");
@@ -183,7 +187,8 @@ fn test_args() {
         "--https-port=4444",
         "--domain=example.com",
         "--data-directory=/tmp/mydata",
-        "--cert-directory=/tmp/mycerts",
+        "--identity-directory=/tmp/mycerts",
+        "--identity-password=mypass",
         "--tunnel-ip=1.2.3.4",
         "--dns-ttl=120",
         "--soa-content=_my_soa",
@@ -209,9 +214,10 @@ fn test_args() {
     assert_eq!(args.general.domain, "example.com");
     assert_eq!(args.general.data_directory, "/tmp/mydata");
     assert_eq!(
-        args.general.cert_directory,
+        args.general.identity_directory,
         Some(PathBuf::from("/tmp/mycerts"))
     );
+    assert_eq!(args.general.identity_password, Some("mypass".to_owned()));
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 120);
     assert_eq!(args.pdns.soa_content, "_my_soa");
@@ -278,8 +284,12 @@ fn test_args() {
     assert_eq!(args.general.domain, "knilxof.org");
     assert_eq!(args.general.data_directory, "/tmp");
     assert_eq!(
-        args.general.cert_directory,
+        args.general.identity_directory,
         Some(PathBuf::from("/tmp/certs"))
+    );
+    assert_eq!(
+        args.general.identity_password,
+        Some("mypassword".to_owned())
     );
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 89);

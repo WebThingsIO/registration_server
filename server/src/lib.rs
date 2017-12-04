@@ -12,6 +12,7 @@ extern crate iron_cors;
 #[cfg(test)]
 extern crate iron_test;
 extern crate lettre;
+extern crate lettre_email;
 #[macro_use]
 extern crate log;
 extern crate mount;

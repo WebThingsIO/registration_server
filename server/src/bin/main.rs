@@ -5,14 +5,14 @@
 //! Server that manages foxbox registrations.
 
 extern crate env_logger;
-extern crate hyper_openssl;
+extern crate hyper_native_tls;
 extern crate iron;
 #[macro_use]
 extern crate log;
 extern crate mount;
 extern crate registration_server;
 
-use hyper_openssl::OpensslServer;
+use hyper_native_tls::NativeTlsServer;
 use iron::Iron;
 use std::thread;
 
@@ -34,9 +34,13 @@ fn main() {
 
     let mut threads = Vec::new();
 
-    if args.general.http_port != 0 {
-        let addr = format!("{}:{}", args.general.host, args.general.http_port);
+    if config.options.general.http_port != 0 {
         let cfg = config.clone();
+        let addr = format!(
+            "{}:{}",
+            config.options.general.host,
+            config.options.general.http_port
+        );
         threads.push(thread::spawn(move || {
             let iron_server = Iron::new(routes::create_chain("/", &cfg));
             info!("Starting HTTP server on {}", addr);
@@ -44,25 +48,29 @@ fn main() {
         }));
     }
 
-    if args.general.https_port != 0 {
-        if args.general.cert_directory.is_none() {
-            error!("Certificate directory not set!");
+    if config.options.general.https_port != 0 {
+        if config.options.general.identity_directory.is_none() {
+            error!("Identity directory not set!");
+        } else if config.options.general.identity_password.is_none() {
+            error!("Identity password not set!");
         } else {
-            let addr = format!("{}:{}", args.general.host, args.general.https_port);
-            let certificate_directory = args.general.cert_directory.unwrap();
             let cfg = config.clone();
+            let addr = format!(
+                "{}:{}",
+                config.options.general.host,
+                config.options.general.https_port
+            );
+            let identity_directory = config.options.general.identity_directory.clone().unwrap();
             threads.push(thread::spawn(move || {
                 let iron_server = Iron::new(routes::create_chain("/", &cfg));
                 info!("Starting TLS server on {}", addr);
 
-                let mut private_key = certificate_directory.clone();
-                private_key.push("privkey.pem");
+                let identity_password = config.options.general.identity_password.unwrap();
+                let mut identity = identity_directory.clone();
+                identity.push("identity.p12");
 
-                let mut cert = certificate_directory.clone();
-                cert.push("fullchain.pem");
-
-                info!("Using cert: '{:?}' pk: '{:?}'", cert, private_key);
-                let ssl = OpensslServer::from_files(private_key, cert).unwrap();
+                info!("Using identity: '{:?}'", identity);
+                let ssl = NativeTlsServer::new(identity, &identity_password).unwrap();
                 iron_server.https(addr.as_ref() as &str, ssl).unwrap();
             }));
         }

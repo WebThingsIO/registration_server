@@ -2,5 +2,6 @@
 *.rdb
 *.sqlite
 *.swp
+Cargo.lock
 kcov
 target
