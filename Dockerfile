@@ -14,14 +14,14 @@ RUN apt-get update && \
        gcc \
        libboost-all-dev \ 
        libc6-dev \
+       libmariadbclient-dev-compat \
+       libpq-dev \
        libsqlite3-dev \
        libssl-dev \
        libssl-dev \
        libtool \
        make \
-       mysql-client \
        pkgconf \
-       postgresql \
        python \
        sqlite \ 
        -qqy \
