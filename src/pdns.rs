@@ -589,16 +589,16 @@ mod tests {
         let request = build_request(
             "lookup",
             Some("A"),
-            Some("1d48.https-4443.test.knilxof.org.knilxof.org."),
+            Some("1d48.https-4443.test.mydomain.org.mydomain.org."),
         );
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 117);
-        let result = String::from_utf8(answer[..117].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 119);
+        let result = String::from_utf8(answer[..119].to_vec()).unwrap();
         let soa_success = "{\"result\":[{\"qtype\":\"A\",\
-                           \"qname\":\"1d48.https-4443.test.knilxof.org.knilxof.org.\",\
+                           \"qname\":\"1d48.https-4443.test.mydomain.org.mydomain.org.\",\
                            \"content\":\"255.255.255.0\",\"ttl\":89}]}";
         assert_eq!(&result, soa_success);
     }

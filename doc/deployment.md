@@ -145,9 +145,9 @@ txt_record = ""
 
 [email]
 server = "mail.gandi.net"
-user = "accounts@knilxof.org"
+user = "accounts@mydomain.org"
 password = "******"
-sender = "accounts@knilxof.org"
+sender = "accounts@mydomain.org"
 confirmation_title = "Welcome to your Mozilla IoT Gateway"
 confirmation_body = "Hello,\n\nWelcome to your Mozilla IoT Gateway! To confirm your email address, follow this link: {link}"
 success_page = """<!DOCTYPE html>
