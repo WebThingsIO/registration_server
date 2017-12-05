@@ -594,7 +594,7 @@ mod tests {
         assert_eq!(response.1, status::Ok);
         let record: Domain = serde_json::from_str(&response.0).unwrap();
         assert_eq!(record.token, token);
-        assert_eq!(record.name, "test.knilxof.org.");
+        assert_eq!(record.name, "test.mydomain.org.");
         assert_eq!(record.description, r#"test's server"#);
 
         // Test the LE challenge endpoints.
@@ -680,12 +680,12 @@ mod tests {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("A".to_owned()),
-                qname: Some("test.knilxof.org.".to_owned()),
+                qname: Some("test.mydomain.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success = "{\"result\":[{\"qtype\":\"A\",\"qname\":\"test.knilxof.org.\",\
+        let success = "{\"result\":[{\"qtype\":\"A\",\"qname\":\"test.mydomain.org.\",\
                        \"content\":\"1.2.3.4\",\"ttl\":89}]}";
         assert_eq!(
             put("pdns", &body, &router),
@@ -697,13 +697,13 @@ mod tests {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("TXT".to_owned()),
-                qname: Some("_acme-challenge.test.knilxof.org.".to_owned()),
+                qname: Some("_acme-challenge.test.mydomain.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
         let success = "{\"result\":[{\"qtype\":\"TXT\",\
-                       \"qname\":\"_acme-challenge.test.knilxof.org.\",\
+                       \"qname\":\"_acme-challenge.test.mydomain.org.\",\
                        \"content\":\"test_challenge\",\
                        \"ttl\":89}]}";
         assert_eq!(
@@ -716,12 +716,12 @@ mod tests {
             method: "lookup".to_owned(),
             parameters: PdnsRequestParameters {
                 qtype: Some("SOA".to_owned()),
-                qname: Some("test.knilxof.org.".to_owned()),
+                qname: Some("test.mydomain.org.".to_owned()),
             },
         };
         let body = serde_json::to_string(&pdns_request).unwrap();
 
-        let success = "{\"result\":[{\"qtype\":\"SOA\",\"qname\":\"test.knilxof.org.\",\
+        let success = "{\"result\":[{\"qtype\":\"SOA\",\"qname\":\"test.mydomain.org.\",\
                        \"content\":\
                        \"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800\",\
                        \"ttl\":89}]}";
@@ -755,7 +755,7 @@ mod tests {
 
         // A request with a bogus domain.
         let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.\
-                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.knilxof.org.knilxof.\
+                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.mydomain.org.mydomain.\
                      org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),
@@ -773,7 +773,7 @@ mod tests {
 
         // A request with a correct domain.
         let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.\
-                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.knilxof.org.knilxof.\
+                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.mydomain.org.mydomain.\
                      org.";
         let pdns_request = PdnsRequest {
             method: "lookup".to_owned(),

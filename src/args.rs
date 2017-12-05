@@ -86,7 +86,7 @@ impl ArgsParser {
                 https_port: value_t!(matches, "https-port", u16).unwrap_or(4343),
                 domain: matches
                     .value_of("domain")
-                    .unwrap_or("knilxof.org")
+                    .unwrap_or("mydomain.org")
                     .to_owned(),
                 db_path: String::from(matches.value_of("db-path").unwrap_or("./domains.sqlite")),
                 identity_directory: identity_directory,
@@ -158,7 +158,7 @@ fn test_args() {
     assert_eq!(args.general.host, "0.0.0.0");
     assert_eq!(args.general.http_port, 4242);
     assert_eq!(args.general.https_port, 4343);
-    assert_eq!(args.general.domain, "knilxof.org");
+    assert_eq!(args.general.domain, "mydomain.org");
     assert_eq!(args.general.db_path, "./domains.sqlite");
     assert_eq!(args.general.identity_directory, None);
     assert_eq!(args.general.identity_password, None);
@@ -281,7 +281,7 @@ fn test_args() {
     assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.http_port, 4141);
     assert_eq!(args.general.https_port, 4142);
-    assert_eq!(args.general.domain, "knilxof.org");
+    assert_eq!(args.general.domain, "mydomain.org");
     assert_eq!(args.general.db_path, "/tmp/domains.sqlite");
     assert_eq!(
         args.general.identity_directory,
@@ -302,9 +302,9 @@ fn test_args() {
     assert_eq!(args.pdns.caa_record, caa);
     assert_eq!(args.pdns.txt_record, txt);
     assert_eq!(args.email.server, Some("mail.gandi.net".to_owned()));
-    assert_eq!(args.email.user, Some("accounts@knilxof.org".to_owned()));
+    assert_eq!(args.email.user, Some("accounts@mydomain.org".to_owned()));
     assert_eq!(args.email.password, Some("******".to_owned()));
-    assert_eq!(args.email.sender, Some("accounts@knilxof.org".to_owned()));
+    assert_eq!(args.email.sender, Some("accounts@mydomain.org".to_owned()));
     assert_eq!(args.email.reclamation_title, Some(recl_title.to_string()));
     assert_eq!(args.email.reclamation_body, Some(recl_body.to_string()));
     assert_eq!(args.email.confirmation_title, Some(conf_title.to_string()));
