@@ -1,15 +1,24 @@
 sudo: false
 language: rust
 
+services:
+  - mysql
+  - postgresql
+
 # run builds for all the trains (and more)
 rust:
   - nightly
 
+before_install:
+  - cargo install diesel_cli
+
 # the main build
 script:
   - |
-      cd server &&
-      cargo build &&
-      cargo test
+      cargo build --features mysql &&
+      cargo build --features postgres &&
+      cargo build --features sqlite &&
+      ./run_tests.sh
+
 notifications:
-irc: "irc.mozilla.org#iot"
+  irc: "irc.mozilla.org#iot"

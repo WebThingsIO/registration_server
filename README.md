@@ -21,7 +21,7 @@ OPTIONS:
         --config-file <path>            Path to a toml configuration file.
         --confirmation-body <s>         The body of the confirmation email.
         --confirmation-title <s>        The title of the confirmation email.
-        --data-directory <dir>          The directory where the persistent data will be saved.
+        --db-path <path>                The database path: file path, postgres://..., mysql://...
         --dns-ttl <ttl>                 TTL of the DNS records, in seconds.
         --domain <domain>               The domain that will be tied to this registration server.
         --email-password <pass>         The password for this email account.
@@ -47,12 +47,14 @@ See the `config/config.toml` for an example configuration file.
 
 ## Building & Testing
 
-Just run `cargo build` and `cargo test` in the `server` directory!
+* First, select the database type you'd like: mysql, postgres, sqlite
+* Run `cargo build --features <db_type>` to build.
+* Run `./run_tests.sh` to test.
 
 ## Deploying
 
-Deployment details are provided in the [deployment guide](deployment.md).
+Deployment details are provided in the [deployment guide](doc/deployment.md).
 
 ## API
 
-The API is documented [here](api.md). Its usage is described in [this document](flow.md).
+The API is documented [here](doc/api.md). Its usage is described in [this document](doc/flow.md).

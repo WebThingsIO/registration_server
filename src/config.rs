@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use database::Database;
+use database::DatabasePool;
 use std::path::PathBuf;
 
 #[derive(Clone, Deserialize)]
@@ -10,7 +10,7 @@ pub struct GeneralOptions {
     pub host: String,
     pub http_port: u16,
     pub https_port: u16,
-    pub data_directory: String,
+    pub db_path: String,
     pub identity_directory: Option<PathBuf>,
     pub identity_password: Option<String>,
     pub domain: String,
@@ -50,20 +50,20 @@ pub struct Args {
 
 #[derive(Clone)]
 pub struct Config {
-    pub db: Database,
+    pub db: DatabasePool,
     pub options: Args,
 }
 
 impl Config {
     pub fn from_args(args: Args) -> Self {
         Config {
-            db: Database::new(&format!("{}/domains.sqlite", args.general.data_directory)),
+            db: DatabasePool::new(&args.general.db_path.clone()),
             options: args,
         }
     }
 
     #[cfg(test)]
-    pub fn from_args_with_db(args: Args, db: Database) -> Self {
+    pub fn from_args_with_db(args: Args, db: DatabasePool) -> Self {
         Config {
             db: db,
             options: args,

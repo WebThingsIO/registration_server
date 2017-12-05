@@ -5,7 +5,7 @@
 // Email related routes.
 
 use config::Config;
-use database::DatabaseError;
+use diesel;
 use email::Mailbox;
 use errors::*;
 use iron::headers::ContentType;
@@ -104,7 +104,13 @@ impl EmailSender {
 pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /setemail");
 
-    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        return EndpointError::with(status::InternalServerError, 501);
+    }
+    let conn = conn.unwrap();
+
+    let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
     let email = map.find(&["email"]);
 
@@ -114,37 +120,26 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     let token = String::from_value(token.unwrap()).unwrap();
     let email = String::from_value(email.unwrap()).unwrap();
+
     // Check that this is a valid email address.
     if Mailbox::from_str(&email).is_err() {
         return EndpointError::with(status::BadRequest, 400);
     }
 
-    // Check that this is a valid token.
-    let record = config.db.get_record_by_token(&token).recv().unwrap();
-    if record.is_err() {
-        return EndpointError::with(status::BadRequest, 400);
-    }
-
-    let mut record = record.unwrap();
-
-    let account_id = match config.db.get_account_id_by_email(&email).recv().unwrap() {
-        Ok(id) => id,
-        Err(_) => match config.db.add_email(&email).recv().unwrap() {
-            Ok(id) => id,
+    let account_id = match conn.get_account_by_email(&email) {
+        Ok(account) => account.id,
+        Err(_) => match conn.add_account(&email) {
+            Ok(account) => account.id,
             Err(_) => {
                 return EndpointError::with(status::InternalServerError, 501);
             }
         },
     };
 
-    // Update the record.
     let verification_token = format!("{}", Uuid::new_v4());
-    record.account_id = account_id;
-    record.verification_token = verification_token.clone();
-    record.verified = false;
-
-    match config.db.update_record(record).recv().unwrap() {
-        Ok(_) => match EmailSender::new(config) {
+    match conn.update_domain_verification_data(&token, Some(account_id), &verification_token, false)
+    {
+        Ok(count) if count > 0 => match EmailSender::new(config) {
             Ok(mut sender) => {
                 let scheme = match config.options.general.identity_directory {
                     Some(_) => "https",
@@ -174,6 +169,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
             }
             Err(_) => EndpointError::with(status::InternalServerError, 501),
         },
+        Ok(_) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }
@@ -182,33 +178,35 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /verifyemail");
 
-    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        return EndpointError::with(status::InternalServerError, 501);
+    }
+    let conn = conn.unwrap();
+
+    let map = req.get_ref::<Params>().unwrap();
     let link = map.find(&["s"]);
 
     if link.is_none() {
         return EndpointError::with(status::BadRequest, 400);
     }
+
     let link = String::from_value(link.unwrap()).unwrap();
 
-    match config
-        .db
-        .get_record_by_verification_token(&link)
-        .recv()
-        .unwrap()
-    {
-        Ok(mut record) => {
-            // Update the record's verification state.
-            record.verified = true;
-            record.verification_token = "".to_owned();
-            match config.db.update_record(record).recv().unwrap() {
-                Ok(_) => html_response!(config.options.email.clone().success_page.unwrap()),
-                Err(DatabaseError::NoRecord) => {
-                    html_response!(config.options.email.clone().error_page.unwrap())
-                }
-                Err(_) => EndpointError::with(status::InternalServerError, 501),
+    match conn.get_domain_by_verification_token(&link) {
+        Ok(record) => match conn.update_domain_verification_data(
+            &record.token,
+            Some(record.account_id),
+            "",
+            true,
+        ) {
+            Ok(count) if count > 0 => {
+                html_response!(config.options.email.clone().success_page.unwrap())
             }
-        }
-        Err(DatabaseError::NoRecord) => {
+            Ok(_) => html_response!(config.options.email.clone().error_page.unwrap()),
+            Err(_) => EndpointError::with(status::InternalServerError, 501),
+        },
+        Err(diesel::result::Error::NotFound) => {
             html_response!(config.options.email.clone().error_page.unwrap())
         }
         Err(_) => EndpointError::with(status::InternalServerError, 501),
@@ -218,7 +216,13 @@ pub fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     info!("GET /revokeemail");
 
-    let map = req.get_ref::<Params>().unwrap(); // TODO: don't unwrap.
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        return EndpointError::with(status::InternalServerError, 501);
+    }
+    let conn = conn.unwrap();
+
+    let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
 
     if token.is_none() {
@@ -227,19 +231,9 @@ pub fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     let token = String::from_value(token.unwrap()).unwrap();
 
-    // Check that this is a valid token.
-    let record = config.db.get_record_by_token(&token).recv().unwrap();
-    if record.is_err() {
-        return EndpointError::with(status::BadRequest, 400);
-    }
-
-    // Update the record's verification state.
-    let mut record = record.unwrap();
-    record.verified = false;
-    record.verification_token = "".to_owned();
-
-    match config.db.update_record(record).recv().unwrap() {
-        Ok(_) => ok_response!(),
+    match conn.update_domain_verification_data(&token, None, "", false) {
+        Ok(count) if count > 0 => ok_response!(),
+        Ok(_) => EndpointError::with(status::BadRequest, 400),
         Err(_) => EndpointError::with(status::InternalServerError, 501),
     }
 }

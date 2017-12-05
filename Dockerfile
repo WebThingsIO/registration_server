@@ -7,21 +7,23 @@ ENV SHELL=/bin/bash
 RUN apt-get update && \
     apt-get dist-upgrade -qqy && \
     apt-get install \
+       bzip2 \
        ca-certificates \
        curl \
-       gcc \
-       libc6-dev \
-       libssl-dev \
-       libsqlite3-dev \
-       python \
-       pkgconf \
-       bzip2 \
-       sqlite \ 
        g++ \ 
+       gcc \
        libboost-all-dev \ 
-       libtool \
+       libc6-dev \
+       libsqlite3-dev \
        libssl-dev \
+       libssl-dev \
+       libtool \
        make \
+       mysql-client \
+       pkgconf \
+       postgresql \
+       python \
+       sqlite \ 
        -qqy \
        --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
@@ -46,7 +48,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 ENV PATH=/home/user/.cargo/bin:/home/user/bin:$PATH
 
 WORKDIR /home/user/server
-RUN cargo build --release
+RUN cargo build --release --features sqlite
 WORKDIR /home/user
 
 USER root

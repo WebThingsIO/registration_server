@@ -17,6 +17,20 @@ Getting a full setup ready involves the following:
 
 First, build the docker image with `docker build -t registration_server .` from the source directory.
 
+## Database setup
+
+* Install rust on the host: `curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly`
+* Install diesel: `cargo install diesel_cli`
+* Set up some temp variables:
+  * `export db_type=sqlite`
+    * You can choose one of: mysql, postgres, sqlite
+  * `export db_path=./domains.sqlite`
+    * mysql: this should be of the form `mysql://[[user]:[password]@]host[:port][/database]`
+    * postgres: this should be of the form `postgres://[[user]:[password]@]host[:port][/database]`
+    * sqlite: this should be a file path
+* Set up your database for diesel: `diesel --database-url "${db_path}" setup --migration-dir "migrations/${db_type}"`
+* Set up the database tables: `diesel --database-url "${db_path}" migration --migration-dir "migrations/${db_type}" run`
+
 ## Running the Docker image
 
 You will have to mount a couple of directories and relay some ports for the Docker image to run properly:
@@ -114,7 +128,7 @@ host = "0.0.0.0"
 http_port = 81
 https_port = 4444
 domain = "yourdomain.org"
-data_directory = "/home/user/data"
+db_path = "/home/user/data/domains.sqlite"
 # Uncomment to use TLS (recommended)
 # identity_directory = "/home/user/config"
 # identity_password = "mypassword"

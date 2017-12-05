@@ -14,7 +14,7 @@ const USAGE: &'static str = "--config-file=[path]     'Path to a toml configurat
 --http-port=[port]              'Set port to listen on for HTTP connections (0 to turn off).'
 --https-port=[port]             'Set port to listen on for TLS connections (0 to turn off).'
 --domain=[domain]               'The domain that will be tied to this registration server.'
---data-directory=[dir]          'The directory where the persistent data will be saved.'
+--db-path=[path]                'The database path: file path, postgres://..., mysql://...'
 --identity-directory=[dir]      'Identity directory.'
 --identity-password=[password]  'Identity password.'
 --tunnel-ip=[ip]                'The IP address of the tunnel endpoint.'
@@ -88,7 +88,7 @@ impl ArgsParser {
                     .value_of("domain")
                     .unwrap_or("knilxof.org")
                     .to_owned(),
-                data_directory: String::from(matches.value_of("data-directory").unwrap_or(".")),
+                db_path: String::from(matches.value_of("db-path").unwrap_or("./domains.sqlite")),
                 identity_directory: identity_directory,
                 identity_password: identity_password,
                 tunnel_ip: matches
@@ -159,7 +159,7 @@ fn test_args() {
     assert_eq!(args.general.http_port, 4242);
     assert_eq!(args.general.https_port, 4343);
     assert_eq!(args.general.domain, "knilxof.org");
-    assert_eq!(args.general.data_directory, ".");
+    assert_eq!(args.general.db_path, "./domains.sqlite");
     assert_eq!(args.general.identity_directory, None);
     assert_eq!(args.general.identity_password, None);
     assert_eq!(args.general.tunnel_ip, "1.2.3.4");
@@ -186,7 +186,7 @@ fn test_args() {
         "--http-port=4343",
         "--https-port=4444",
         "--domain=example.com",
-        "--data-directory=/tmp/mydata",
+        "--db-path=/tmp/mydata/domains.sqlite",
         "--identity-directory=/tmp/mycerts",
         "--identity-password=mypass",
         "--tunnel-ip=1.2.3.4",
@@ -212,7 +212,7 @@ fn test_args() {
     assert_eq!(args.general.http_port, 4343);
     assert_eq!(args.general.https_port, 4444);
     assert_eq!(args.general.domain, "example.com");
-    assert_eq!(args.general.data_directory, "/tmp/mydata");
+    assert_eq!(args.general.db_path, "/tmp/mydata/domains.sqlite");
     assert_eq!(
         args.general.identity_directory,
         Some(PathBuf::from("/tmp/mycerts"))
@@ -276,13 +276,13 @@ fn test_args() {
 
     let args = ArgsParser::from_vec(vec![
         "registration_server",
-        "--config-file=../config/config.toml",
+        "--config-file=./config/config.toml",
     ]);
     assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.http_port, 4141);
     assert_eq!(args.general.https_port, 4142);
     assert_eq!(args.general.domain, "knilxof.org");
-    assert_eq!(args.general.data_directory, "/tmp");
+    assert_eq!(args.general.db_path, "/tmp/domains.sqlite");
     assert_eq!(
         args.general.identity_directory,
         Some(PathBuf::from("/tmp/certs"))
