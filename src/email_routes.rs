@@ -122,7 +122,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     let email = String::from_value(email.unwrap()).unwrap();
 
     // Check that this is a valid email address.
-    if Mailbox::from_str(&email).is_err() {
+    if Mailbox::from_str(&email).is_err() || email.len() > 254 {
         return EndpointError::with(status::BadRequest, 400);
     }
 
