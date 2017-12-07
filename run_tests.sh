@@ -25,8 +25,4 @@ for db_type in mysql postgres sqlite; do
     echo
     echo "Testing ${db_type}"
     cargo test --features "${db_type}" "$@"
-
-    #cargo cov clean
-    #cargo cov test --features "${db_type}" "$@"
-    #cargo cov report --open --include local
 done

@@ -126,6 +126,7 @@ impl Database {
                     Err(e) => Err(e),
                 }
             }
+            Err(diesel::result::Error::NotFound) => Ok(0),
             Err(e) => Err(e),
         }
     }
@@ -315,6 +316,16 @@ fn test_domain_store() {
         Ok(test_account.clone())
     );
 
+    // Fail to add same account.
+    let e = conn.add_account(&test_account.email).unwrap_err();
+    match e {
+        diesel::result::Error::DatabaseError(
+            diesel::result::DatabaseErrorKind::UniqueViolation,
+            _,
+        ) => (),
+        _ => panic!("Adding same account resulted in wrong error."),
+    }
+
     // Check that we don't find any record.
     assert_eq!(
         conn.get_domain_by_name("test.example.org"),
@@ -336,7 +347,7 @@ fn test_domain_store() {
         timestamp: 0,
         dns_challenge: "".to_owned(),
         reclamation_token: "".to_owned(),
-        verification_token: "".to_owned(),
+        verification_token: "verification-token".to_owned(),
         verified: false,
     };
     assert_eq!(
@@ -348,7 +359,7 @@ fn test_domain_store() {
             0,
             "",
             "",
-            "",
+            "verification-token",
             false
         ),
         Ok(no_challenge_record.clone())
@@ -365,6 +376,11 @@ fn test_domain_store() {
         Ok(no_challenge_record.clone())
     );
 
+    assert_eq!(
+        conn.get_domain_by_verification_token("verification-token"),
+        Ok(no_challenge_record.clone())
+    );
+
     // Update the record to have challenge.
     let challenge_record = Domain {
         id: 1,
@@ -375,7 +391,7 @@ fn test_domain_store() {
         timestamp: 0,
         dns_challenge: "dns-challenge".to_owned(),
         reclamation_token: "".to_owned(),
-        verification_token: "".to_owned(),
+        verification_token: "verification-token".to_owned(),
         verified: false,
     };
     assert_eq!(
@@ -404,6 +420,7 @@ fn test_domain_store() {
 
     // Add a record without a reclamation token.
     no_challenge_record.id = 2;
+    no_challenge_record.verification_token = "".to_owned();
     assert_eq!(
         conn.add_domain(
             "test.example.org",
@@ -420,11 +437,17 @@ fn test_domain_store() {
     );
 
     // Update the record by name to have a reclamation token.
-    let challenge_record = Domain {
-        id: 1,
+    assert_eq!(
+        conn.update_domain_reclamation_token("test-token", "test-reclamation-token"),
+        Ok(1)
+    );
+
+    // Update the record's token
+    let updated_record = Domain {
+        id: 2,
         name: "test.example.org".to_owned(),
         account_id: 1,
-        token: "test-token".to_owned(),
+        token: "new-token".to_owned(),
         description: "Test Server".to_owned(),
         timestamp: 0,
         dns_challenge: "".to_owned(),
@@ -433,18 +456,25 @@ fn test_domain_store() {
         verified: false,
     };
     assert_eq!(
-        conn.update_domain_reclamation_token("test-token", "test-reclamation-token"),
+        conn.update_domain_token("test.example.org", "new-token"),
         Ok(1)
     );
+    assert_eq!(
+        conn.get_domain_by_token("new-token"),
+        Ok(updated_record.clone())
+    );
+
+    // Update the timestamp
+    assert_eq!(conn.update_domain_timestamp(&updated_record.token), Ok(1));
 
     // Remove by reclamation token.
     assert_eq!(
-        conn.delete_domain_by_reclamation_token(&challenge_record.reclamation_token),
+        conn.delete_domain_by_reclamation_token(&updated_record.reclamation_token),
         Ok(1)
     );
 
     assert_eq!(
-        conn.get_domain_by_name(&challenge_record.name),
+        conn.get_domain_by_name(&updated_record.name),
         Err(diesel::result::Error::NotFound)
     );
 }
@@ -480,6 +510,7 @@ fn test_email() {
         Ok(test_account.clone())
     );
     assert_eq!(conn.delete_account(&test_account.email), Ok(1));
+    assert_eq!(conn.delete_account(&test_account.email), Ok(0));
     assert_eq!(
         conn.get_account_by_email(&test_account.email),
         Err(diesel::result::Error::NotFound)
@@ -501,10 +532,23 @@ fn test_email() {
             false
         ).is_ok()
     );
+    assert!(
+        conn.get_domains_by_account_id(test_account_id)
+            .unwrap()
+            .len() == 1
+    );
     assert!(conn.delete_account(&test_account.email).is_ok());
     assert!(
-        conn.get_domains_by_account_id(test_account.id)
+        conn.get_domains_by_account_id(test_account_id)
             .unwrap()
             .len() == 0
+    );
+
+    assert_eq!(
+        conn.get_unknown_account().unwrap(),
+        Account {
+            id: 3,
+            email: "".to_owned(),
+        }
     );
 }

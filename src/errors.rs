@@ -53,4 +53,9 @@ fn test_error() {
     let s_error = StringError(status::BadRequest.canonical_reason().unwrap().to_owned());
     let error = format!("{} {}", s_error, s_error.description());
     assert_eq!(error, r#"StringError("Bad Request") Bad Request"#);
+
+    let ep_error = EndpointError::with(status::InternalServerError, 501);
+    let error = ep_error.unwrap_err();
+    assert_eq!(error.description(), "Internal Server Error");
+    assert_eq!(error.response.status.unwrap(), status::InternalServerError);
 }

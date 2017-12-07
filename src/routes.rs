@@ -214,20 +214,22 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let name = String::from_value(name.unwrap()).unwrap();
     let subdomain = name.trim().to_lowercase();
-    let re = Regex::new(r"^([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$").unwrap();
+    let full_name = domain_for_name(&subdomain, config);
 
     // Ensure that subdomain is valid:
     // - Contains only a-z, 0-9, and hyphens, but does not start or end
     //   with hyphen.
     // - Is not equal to "api" or "www", as those are reserved.
-    if !re.is_match(&subdomain) || subdomain == "api" || subdomain == "www" {
+    let re = Regex::new(r"^([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$").unwrap();
+    if !re.is_match(&subdomain) || subdomain == "api" || subdomain == "www" || subdomain.len() > 63
+        || full_name.len() > 253
+    {
         let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
         response.status = Some(status::BadRequest);
         response.headers.set(ContentType::json());
         return Ok(response);
     }
 
-    let full_name = domain_for_name(&subdomain, config);
     info!("trying to subscribe {}", full_name);
 
     let timestamp = SystemTime::now()
@@ -269,25 +271,27 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     // We already have a record for this name, return an error.
                     let email = map.find(&["email"]);
                     if !email.is_none() {
-                        match conn.get_account_by_id(record.account_id) {
-                            Ok(account) => {
-                                let email = String::from_value(email.unwrap()).unwrap();
-                                if email == account.email.to_string() {
-                                    let mut response = Response::with(
-                                        "{\"error\": \
-                                         \"UnavailableNameReclamationPossible\"}",
-                                    );
+                        let email = String::from_value(email.unwrap()).unwrap();
+                        if email.len() > 0 {
+                            match conn.get_account_by_id(record.account_id) {
+                                Ok(account) => {
+                                    if email == account.email.to_string() {
+                                        let mut response = Response::with(
+                                            "{\"error\": \
+                                             \"UnavailableNameReclamationPossible\"}",
+                                        );
+                                        response.status = Some(status::BadRequest);
+                                        response.headers.set(ContentType::json());
+                                        return Ok(response);
+                                    }
+                                }
+                                Err(_) => {
+                                    let mut response =
+                                        Response::with(r#"{"error": "UnavailableName"}"#);
                                     response.status = Some(status::BadRequest);
                                     response.headers.set(ContentType::json());
                                     return Ok(response);
                                 }
-                            }
-                            Err(_) => {
-                                let mut response =
-                                    Response::with(r#"{"error": "UnavailableName"}"#);
-                                response.status = Some(status::BadRequest);
-                                response.headers.set(ContentType::json());
-                                return Ok(response);
                             }
                         }
                     }
@@ -364,6 +368,10 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 
     let challenge = String::from_value(challenge.unwrap()).unwrap();
+    if challenge.len() > 63 {
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
     let token = String::from_value(token.unwrap()).unwrap();
 
     match conn.update_domain_dns_challenge(&token, &challenge) {
@@ -449,6 +457,7 @@ mod tests {
     use models::Domain;
     use std::io::Cursor;
     use std::thread::sleep;
+    use std;
     use std::time;
     use self::hyper::buffer::BufReader;
     use self::hyper::net::NetworkStream;
@@ -529,6 +538,52 @@ mod tests {
 
         // Subscribe a test user.
         assert_eq!(get("subscribe", &router), bad_request_error);
+        assert_eq!(
+            get("subscribe?name=", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get("subscribe?name=-test", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get("subscribe?name=test-", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get("subscribe?name=api", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get("subscribe?name=www", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get(
+                "subscribe?name=abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy\
+                 zabcdefghijklmnopqrstuvwxyz",
+                &router
+            ),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
 
         let resp = get("subscribe?name=test", &router);
         let registration: NameAndToken = serde_json::from_str(&resp.0).unwrap();
@@ -554,7 +609,7 @@ mod tests {
 
         assert_eq!(registration.name, "test".to_owned());
 
-        // Fail to register the same user twice.
+        // Fail to register the same name twice.
         let res = get("subscribe?name=test", &router);
         assert_eq!(
             res,
@@ -565,6 +620,21 @@ mod tests {
         );
 
         // Test reclaiming domain
+        let email = "test@example.com".to_owned();
+        assert_eq!(
+            get("subscribe?name=test&email=", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get(&format!("subscribe?name=test&email={}", email), &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
         assert_eq!(get("reclaim", &router), bad_request_error);
         let res = get("reclaim?name=nonexistent", &router);
         assert_eq!(
@@ -610,6 +680,17 @@ mod tests {
         assert_eq!(
             get(
                 "dnsconfig?token=wrong_token&challenge=test_challenge",
+                &router
+            ),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!(
+                    "dnsconfig?token={}&challenge=abcdefghijklmnopqrstuvwxyz\
+                     abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+                    token
+                ),
                 &router
             ),
             bad_request_error
@@ -730,23 +811,41 @@ mod tests {
             (success.to_owned(), status::Ok)
         );
 
+        // Test ANY queries.
+        let pdns_request = PdnsRequest {
+            method: "lookup".to_owned(),
+            parameters: PdnsRequestParameters {
+                qtype: Some("ANY".to_owned()),
+                qname: Some("test.mydomain.org.".to_owned()),
+            },
+        };
+        let body = serde_json::to_string(&pdns_request).unwrap();
+
+        let success = "{\"result\":[{\"qtype\":\"MX\",\"qname\":\"test.mydomain.org.\",\
+                       \"content\":\"\",\"ttl\":89},\
+                       {\"qtype\":\"A\",\"qname\":\"test.mydomain.org.\",\
+                       \"content\":\"1.2.3.4\",\"ttl\":89},\
+                       {\"qtype\":\"TXT\",\"qname\":\"test.mydomain.org.\",\
+                       \"content\":\"test_challenge\",\"ttl\":89},\
+                       {\"qtype\":\"CAA\",\"qname\":\"test.mydomain.org.\",\
+                       \"content\":\"0 issue \\\"letsencrypt.org\\\"\",\"ttl\":89}]}";
+        assert_eq!(
+            put("pdns", &body, &router),
+            (success.to_owned(), status::Ok)
+        );
+
         // PageKite queries
         #[derive(Deserialize)]
         struct PdnsLookupResponse {
-            #[allow(dead_code)]
-            qtype: String,
-            #[allow(dead_code)]
-            qname: String,
+            #[allow(dead_code)] qtype: String,
+            #[allow(dead_code)] qname: String,
             content: String,
-            #[allow(dead_code)]
-            ttl: u32,
-            #[allow(dead_code)]
-            domain_id: Option<String>,
+            #[allow(dead_code)] ttl: u32,
+            #[allow(dead_code)] domain_id: Option<String>,
             #[allow(dead_code)]
             #[serde(rename = "scopeMask")]
             scope_mask: Option<String>,
-            #[allow(dead_code)]
-            auth: Option<String>,
+            #[allow(dead_code)] auth: Option<String>,
         }
         #[derive(Deserialize)]
         struct PdnsResponse {
@@ -821,7 +920,6 @@ mod tests {
 
         // Email routes tests
         // 1. set an email address
-        let email = "test@example.com".to_owned();
         assert_eq!(get("setemail", &router), bad_request_error);
         assert_eq!(
             get("setemail?token=wrong_token", &router),
@@ -834,6 +932,19 @@ mod tests {
         assert_eq!(
             get(
                 &format!("setemail?token={}&email=not_an_email", token),
+                &router
+            ),
+            bad_request_error
+        );
+        assert_eq!(
+            get(
+                &format!(
+                    "setemail?token={}&email=abc@{}com",
+                    token,
+                    std::iter::repeat("makeasuperlongfakedomain.")
+                        .take(10)
+                        .collect::<String>()
+                ),
                 &router
             ),
             bad_request_error
@@ -867,6 +978,13 @@ mod tests {
         assert!(domain_record.verified);
 
         // 3a. Before revoking, finish testing domain reclamation.
+        assert_eq!(
+            get(&format!("subscribe?name=test&email={}", email), &router),
+            (
+                r#"{"error": "UnavailableNameReclamationPossible"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
         assert_eq!(get("reclaim?name=test", &router), empty_ok);
         let domain_record = conn.get_domain_by_token(&token).unwrap();
         let res = get("subscribe?name=test&reclamationToken=wrongtoken", &router);

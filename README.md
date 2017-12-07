@@ -1,6 +1,8 @@
 # Registration server
 
 [![Build Status](https://travis-ci.org/mozilla-iot/registration_server.svg?branch=master)](https://travis-ci.org/mozilla-iot/registration_server)
+[![codecov](https://codecov.io/gh/mozilla-iot/registration_server/branch/master/graph/badge.svg)](https://codecov.io/gh/mozilla-iot/registration_server)
+[![license](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
 This server exposes a HTTP(S) API that lets you register a gateway with the server.
 

@@ -30,8 +30,7 @@ struct PdnsRequestParameters {
     // lookup method
     qtype: Option<String>,
     qname: Option<String>,
-    #[serde(rename = "zone-id")]
-    zone_id: Option<i32>,
+    #[serde(rename = "zone-id")] zone_id: Option<i32>,
     remote: Option<String>,
     local: Option<String>,
     real_remote: Option<String>,
@@ -49,13 +48,11 @@ struct PdnsLookupResponse {
     qname: String,
     content: String,
     ttl: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    domain_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] domain_id: Option<String>,
     #[serde(rename = "scopeMask")]
     #[serde(skip_serializing_if = "Option::is_none")]
     scope_mask: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    auth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] auth: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -224,9 +221,12 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         let mut pdns_response = PdnsResponse { result: Vec::new() };
 
         if qtype == "SOA" {
-            pdns_response.result.push(PdnsResponseParams::Lookup(
-                soa_response(&original_qname, config),
-            ));
+            pdns_response
+                .result
+                .push(PdnsResponseParams::Lookup(soa_response(
+                    &original_qname,
+                    config,
+                )));
         }
 
         if qtype == "ANY" {
@@ -601,5 +601,21 @@ mod tests {
                            \"qname\":\"1d48.https-4443.test.mydomain.org.mydomain.org.\",\
                            \"content\":\"255.255.255.0\",\"ttl\":89}]}";
         assert_eq!(&result, soa_success);
+
+        // ANY query
+        let request = build_request("lookup", Some("ANY"), Some("example.org"));
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 131);
+        let result = String::from_utf8(answer[..131].to_vec()).unwrap();
+        let any_success = "{\"result\":[{\"qtype\":\"MX\",\
+                           \"qname\":\"example.org\",\
+                           \"content\":\"\",\"ttl\":89},\
+                           {\"qtype\":\"TXT\",\
+                           \"qname\":\"example.org\",\
+                           \"content\":\"\",\"ttl\":89}]}";
+        assert_eq!(&result, any_success);
     }
 }
