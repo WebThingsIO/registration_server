@@ -73,6 +73,3 @@ pub mod models;
 pub mod pdns;
 pub mod routes;
 pub mod schema;
-
-// unsafe impl Send for ServerInfo {}
-// unsafe impl Sync for ServerInfo {}

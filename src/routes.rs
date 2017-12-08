@@ -95,7 +95,7 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
         let reclamation_token = map.find(&["reclamationToken"]);
         match reclamation_token {
             Some(&Value::String(ref reclamation_token)) => {
-                return match conn.delete_domain_by_reclamation_token(&reclamation_token) {
+                return match conn.delete_domain_by_reclamation_token(reclamation_token) {
                     Ok(0) => {
                         // No record found for this token.
                         EndpointError::with(status::BadRequest, 400)
@@ -240,67 +240,64 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     match conn.get_domain_by_name(&full_name) {
         Ok(record) => {
             let reclamation_token = map.find(&["reclamationToken"]);
-            match reclamation_token {
-                Some(&Value::String(ref reclamation_token)) => {
-                    if reclamation_token.to_string() == record.reclamation_token {
-                        // Create a new token and update the existing record.
-                        let token = format!("{}", Uuid::new_v4());
-                        match conn.update_domain_token(&record.name, &token) {
-                            Ok(count) if count > 0 => {
-                                // We don't want the full domain name or the DNS
-                                // challenge in the response, so we create a local
-                                // struct.
-                                let n_and_t = NameAndToken {
-                                    name: subdomain.to_owned(),
-                                    token: token,
-                                };
-                                json_response!(&n_and_t)
-                            }
-                            Ok(_) => EndpointError::with(status::BadRequest, 400),
-                            Err(_) => EndpointError::with(status::InternalServerError, 501),
+            if !reclamation_token.is_none() {
+                let reclamation_token = String::from_value(reclamation_token.unwrap()).unwrap();
+                if reclamation_token == record.reclamation_token {
+                    // Create a new token and update the existing record.
+                    let token = format!("{}", Uuid::new_v4());
+                    match conn.update_domain_token(&record.name, &token) {
+                        Ok(count) if count > 0 => {
+                            // We don't want the full domain name or the DNS
+                            // challenge in the response, so we create a local
+                            // struct.
+                            let n_and_t = NameAndToken {
+                                name: subdomain.to_owned(),
+                                token: token,
+                            };
+                            json_response!(&n_and_t)
                         }
-                    } else {
-                        let mut response =
-                            Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
-                        response.status = Some(status::BadRequest);
-                        response.headers.set(ContentType::json());
-                        Ok(response)
+                        Ok(_) => EndpointError::with(status::BadRequest, 400),
+                        Err(_) => EndpointError::with(status::InternalServerError, 501),
                     }
+                } else {
+                    let mut response = Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
+                    response.status = Some(status::BadRequest);
+                    response.headers.set(ContentType::json());
+                    Ok(response)
                 }
-                _ => {
-                    // We already have a record for this name, return an error.
-                    let email = map.find(&["email"]);
-                    if !email.is_none() {
-                        let email = String::from_value(email.unwrap()).unwrap();
-                        if email.len() > 0 {
-                            match conn.get_account_by_id(record.account_id) {
-                                Ok(account) => {
-                                    if email == account.email.to_string() {
-                                        let mut response = Response::with(
-                                            "{\"error\": \
-                                             \"UnavailableNameReclamationPossible\"}",
-                                        );
-                                        response.status = Some(status::BadRequest);
-                                        response.headers.set(ContentType::json());
-                                        return Ok(response);
-                                    }
-                                }
-                                Err(_) => {
-                                    let mut response =
-                                        Response::with(r#"{"error": "UnavailableName"}"#);
+            } else {
+                // We already have a record for this name, return an error.
+                let email = map.find(&["email"]);
+                if !email.is_none() {
+                    let email = String::from_value(email.unwrap()).unwrap();
+                    if !email.is_empty() {
+                        match conn.get_account_by_id(record.account_id) {
+                            Ok(account) => {
+                                if email == account.email {
+                                    let mut response = Response::with(
+                                        "{\"error\": \
+                                         \"UnavailableNameReclamationPossible\"}",
+                                    );
                                     response.status = Some(status::BadRequest);
                                     response.headers.set(ContentType::json());
                                     return Ok(response);
                                 }
                             }
+                            Err(_) => {
+                                let mut response =
+                                    Response::with(r#"{"error": "UnavailableName"}"#);
+                                response.status = Some(status::BadRequest);
+                                response.headers.set(ContentType::json());
+                                return Ok(response);
+                            }
                         }
                     }
-
-                    let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
-                    response.status = Some(status::BadRequest);
-                    response.headers.set(ContentType::json());
-                    Ok(response)
                 }
+
+                let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
+                response.status = Some(status::BadRequest);
+                response.headers.set(ContentType::json());
+                Ok(response)
             }
         }
         Err(diesel::result::Error::NotFound) => {
@@ -422,7 +419,7 @@ pub fn create_router(config: &Config) -> Router {
 
 pub fn create_chain(root_path: &str, config: &Config) -> Chain {
     let mut mount = Mount::new();
-    mount.mount(root_path, create_router(&config));
+    mount.mount(root_path, create_router(config));
 
     let mut chain = Chain::new(mount);
     let cors = CORS::new(vec![
