@@ -181,6 +181,7 @@ impl Database {
             .load::<Domain>(self.conn())
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
     pub fn add_domain<'a>(
         &self,
         _name: &'a str,

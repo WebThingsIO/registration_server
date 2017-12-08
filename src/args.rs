@@ -9,7 +9,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use toml;
 
-const USAGE: &'static str = "--config-file=[path]     'Path to a toml configuration file.'
+const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file.'
 --host=[host]                   'Set local hostname.'
 --http-port=[port]              'Set port to listen on for HTTP connections (0 to turn off).'
 --https-port=[port]             'Set port to listen on for TLS connections (0 to turn off).'
@@ -46,7 +46,7 @@ impl ArgsParser {
         toml::from_str(&source).expect("Invalid config file")
     }
 
-    fn from_matches(matches: ArgMatches) -> Args {
+    fn from_matches(matches: &ArgMatches) -> Args {
         if matches.is_present("config-file") {
             return ArgsParser::from_file(&PathBuf::from(matches.value_of("config-file").unwrap()));
         }
@@ -133,21 +133,17 @@ impl ArgsParser {
 
     // Gets the args from the default command line.
     pub fn from_env() -> Args {
-        ArgsParser::from_matches(
-            App::new("registration_server")
-                .args_from_usage(USAGE)
-                .get_matches(),
-        )
+        ArgsParser::from_matches(&App::new("registration_server")
+            .args_from_usage(USAGE)
+            .get_matches())
     }
 
     // Gets the args from a string array.
     #[cfg(test)]
     pub fn from_vec(params: Vec<&str>) -> Args {
-        ArgsParser::from_matches(
-            App::new("registration_server")
-                .args_from_usage(USAGE)
-                .get_matches_from(params),
-        )
+        ArgsParser::from_matches(&App::new("registration_server")
+            .args_from_usage(USAGE)
+            .get_matches_from(params))
     }
 }
 
