@@ -3,6 +3,7 @@
 * **gateway**: The IoT gateway running on the local network.
 * **cloud**: The registration server/DNS/PageKite combo.
     * All API calls to the registration server are done through TLS, assuming the server is properly configured.
+    * PageKite tunnels are set up with unique secret tokens for each domain.
 * **LE**: [Let's Encrypt](https://letsencrypt.org/)
 * **browser**: The user's web browser.
 * **email**: The user's email.
