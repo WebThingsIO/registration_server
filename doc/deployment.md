@@ -93,12 +93,10 @@ Port 53 over TCP and UDP needs to be forwarded for PowerDNS. The ports used for 
       	}
 ```
 
-* The `$CONFIG_DIR/env` file is used to set any environment variable need. It is mandatory to declare DOMAIN and SECRET to configure PageKite. For instance, set DOMAIN to `box.yourdomain.com`. Here's a full example:
+* The `$CONFIG_DIR/env` file is used to set any environment variable need. It is mandatory to declare DOMAIN to configure PageKite. For instance, set DOMAIN to `box.yourdomain.com`. Here's a full example:
 ```
 # Domain specific configuration for pagekite.
-
 DOMAIN=box.yourdomain.com
-SECRET=moziot
 
 # Other variables useful for other purposes.
 export RUST_LOG=debug

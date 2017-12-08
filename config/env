@@ -1,7 +1,5 @@
 # Domain specific configuration for pagekite.
-
 DOMAIN=mydomain.org
-SECRET=moziot
 
 # Other variables useful for other purposes.
 export RUST_LOG=debug
