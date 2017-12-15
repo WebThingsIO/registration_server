@@ -48,7 +48,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 ENV PATH=/home/user/.cargo/bin:/home/user/bin:$PATH
 
 WORKDIR /home/user/server
-RUN cargo build --release --features sqlite
+RUN cargo build --release --features mysql
 WORKDIR /home/user
 
 USER root
