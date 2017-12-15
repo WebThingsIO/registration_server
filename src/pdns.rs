@@ -230,8 +230,8 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         }
 
         if qtype == "ANY" {
-            // Add a "MX" record.
-            let ns_record = PdnsLookupResponse {
+            // Add an "MX" record.
+            let mx_record = PdnsLookupResponse {
                 qtype: "MX".to_owned(),
                 qname: original_qname.to_owned(),
                 content: config.options.pdns.mx_record.to_owned(),
@@ -242,7 +242,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
             };
             pdns_response
                 .result
-                .push(PdnsResponseParams::Lookup(ns_record));
+                .push(PdnsResponseParams::Lookup(mx_record));
         }
 
         let conn = config.db.get_connection();
@@ -251,30 +251,32 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         }
         let conn = conn.unwrap();
 
+        let api_domain = format!("api.{}.", domain);
+        let domain_lookup = conn.get_domain_by_name(&qname);
+
         // Look for a record with the qname.
-        match conn.get_domain_by_name(&qname) {
-            Ok(record) => {
-                let a_record = config.options.general.tunnel_ip.to_owned();
+        if qname == api_domain || domain_lookup.is_ok() {
+            if qtype == "ANY" || qtype == "A" {
+                // Add an "A" record.
+                let a_record = PdnsLookupResponse {
+                    qtype: "A".to_owned(),
+                    qname: original_qname.to_owned(),
+                    content: config.options.general.tunnel_ip.to_owned(),
+                    ttl: config.options.pdns.dns_ttl,
+                    domain_id: None,
+                    scope_mask: None,
+                    auth: None,
+                };
+                pdns_response
+                    .result
+                    .push(PdnsResponseParams::Lookup(a_record));
+            }
 
-                if qtype == "ANY" || qtype == "A" {
-                    // Add an "A" record.
-                    let ns_record = PdnsLookupResponse {
-                        qtype: "A".to_owned(),
-                        qname: original_qname.to_owned(),
-                        content: a_record,
-                        ttl: config.options.pdns.dns_ttl,
-                        domain_id: None,
-                        scope_mask: None,
-                        auth: None,
-                    };
-                    pdns_response
-                        .result
-                        .push(PdnsResponseParams::Lookup(ns_record));
-                }
-
-                if (qtype == "ANY" || qtype == "TXT") && !record.dns_challenge.is_empty() {
+            if (qtype == "ANY" || qtype == "TXT") && domain_lookup.is_ok() {
+                let record = domain_lookup.unwrap();
+                if !record.dns_challenge.is_empty() {
                     // Add a "TXT" record with the DNS challenge content.
-                    let ns_record = PdnsLookupResponse {
+                    let txt_record = PdnsLookupResponse {
                         qtype: "TXT".to_owned(),
                         qname: original_qname.to_owned(),
                         content: record.dns_challenge,
@@ -285,43 +287,41 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                     };
                     pdns_response
                         .result
-                        .push(PdnsResponseParams::Lookup(ns_record));
-                }
-
-                if qtype == "ANY" {
-                    // Add a "CAA" record.
-                    let ns_record = PdnsLookupResponse {
-                        qtype: "CAA".to_owned(),
-                        qname: original_qname.to_owned(),
-                        content: config.options.pdns.caa_record.to_owned(),
-                        ttl: config.options.pdns.dns_ttl,
-                        domain_id: None,
-                        scope_mask: None,
-                        auth: None,
-                    };
-                    pdns_response
-                        .result
-                        .push(PdnsResponseParams::Lookup(ns_record));
+                        .push(PdnsResponseParams::Lookup(txt_record));
                 }
             }
-            Err(_) => {
-                info!("No record for this name {}", qname);
-                // If there's no record in the database
-                // we add a "TXT" record from the config file (if any).
-                if qtype == "ANY" {
-                    let ns_record = PdnsLookupResponse {
-                        qtype: "TXT".to_owned(),
-                        qname: original_qname.to_owned(),
-                        content: config.options.pdns.txt_record.to_owned(),
-                        ttl: config.options.pdns.dns_ttl,
-                        domain_id: None,
-                        scope_mask: None,
-                        auth: None,
-                    };
-                    pdns_response
-                        .result
-                        .push(PdnsResponseParams::Lookup(ns_record));
-                }
+
+            if qtype == "ANY" {
+                // Add a "CAA" record.
+                let caa_record = PdnsLookupResponse {
+                    qtype: "CAA".to_owned(),
+                    qname: original_qname.to_owned(),
+                    content: config.options.pdns.caa_record.to_owned(),
+                    ttl: config.options.pdns.dns_ttl,
+                    domain_id: None,
+                    scope_mask: None,
+                    auth: None,
+                };
+                pdns_response
+                    .result
+                    .push(PdnsResponseParams::Lookup(caa_record));
+            }
+        } else {
+            info!("No record for this name {}", qname);
+            // If there's no record in the database, we add the "TXT" record from the config file.
+            if qtype == "ANY" {
+                let txt_record = PdnsLookupResponse {
+                    qtype: "TXT".to_owned(),
+                    qname: original_qname.to_owned(),
+                    content: config.options.pdns.txt_record.to_owned(),
+                    ttl: config.options.pdns.dns_ttl,
+                    domain_id: None,
+                    scope_mask: None,
+                    auth: None,
+                };
+                pdns_response
+                    .result
+                    .push(PdnsResponseParams::Lookup(txt_record));
             }
         }
         return Ok(pdns_response);
