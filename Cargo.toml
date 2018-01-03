@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["fabrice <fabrice@desre.org>"]
 
 [dependencies]
-clap = "2.27"
+clap = "2.29"
 email = "0.0"
 env_logger = "0.4"
 hyper-native-tls = "0.2"
@@ -12,7 +12,7 @@ iron = "0.6"
 iron-cors = { git = "https://github.com/mozilla-iot/iron-cors.git" }
 lettre = "0.7"
 lettre_email = "0.7"
-log = "0.3"
+log = "0.4"
 mount = "0.4"
 params = "0.8"
 r2d2 = "0.8"
@@ -37,8 +37,8 @@ sqlite = ["r2d2-diesel", "diesel/sqlite"]
 
 [dependencies.diesel]
 optional = true
-version = "0.99"
+version = "1.0"
 
 [dependencies.r2d2-diesel]
 optional = true
-version = "0.99"
+version = "1.0"
