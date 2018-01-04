@@ -8,7 +8,7 @@ This server exposes a HTTP(S) API that lets you register a gateway with the serv
 
 ## Usage
 
-```bash
+```
 USAGE:
     registration_server [OPTIONS]
 
