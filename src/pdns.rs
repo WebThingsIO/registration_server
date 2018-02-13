@@ -107,7 +107,7 @@ fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
 fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsResponse, String> {
     // PageKite sends DNS requests to qnames like:
     // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
-    // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.box.knilxof.org.box.knilxof.org
+    // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.mozilla-iot.org.mozilla-iot.org
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
     debug!("PageKite query for {} {}", qtype, qname);
 
@@ -195,13 +195,13 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         //
         // {"method": "lookup",
         //  "parameters": {"local": "0.0.0.0",
-        //                 "qname": "fabrice.box.knilxof.org.",
+        //                 "qname": "fabrice.mozilla-iot.org.",
         //                 "qtype": "SOA",
         //                 "real-remote": "63.245.221.198/32",
         //                 "remote": "63.245.221.198",
         //                 "zone-id": -1}}
 
-        // If the qname ends up with .box.$domain.box.$domain. we consider that
+        // If the qname ends up with .$domain.$domain. we consider that
         // it's a PageKite request and process it separately.
         let domain = &config.options.general.domain;
         if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
