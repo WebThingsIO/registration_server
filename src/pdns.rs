@@ -30,7 +30,8 @@ struct PdnsRequestParameters {
     // lookup method
     qtype: Option<String>,
     qname: Option<String>,
-    #[serde(rename = "zone-id")] zone_id: Option<i32>,
+    #[serde(rename = "zone-id")]
+    zone_id: Option<i32>,
     remote: Option<String>,
     local: Option<String>,
     real_remote: Option<String>,
@@ -48,11 +49,13 @@ struct PdnsLookupResponse {
     qname: String,
     content: String,
     ttl: u32,
-    #[serde(skip_serializing_if = "Option::is_none")] domain_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    domain_id: Option<String>,
     #[serde(rename = "scopeMask")]
     #[serde(skip_serializing_if = "Option::is_none")]
     scope_mask: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] auth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -252,7 +255,29 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         let conn = conn.unwrap();
 
         let api_domain = format!("api.{}.", domain);
+        let psl_domain = format!("_psl.{}.", domain);
         let domain_lookup = conn.get_domain_by_name(&qname);
+
+        if qname == psl_domain {
+            // Add the PSL record if known. If not, just return, as this subdomain is forbidden
+            // otherwise.
+            if (qtype == "ANY" || qtype == "TXT") && config.options.pdns.psl_record.is_some() {
+                let psl_record = PdnsLookupResponse {
+                    qtype: "TXT".to_owned(),
+                    qname: original_qname.to_owned(),
+                    content: config.options.pdns.clone().psl_record.unwrap(),
+                    ttl: config.options.pdns.dns_ttl,
+                    domain_id: None,
+                    scope_mask: None,
+                    auth: None,
+                };
+                pdns_response
+                    .result
+                    .push(PdnsResponseParams::Lookup(psl_record));
+            }
+
+            return Ok(pdns_response);
+        }
 
         // Look for a record with the qname.
         if qname == api_domain || domain_lookup.is_ok() {
@@ -617,5 +642,19 @@ mod tests {
                            \"qname\":\"example.org\",\
                            \"content\":\"\",\"ttl\":89}]}";
         assert_eq!(&result, any_success);
+
+        // PSL query
+        let request = build_request("lookup", Some("TXT"), Some("_psl.mydomain.org."));
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 124);
+        let result = String::from_utf8(answer[..124].to_vec()).unwrap();
+        let psl_success = "{\"result\":[{\"qtype\":\"TXT\",\
+                           \"qname\":\"_psl.mydomain.org.\",\
+                           \"content\":\"https://github.com/publicsuffix/list/pull/XYZ\",\
+                           \"ttl\":89}]}";
+        assert_eq!(&result, psl_success);
     }
 }

@@ -25,6 +25,7 @@ pub struct PdnsOptions {
     pub mx_record: String,
     pub caa_record: String,
     pub txt_record: String,
+    pub psl_record: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]

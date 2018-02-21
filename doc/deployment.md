@@ -140,6 +140,8 @@ socket_path = "/tmp/powerdns_tunnel.sock"
 mx_record = ""
 caa_record = "0 issue \"letsencrypt.org\""
 txt_record = ""
+# Uncomment to set a PSL authentication record
+# psl_record = "https://github.com/publicsuffix/list/pull/XYZ"
 
 [email]
 server = "mail.gandi.net"

@@ -219,10 +219,10 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Ensure that subdomain is valid:
     // - Contains only a-z, 0-9, and hyphens, but does not start or end
     //   with hyphen.
-    // - Is not equal to "api" or "www", as those are reserved.
+    // - Is not equal to "api", "www", or "_psl" as those are reserved.
     let re = Regex::new(r"^([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$").unwrap();
-    if !re.is_match(&subdomain) || subdomain == "api" || subdomain == "www" || subdomain.len() > 63
-        || full_name.len() > 253
+    if !re.is_match(&subdomain) || subdomain == "api" || subdomain == "www" || subdomain == "_psl"
+        || subdomain.len() > 63 || full_name.len() > 253
     {
         let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
         response.status = Some(status::BadRequest);
@@ -834,15 +834,20 @@ mod tests {
         // PageKite queries
         #[derive(Deserialize)]
         struct PdnsLookupResponse {
-            #[allow(dead_code)] qtype: String,
-            #[allow(dead_code)] qname: String,
+            #[allow(dead_code)]
+            qtype: String,
+            #[allow(dead_code)]
+            qname: String,
             content: String,
-            #[allow(dead_code)] ttl: u32,
-            #[allow(dead_code)] domain_id: Option<String>,
+            #[allow(dead_code)]
+            ttl: u32,
+            #[allow(dead_code)]
+            domain_id: Option<String>,
             #[allow(dead_code)]
             #[serde(rename = "scopeMask")]
             scope_mask: Option<String>,
-            #[allow(dead_code)] auth: Option<String>,
+            #[allow(dead_code)]
+            auth: Option<String>,
         }
         #[derive(Deserialize)]
         struct PdnsResponse {
