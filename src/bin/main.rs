@@ -38,8 +38,7 @@ fn main() {
         let cfg = config.clone();
         let addr = format!(
             "{}:{}",
-            config.options.general.host,
-            config.options.general.http_port
+            config.options.general.host, config.options.general.http_port
         );
         threads.push(thread::spawn(move || {
             let iron_server = Iron::new(routes::create_chain("/", &cfg));
@@ -57,8 +56,7 @@ fn main() {
             let cfg = config.clone();
             let addr = format!(
                 "{}:{}",
-                config.options.general.host,
-                config.options.general.https_port
+                config.options.general.host, config.options.general.https_port
             );
             let identity_directory = config.options.general.identity_directory.clone().unwrap();
             threads.push(thread::spawn(move || {

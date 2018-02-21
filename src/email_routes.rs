@@ -147,9 +147,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
                 };
                 let full_link = format!(
                     "{}://api.{}/verifyemail?s={}",
-                    scheme,
-                    config.options.general.domain,
-                    verification_token
+                    scheme, config.options.general.domain, verification_token
                 );
                 let body = config
                     .options

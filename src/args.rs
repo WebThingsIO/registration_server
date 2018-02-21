@@ -24,6 +24,7 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --mx-record=[record]            'The MX record the PowerDNS server should return.'
 --caa-record=[record]           'The CAA record the PowerDNS server should return.'
 --txt-record=[record]           'The TXT record the PowerDNS server should return.'
+--psl-record=[record]           'The TXT record used to authenticate against the Public Suffix List.'
 --email-server=[name]           'The name of the SMTP server.'
 --email-user=[username]         'The username to authenticate with.'
 --email-password=[pass]         'The password for this email account.'
@@ -78,6 +79,7 @@ impl ArgsParser {
         optional!(confirmation_body, "confirmation-body");
         optional!(success_page, "success-page");
         optional!(error_page, "error-page");
+        optional!(psl_record, "psl-record");
 
         Args {
             general: GeneralOptions {
@@ -115,6 +117,7 @@ impl ArgsParser {
                     .value_of("txt-record")
                     .unwrap_or("_txt_not_configured_")
                     .to_owned(),
+                psl_record: psl_record,
             },
             email: EmailOptions {
                 server: email_server,
@@ -165,6 +168,7 @@ fn test_args() {
     assert_eq!(args.pdns.mx_record, "_mx_not_configured_");
     assert_eq!(args.pdns.caa_record, "_caa_not_configured_");
     assert_eq!(args.pdns.txt_record, "_txt_not_configured_");
+    assert_eq!(args.pdns.psl_record, None);
     assert_eq!(args.email.server, None);
     assert_eq!(args.email.user, None);
     assert_eq!(args.email.password, None);
@@ -192,6 +196,7 @@ fn test_args() {
         "--mx-record=_my_mx",
         "--caa-record=_my_caa",
         "--txt-record=_my_txt",
+        "--psl-record=_my_psl",
         "--email-server=test.email.com",
         "--email-user=my_email_user",
         "--email-password=my_password",
@@ -221,6 +226,7 @@ fn test_args() {
     assert_eq!(args.pdns.mx_record, "_my_mx");
     assert_eq!(args.pdns.caa_record, "_my_caa");
     assert_eq!(args.pdns.txt_record, "_my_txt");
+    assert_eq!(args.pdns.psl_record, Some("_my_psl".to_owned()));
     assert_eq!(args.email.server, Some("test.email.com".to_owned()));
     assert_eq!(args.email.user, Some("my_email_user".to_owned()));
     assert_eq!(args.email.password, Some("my_password".to_owned()));
@@ -297,6 +303,10 @@ fn test_args() {
     assert_eq!(args.pdns.mx_record, mx);
     assert_eq!(args.pdns.caa_record, caa);
     assert_eq!(args.pdns.txt_record, txt);
+    assert_eq!(
+        args.pdns.psl_record,
+        Some("https://github.com/publicsuffix/list/pull/XYZ".to_owned())
+    );
     assert_eq!(args.email.server, Some("mail.gandi.net".to_owned()));
     assert_eq!(args.email.user, Some("accounts@mydomain.org".to_owned()));
     assert_eq!(args.email.password, Some("******".to_owned()));

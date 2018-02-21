@@ -18,8 +18,6 @@ FLAGS:
 
 OPTIONS:
         --caa-record <record>           The CAA record the PowerDNS server should return.
-        --identity-directory <dir>      Identity directory.
-        --identity-password <password>  Identity password.
         --config-file <path>            Path to a toml configuration file.
         --confirmation-body <s>         The body of the confirmation email.
         --confirmation-title <s>        The title of the confirmation email.
@@ -34,7 +32,10 @@ OPTIONS:
         --host <host>                   Set local hostname.
         --http-port <port>              Set port to listen on for HTTP connections (0 to turn off).
         --https-port <port>             Set port to listen on for TLS connections (0 to turn off).
+        --identity-directory <dir>      Identity directory.
+        --identity-password <password>  Identity password.
         --mx-record <record>            The MX record the PowerDNS server should return.
+        --psl-record <record>           The TXT record used to authenticate against the Public Suffix List.
         --reclamation-body <s>          The body of the domain reclamation email.
         --reclamation-title <s>         The title of the domain reclamation email.
         --soa-content <dns>             The content of the SOA record for this tunnel.

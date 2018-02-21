@@ -520,19 +520,17 @@ fn test_email() {
     // Create a domain linked to an account, and verify that deleting the account also deletes the
     // domain.
     let test_account_id = conn.add_account(&test_account.email).unwrap().id;
-    assert!(
-        conn.add_domain(
-            "test.example.org",
-            test_account_id,
-            "test-token",
-            "Test Server",
-            0,
-            "",
-            "",
-            "",
-            false
-        ).is_ok()
-    );
+    assert!(conn.add_domain(
+        "test.example.org",
+        test_account_id,
+        "test-token",
+        "Test Server",
+        0,
+        "",
+        "",
+        "",
+        false
+    ).is_ok());
     assert!(
         conn.get_domains_by_account_id(test_account_id)
             .unwrap()
