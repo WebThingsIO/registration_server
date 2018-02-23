@@ -130,7 +130,6 @@ db_path = "/home/user/data/domains.sqlite"
 # Uncomment to use TLS (recommended)
 # identity_directory = "/home/user/config"
 # identity_password = "mypassword"
-tunnel_ip = "1.2.3.4"
 
 [pdns]
 dns_ttl = 1203
@@ -142,6 +141,19 @@ caa_record = "0 issue \"letsencrypt.org\""
 txt_record = ""
 # Uncomment to set a PSL authentication record
 # psl_record = "https://github.com/publicsuffix/list/pull/XYZ"
+
+  [pdns.geoip]
+  default = "5.6.7.8"
+  database = "/home/user/geoip/GeoLite2-Country.mmdb"
+
+    [pdns.geoip.continent]
+    AF = "1.2.3.4"
+    AN = "2.3.4.5"
+    AS = "3.4.5.6"
+    EU = "4.5.6.7"
+    NA = "5.6.7.8"
+    OC = "6.7.8.9"
+    SA = "9.8.7.6"
 
 [email]
 server = "mail.gandi.net"

@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use clap::{App, ArgMatches};
-use config::{Args, EmailOptions, GeneralOptions, PdnsOptions};
+use config::{Args, Continent, EmailOptions, GeneralOptions, GeoIp, PdnsOptions};
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -17,7 +17,6 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --db-path=[path]                'The database path: file path, postgres://..., mysql://...'
 --identity-directory=[dir]      'Identity directory.'
 --identity-password=[password]  'Identity password.'
---tunnel-ip=[ip]                'The IP address of the tunnel endpoint.'
 --dns-ttl=[ttl]                 'TTL of the DNS records, in seconds.'
 --soa-content=[dns]             'The content of the SOA record for this tunnel.'
 --socket-path=[path]            'The path to the socket used to communicate with PowerDNS.'
@@ -25,6 +24,15 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --caa-record=[record]           'The CAA record the PowerDNS server should return.'
 --txt-record=[record]           'The TXT record the PowerDNS server should return.'
 --psl-record=[record]           'The TXT record used to authenticate against the Public Suffix List.'
+--geoip-default=[ip]            'The IP address of the default tunnel endpoint.'
+--geoip-database=[path]         'Path to the GeoIP2/GeoLite2 database.'
+--geoip-continent-af=[ip]       'The IP address of the tunnel endpoint for Africa.'
+--geoip-continent-an=[ip]       'The IP address of the tunnel endpoint for Antarctica.'
+--geoip-continent-as=[ip]       'The IP address of the tunnel endpoint for Asia.'
+--geoip-continent-eu=[ip]       'The IP address of the tunnel endpoint for Europe.'
+--geoip-continent-na=[ip]       'The IP address of the tunnel endpoint for North America.'
+--geoip-continent-oc=[ip]       'The IP address of the tunnel endpoint for Oceania.'
+--geoip-continent-sa=[ip]       'The IP address of the tunnel endpoint for South America.'
 --email-server=[name]           'The name of the SMTP server.'
 --email-user=[username]         'The username to authenticate with.'
 --email-password=[pass]         'The password for this email account.'
@@ -80,6 +88,14 @@ impl ArgsParser {
         optional!(success_page, "success-page");
         optional!(error_page, "error-page");
         optional!(psl_record, "psl-record");
+        optional!(geoip_database, "geoip-database");
+        optional!(geoip_continent_af, "geoip-continent-af");
+        optional!(geoip_continent_an, "geoip-continent-an");
+        optional!(geoip_continent_as, "geoip-continent-as");
+        optional!(geoip_continent_eu, "geoip-continent-eu");
+        optional!(geoip_continent_na, "geoip-continent-na");
+        optional!(geoip_continent_oc, "geoip-continent-oc");
+        optional!(geoip_continent_sa, "geoip-continent-sa");
 
         Args {
             general: GeneralOptions {
@@ -93,10 +109,6 @@ impl ArgsParser {
                 db_path: String::from(matches.value_of("db-path").unwrap_or("./domains.sqlite")),
                 identity_directory: identity_directory,
                 identity_password: identity_password,
-                tunnel_ip: matches
-                    .value_of("tunnel-ip")
-                    .unwrap_or("0.0.0.0")
-                    .to_owned(),
             },
             pdns: PdnsOptions {
                 dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
@@ -118,6 +130,22 @@ impl ArgsParser {
                     .unwrap_or("_txt_not_configured_")
                     .to_owned(),
                 psl_record: psl_record,
+                geoip: GeoIp {
+                    default: matches
+                        .value_of("geoip-default")
+                        .unwrap_or("0.0.0.0")
+                        .to_owned(),
+                    database: geoip_database,
+                    continent: Continent {
+                        AF: geoip_continent_af,
+                        AN: geoip_continent_an,
+                        AS: geoip_continent_as,
+                        EU: geoip_continent_eu,
+                        NA: geoip_continent_na,
+                        OC: geoip_continent_oc,
+                        SA: geoip_continent_sa,
+                    },
+                },
             },
             email: EmailOptions {
                 server: email_server,
@@ -152,7 +180,7 @@ impl ArgsParser {
 
 #[test]
 fn test_args() {
-    let args = ArgsParser::from_vec(vec!["registration_server", "--tunnel-ip=1.2.3.4"]);
+    let args = ArgsParser::from_vec(vec!["registration_server", "--geoip-default=1.2.3.4"]);
 
     assert_eq!(args.general.host, "0.0.0.0");
     assert_eq!(args.general.http_port, 4242);
@@ -161,7 +189,6 @@ fn test_args() {
     assert_eq!(args.general.db_path, "./domains.sqlite");
     assert_eq!(args.general.identity_directory, None);
     assert_eq!(args.general.identity_password, None);
-    assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 60);
     assert_eq!(args.pdns.soa_content, "_soa_not_configured_");
     assert_eq!(args.pdns.socket_path, None);
@@ -169,6 +196,15 @@ fn test_args() {
     assert_eq!(args.pdns.caa_record, "_caa_not_configured_");
     assert_eq!(args.pdns.txt_record, "_txt_not_configured_");
     assert_eq!(args.pdns.psl_record, None);
+    assert_eq!(args.pdns.geoip.default, "1.2.3.4");
+    assert_eq!(args.pdns.geoip.database, None);
+    assert_eq!(args.pdns.geoip.continent.AF, None);
+    assert_eq!(args.pdns.geoip.continent.AN, None);
+    assert_eq!(args.pdns.geoip.continent.AS, None);
+    assert_eq!(args.pdns.geoip.continent.EU, None);
+    assert_eq!(args.pdns.geoip.continent.NA, None);
+    assert_eq!(args.pdns.geoip.continent.OC, None);
+    assert_eq!(args.pdns.geoip.continent.SA, None);
     assert_eq!(args.email.server, None);
     assert_eq!(args.email.user, None);
     assert_eq!(args.email.password, None);
@@ -189,7 +225,15 @@ fn test_args() {
         "--db-path=/tmp/mydata/domains.sqlite",
         "--identity-directory=/tmp/mycerts",
         "--identity-password=mypass",
-        "--tunnel-ip=1.2.3.4",
+        "--geoip-default=1.2.3.4",
+        "--geoip-database=/path/to/mmdb",
+        "--geoip-continent-af=1.1.1.1",
+        "--geoip-continent-an=2.2.2.2",
+        "--geoip-continent-as=3.3.3.3",
+        "--geoip-continent-eu=4.4.4.4",
+        "--geoip-continent-na=5.5.5.5",
+        "--geoip-continent-oc=6.6.6.6",
+        "--geoip-continent-sa=7.7.7.7",
         "--dns-ttl=120",
         "--soa-content=_my_soa",
         "--socket-path=/tmp/socket",
@@ -219,7 +263,6 @@ fn test_args() {
         Some(PathBuf::from("/tmp/mycerts"))
     );
     assert_eq!(args.general.identity_password, Some("mypass".to_owned()));
-    assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 120);
     assert_eq!(args.pdns.soa_content, "_my_soa");
     assert_eq!(args.pdns.socket_path, Some("/tmp/socket".to_owned()));
@@ -227,6 +270,15 @@ fn test_args() {
     assert_eq!(args.pdns.caa_record, "_my_caa");
     assert_eq!(args.pdns.txt_record, "_my_txt");
     assert_eq!(args.pdns.psl_record, Some("_my_psl".to_owned()));
+    assert_eq!(args.pdns.geoip.default, "1.2.3.4");
+    assert_eq!(args.pdns.geoip.database, Some("/path/to/mmdb".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.AF, Some("1.1.1.1".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.AN, Some("2.2.2.2".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.AS, Some("3.3.3.3".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.EU, Some("4.4.4.4".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.NA, Some("5.5.5.5".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.OC, Some("6.6.6.6".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.SA, Some("7.7.7.7".to_owned()));
     assert_eq!(args.email.server, Some("test.email.com".to_owned()));
     assert_eq!(args.email.user, Some("my_email_user".to_owned()));
     assert_eq!(args.email.password, Some("my_password".to_owned()));
@@ -293,7 +345,6 @@ fn test_args() {
         args.general.identity_password,
         Some("mypassword".to_owned())
     );
-    assert_eq!(args.general.tunnel_ip, "1.2.3.4");
     assert_eq!(args.pdns.dns_ttl, 89);
     assert_eq!(args.pdns.soa_content, soa);
     assert_eq!(
@@ -307,6 +358,18 @@ fn test_args() {
         args.pdns.psl_record,
         Some("https://github.com/publicsuffix/list/pull/XYZ".to_owned())
     );
+    assert_eq!(args.pdns.geoip.default, "5.6.7.8");
+    assert_eq!(
+        args.pdns.geoip.database,
+        Some("./test-data/GeoLite2-Country_20180206/GeoLite2-Country.mmdb".to_owned())
+    );
+    assert_eq!(args.pdns.geoip.continent.AF, Some("1.2.3.4".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.AN, Some("2.3.4.5".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.AS, Some("3.4.5.6".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.EU, Some("4.5.6.7".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.NA, Some("5.6.7.8".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.OC, Some("6.7.8.9".to_owned()));
+    assert_eq!(args.pdns.geoip.continent.SA, Some("9.8.7.6".to_owned()));
     assert_eq!(args.email.server, Some("mail.gandi.net".to_owned()));
     assert_eq!(args.email.user, Some("accounts@mydomain.org".to_owned()));
     assert_eq!(args.email.password, Some("******".to_owned()));

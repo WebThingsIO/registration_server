@@ -6,6 +6,25 @@ use database::DatabasePool;
 use std::path::PathBuf;
 
 #[derive(Clone, Deserialize)]
+#[allow(non_snake_case)]
+pub struct Continent {
+    pub AF: Option<String>,
+    pub AN: Option<String>,
+    pub AS: Option<String>,
+    pub EU: Option<String>,
+    pub NA: Option<String>,
+    pub OC: Option<String>,
+    pub SA: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct GeoIp {
+    pub default: String,
+    pub database: Option<String>,
+    pub continent: Continent,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct GeneralOptions {
     pub host: String,
     pub http_port: u16,
@@ -14,7 +33,6 @@ pub struct GeneralOptions {
     pub identity_directory: Option<PathBuf>,
     pub identity_password: Option<String>,
     pub domain: String,
-    pub tunnel_ip: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -26,6 +44,7 @@ pub struct PdnsOptions {
     pub caa_record: String,
     pub txt_record: String,
     pub psl_record: Option<String>,
+    pub geoip: GeoIp,
 }
 
 #[derive(Clone, Deserialize)]
