@@ -10,7 +10,9 @@ identity_directory = "/tmp/certs"
 identity_password = "mypassword"
 
 [pdns]
-dns_ttl = 89
+api_ttl = 10
+dns_ttl = 600
+tunnel_ttl = 60
 soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
 socket_path = "/tmp/powerdns_tunnel.sock"
 mx_record = ""

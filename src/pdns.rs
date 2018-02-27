@@ -105,7 +105,7 @@ pub fn lookup_continent(remote: IpAddr, config: &Config) -> Option<String> {
 }
 
 // Returns an A record for a given qname.
-fn a_response(qname: &str, config: &Config, remote: Option<String>, continent: Option<String>) -> PdnsLookupResponse {
+fn a_response(qname: &str, ttl: u32, config: &Config, remote: Option<String>, continent: Option<String>) -> PdnsLookupResponse {
     // Do a GeoIP lookup on the remote IP, if the GeoIP database is configured. If the remote is
     // not set, use the passed in continent value.
     let c = match config.options.pdns.geoip.database {
@@ -126,7 +126,7 @@ fn a_response(qname: &str, config: &Config, remote: Option<String>, continent: O
         qtype: "A".to_owned(),
         qname: qname.to_owned(),
         content: result.to_owned(),
-        ttl: config.options.pdns.dns_ttl,
+        ttl: ttl,
         domain_id: None,
         scope_mask: None,
         auth: None,
@@ -277,7 +277,7 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
         qtype: "A".to_owned(),
         qname: qname.to_owned(),
         content: ip.to_owned(),
-        ttl: config.options.pdns.dns_ttl,
+        ttl: config.options.pdns.tunnel_ttl,
         domain_id: None,
         scope_mask: None,
         auth: None,
@@ -387,6 +387,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         .result
                         .push(PdnsResponseParams::Lookup(a_response(
                             &original_qname,
+                            config.options.pdns.api_ttl,
                             config,
                             remote,
                             None,
@@ -405,6 +406,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         .result
                         .push(PdnsResponseParams::Lookup(a_response(
                             &original_qname,
+                            config.options.pdns.tunnel_ttl,
                             config,
                             None,
                             continent,
@@ -681,7 +683,7 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 143);
+        assert_eq!(stream.read(&mut answer).unwrap(), 144);
         assert_eq!(&answer[..25], soa_exampleorg);
 
         // SOA PageKite query, to create a successful response without having
@@ -700,7 +702,7 @@ mod tests {
         let result = String::from_utf8(answer[..119].to_vec()).unwrap();
         let soa_success = "{\"result\":[{\"qtype\":\"A\",\
                            \"qname\":\"1d48.https-4443.test.mydomain.org.mydomain.org.\",\
-                           \"content\":\"255.255.255.0\",\"ttl\":89}]}";
+                           \"content\":\"255.255.255.0\",\"ttl\":60}]}";
         assert_eq!(&result, soa_success);
 
         // ANY query
@@ -709,14 +711,14 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 131);
-        let result = String::from_utf8(answer[..131].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 133);
+        let result = String::from_utf8(answer[..133].to_vec()).unwrap();
         let any_success = "{\"result\":[{\"qtype\":\"MX\",\
                            \"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":89},\
+                           \"content\":\"\",\"ttl\":600},\
                            {\"qtype\":\"TXT\",\
                            \"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":89}]}";
+                           \"content\":\"\",\"ttl\":600}]}";
         assert_eq!(&result, any_success);
 
         // PSL query
@@ -725,12 +727,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 124);
-        let result = String::from_utf8(answer[..124].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 125);
+        let result = String::from_utf8(answer[..125].to_vec()).unwrap();
         let psl_success = "{\"result\":[{\"qtype\":\"TXT\",\
                            \"qname\":\"_psl.mydomain.org.\",\
                            \"content\":\"https://github.com/publicsuffix/list/pull/XYZ\",\
-                           \"ttl\":89}]}";
+                           \"ttl\":600}]}";
         assert_eq!(&result, psl_success);
 
         // A query (AF)
@@ -749,7 +751,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"1.2.3.4\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
 
         // A query (AN)
@@ -768,7 +770,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"2.3.4.5\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
 
         // A query (AS)
@@ -787,7 +789,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"3.4.5.6\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
 
         // A query (EU)
@@ -806,7 +808,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"4.5.6.7\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
 
         // A query (NA)
@@ -825,7 +827,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"5.6.7.8\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
 
         // A query (OC)
@@ -844,7 +846,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"6.7.8.9\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
 
         // A query (SA)
@@ -863,7 +865,7 @@ mod tests {
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"9.8.7.6\",\
-                         \"ttl\":89}]}";
+                         \"ttl\":10}]}";
         assert_eq!(&result, a_success);
     }
 }

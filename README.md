@@ -17,12 +17,13 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
+        --api-ttl <ttl>                 TTL of the DNS records for the api subdomain, in seconds.
         --caa-record <record>           The CAA record the PowerDNS server should return.
         --config-file <path>            Path to a toml configuration file.
         --confirmation-body <s>         The body of the confirmation email.
         --confirmation-title <s>        The title of the confirmation email.
         --db-path <path>                The database path: file path, postgres://..., mysql://...
-        --dns-ttl <ttl>                 TTL of the DNS records, in seconds.
+        --dns-ttl <ttl>                 TTL of the SOA/MX/TXT/CAA DNS records, in seconds.
         --domain <domain>               The domain that will be tied to this registration server.
         --email-password <pass>         The password for this email account.
         --email-sender <email>          The email identity to use as a sender.
@@ -50,6 +51,7 @@ OPTIONS:
         --soa-content <dns>             The content of the SOA record for this tunnel.
         --socket-path <path>            The path to the socket used to communicate with PowerDNS.
         --success-page <s>              HTML content of the email confirmation success page.
+        --tunnel-ttl <ttl>              TTL of the DNS records for tunnels, in seconds.
         --txt-record <record>           The TXT record the PowerDNS server should return.
 ```
 

@@ -17,7 +17,9 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --db-path=[path]                'The database path: file path, postgres://..., mysql://...'
 --identity-directory=[dir]      'Identity directory.'
 --identity-password=[password]  'Identity password.'
---dns-ttl=[ttl]                 'TTL of the DNS records, in seconds.'
+--dns-ttl=[ttl]                 'TTL of the SOA/MX/TXT/CAA DNS records, in seconds.'
+--api-ttl=[ttl]                 'TTL of the DNS records for the api subdomain, in seconds.'
+--tunnel-ttl=[ttl]              'TTL of the DNS records for tunnels, in seconds.'
 --soa-content=[dns]             'The content of the SOA record for this tunnel.'
 --socket-path=[path]            'The path to the socket used to communicate with PowerDNS.'
 --mx-record=[record]            'The MX record the PowerDNS server should return.'
@@ -111,7 +113,9 @@ impl ArgsParser {
                 identity_password: identity_password,
             },
             pdns: PdnsOptions {
-                dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(60),
+                api_ttl: value_t!(matches, "api-ttl", u32).unwrap_or(10),
+                dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(600),
+                tunnel_ttl: value_t!(matches, "tunnel-ttl", u32).unwrap_or(60),
                 soa_content: matches
                     .value_of("soa-content")
                     .unwrap_or("_soa_not_configured_")
@@ -189,7 +193,9 @@ fn test_args() {
     assert_eq!(args.general.db_path, "./domains.sqlite");
     assert_eq!(args.general.identity_directory, None);
     assert_eq!(args.general.identity_password, None);
-    assert_eq!(args.pdns.dns_ttl, 60);
+    assert_eq!(args.pdns.api_ttl, 10);
+    assert_eq!(args.pdns.dns_ttl, 600);
+    assert_eq!(args.pdns.tunnel_ttl, 60);
     assert_eq!(args.pdns.soa_content, "_soa_not_configured_");
     assert_eq!(args.pdns.socket_path, None);
     assert_eq!(args.pdns.mx_record, "_mx_not_configured_");
@@ -234,7 +240,9 @@ fn test_args() {
         "--geoip-continent-na=5.5.5.5",
         "--geoip-continent-oc=6.6.6.6",
         "--geoip-continent-sa=7.7.7.7",
-        "--dns-ttl=120",
+        "--api-ttl=120",
+        "--dns-ttl=140",
+        "--tunnel-ttl=160",
         "--soa-content=_my_soa",
         "--socket-path=/tmp/socket",
         "--mx-record=_my_mx",
@@ -263,7 +271,9 @@ fn test_args() {
         Some(PathBuf::from("/tmp/mycerts"))
     );
     assert_eq!(args.general.identity_password, Some("mypass".to_owned()));
-    assert_eq!(args.pdns.dns_ttl, 120);
+    assert_eq!(args.pdns.api_ttl, 120);
+    assert_eq!(args.pdns.dns_ttl, 140);
+    assert_eq!(args.pdns.tunnel_ttl, 160);
     assert_eq!(args.pdns.soa_content, "_my_soa");
     assert_eq!(args.pdns.socket_path, Some("/tmp/socket".to_owned()));
     assert_eq!(args.pdns.mx_record, "_my_mx");
@@ -345,7 +355,9 @@ fn test_args() {
         args.general.identity_password,
         Some("mypassword".to_owned())
     );
-    assert_eq!(args.pdns.dns_ttl, 89);
+    assert_eq!(args.pdns.api_ttl, 10);
+    assert_eq!(args.pdns.dns_ttl, 600);
+    assert_eq!(args.pdns.tunnel_ttl, 60);
     assert_eq!(args.pdns.soa_content, soa);
     assert_eq!(
         args.pdns.socket_path,
