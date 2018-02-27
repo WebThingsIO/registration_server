@@ -13,7 +13,7 @@ use iron::status::{self, Status};
 use iron_cors::CORS;
 use mount::Mount;
 use params::{FromValue, Params, Value};
-use pdns::pdns;
+use pdns::lookup_continent;
 use regex::Regex;
 use router::Router;
 use serde_json;
@@ -206,6 +206,11 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let conn = conn.unwrap();
 
+    let continent = match lookup_continent(req.remote_addr.ip(), &config) {
+        Some(val) => val,
+        None => "".to_owned(),
+    };
+
     // Extract the name parameter.
     let map = req.get_ref::<Params>().unwrap();
     let name = map.find(&["name"]);
@@ -245,7 +250,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 if reclamation_token == record.reclamation_token {
                     // Create a new token and update the existing record.
                     let token = format!("{}", Uuid::new_v4());
-                    match conn.update_domain_token(&record.name, &token) {
+                    match conn.update_domain_token(&record.name, &token, &continent) {
                         Ok(count) if count > 0 => {
                             // We don't want the full domain name or the DNS
                             // challenge in the response, so we create a local
@@ -326,6 +331,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 "",
                 "",
                 false,
+                &continent,
             ) {
                 Ok(_) => {
                     // We don't want the full domain name or the DNS
@@ -402,18 +408,6 @@ pub fn create_router(config: &Config) -> Router {
     handler!(setemail);
     handler!(revokeemail);
 
-    if config.options.pdns.socket_path.is_none() {
-        handler!(pdns);
-    }
-
-    // Tests need the pdns handler in all cases.
-    #[cfg(test)]
-    {
-        if config.options.pdns.socket_path.is_some() {
-            handler!(pdns);
-        }
-    }
-
     router
 }
 
@@ -461,15 +455,6 @@ mod tests {
 
     fn get(path: &str, router: &Router) -> (String, Status) {
         let resp = match request(method::Method::Get, path, "", router) {
-            Ok(response) => response,
-            Err(err) => err.response,
-        };
-        let status = resp.status.unwrap();
-        (response::extract_body_to_string(resp), status)
-    }
-
-    fn put(path: &str, body: &str, router: &Router) -> (String, Status) {
-        let resp = match request(method::Method::Get, path, body, router) {
             Ok(response) => response,
             Err(err) => err.response,
         };
@@ -699,226 +684,6 @@ mod tests {
             ),
             empty_ok
         );
-
-        // Tests for the pdns endpoint.
-
-        // Bogus payload.
-        assert_eq!(put("pdns", r#"{"foo": true}"#, &router), bad_request_error);
-
-        // Unsupported method.
-        assert_eq!(
-            put(
-                "pdns",
-                r#"{"method":"dummy", "parameters":{"qtype":"a","qname":"b"}}"#,
-                &router
-            ),
-            (r#"{"result":false}"#.to_owned(), status::Ok)
-        );
-
-        // Simplified local redeclaration of the pdns data structures since
-        // we don't need them to be public.
-        #[derive(Debug, Serialize)]
-        struct PdnsRequestParameters {
-            // intialize method
-            // path: Option<String>,
-            // timeout: Option<String>,
-
-            // lookup method
-            qtype: Option<String>,
-            qname: Option<String>,
-            // #[serde(rename="zone-id")]
-            // zone_id: Option<i32>,
-            // remote: Option<String>,
-            // local: Option<String>,
-            // real_remote: Option<String>,
-        }
-
-        #[derive(Debug, Serialize)]
-        struct PdnsRequest {
-            method: String,
-            parameters: PdnsRequestParameters,
-        }
-
-        // Failure for an unknown domain.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("A".to_owned()),
-                qname: Some("www.example.org.".to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-        assert_eq!(
-            put("pdns", &body, &router),
-            (r#"{"result":[]}"#.to_owned(), status::Ok)
-        );
-
-        // Test the "remote" dns name.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("A".to_owned()),
-                qname: Some("test.mydomain.org.".to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-
-        let success = "{\"result\":[{\"qtype\":\"A\",\"qname\":\"test.mydomain.org.\",\
-                       \"content\":\"1.2.3.4\",\"ttl\":89}]}";
-        assert_eq!(
-            put("pdns", &body, &router),
-            (success.to_owned(), status::Ok)
-        );
-
-        // Test LE challenge queries.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("TXT".to_owned()),
-                qname: Some("_acme-challenge.test.mydomain.org.".to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-
-        let success = "{\"result\":[{\"qtype\":\"TXT\",\
-                       \"qname\":\"_acme-challenge.test.mydomain.org.\",\
-                       \"content\":\"test_challenge\",\
-                       \"ttl\":89}]}";
-        assert_eq!(
-            put("pdns", &body, &router),
-            (success.to_owned(), status::Ok)
-        );
-
-        // Test SOA queries.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("SOA".to_owned()),
-                qname: Some("test.mydomain.org.".to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-
-        let success = "{\"result\":[{\"qtype\":\"SOA\",\"qname\":\"test.mydomain.org.\",\
-                       \"content\":\
-                       \"a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800\",\
-                       \"ttl\":89}]}";
-        assert_eq!(
-            put("pdns", &body, &router),
-            (success.to_owned(), status::Ok)
-        );
-
-        // Test ANY queries.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("ANY".to_owned()),
-                qname: Some("test.mydomain.org.".to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-
-        let success = "{\"result\":[{\"qtype\":\"MX\",\"qname\":\"test.mydomain.org.\",\
-                       \"content\":\"\",\"ttl\":89},\
-                       {\"qtype\":\"A\",\"qname\":\"test.mydomain.org.\",\
-                       \"content\":\"1.2.3.4\",\"ttl\":89},\
-                       {\"qtype\":\"TXT\",\"qname\":\"test.mydomain.org.\",\
-                       \"content\":\"test_challenge\",\"ttl\":89},\
-                       {\"qtype\":\"CAA\",\"qname\":\"test.mydomain.org.\",\
-                       \"content\":\"0 issue \\\"letsencrypt.org\\\"\",\"ttl\":89}]}";
-        assert_eq!(
-            put("pdns", &body, &router),
-            (success.to_owned(), status::Ok)
-        );
-
-        // PageKite queries
-        #[derive(Deserialize)]
-        struct PdnsLookupResponse {
-            #[allow(dead_code)]
-            qtype: String,
-            #[allow(dead_code)]
-            qname: String,
-            content: String,
-            #[allow(dead_code)]
-            ttl: u32,
-            #[allow(dead_code)]
-            domain_id: Option<String>,
-            #[allow(dead_code)]
-            #[serde(rename = "scopeMask")]
-            scope_mask: Option<String>,
-            #[allow(dead_code)]
-            auth: Option<String>,
-        }
-        #[derive(Deserialize)]
-        struct PdnsResponse {
-            result: Vec<PdnsLookupResponse>,
-        }
-
-        // A request with a bogus domain.
-        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.\
-                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.mydomain.org.mydomain.\
-                     org.";
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("A".to_owned()),
-                qname: Some(qname.to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &router);
-        assert_eq!(result.1, status::Ok);
-        let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
-        // 255.255.255.0 Means "no such name found for pagekite"
-        assert_eq!(response.result[0].content, "255.255.255.0");
-
-        // A request with a correct domain.
-        let qname = "dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.\
-                     625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.test.mydomain.org.mydomain.\
-                     org.";
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("A".to_owned()),
-                qname: Some(qname.to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &router);
-        assert_eq!(result.1, status::Ok);
-        let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
-        // 255.255.255.1 Means "failed to verify signature for pagekite"
-        assert_eq!(response.result[0].content, "255.255.255.1");
-
-        // SOA request.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("SOA".to_owned()),
-                qname: Some(qname.to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &router);
-        assert_eq!(result.1, status::Ok);
-        let response: PdnsResponse = serde_json::from_str(&result.0).unwrap();
-        assert_eq!(
-            response.result[0].content,
-            "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
-        );
-
-        // TXT request.
-        let pdns_request = PdnsRequest {
-            method: "lookup".to_owned(),
-            parameters: PdnsRequestParameters {
-                qtype: Some("TXT".to_owned()),
-                qname: Some(qname.to_owned()),
-            },
-        };
-        let body = serde_json::to_string(&pdns_request).unwrap();
-        let result = put("pdns", &body, &router);
-        assert_eq!(result.1, status::Ok);
-        assert_eq!(result.0, r#"{"result":false}"#);
 
         // Email routes tests
         // 1. set an email address

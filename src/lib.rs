@@ -9,7 +9,6 @@ extern crate crypto;
 #[macro_use]
 extern crate diesel;
 extern crate email;
-#[macro_use]
 extern crate iron;
 extern crate iron_cors;
 #[cfg(test)]
@@ -18,6 +17,7 @@ extern crate lettre;
 extern crate lettre_email;
 #[macro_use]
 extern crate log;
+extern crate maxminddb;
 extern crate mount;
 extern crate params;
 extern crate r2d2;

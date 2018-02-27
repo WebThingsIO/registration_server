@@ -193,6 +193,7 @@ impl Database {
         _reclamation_token: &'a str,
         _verification_token: &'a str,
         _verified: bool,
+        _continent: &'a str,
     ) -> QueryResult<Domain> {
         let new_domain = NewDomain {
             name: _name,
@@ -204,6 +205,7 @@ impl Database {
             reclamation_token: _reclamation_token,
             verification_token: _verification_token,
             verified: _verified,
+            continent: _continent,
         };
 
         match diesel::insert_into(domains::table)
@@ -249,9 +251,12 @@ impl Database {
             .execute(self.conn())
     }
 
-    pub fn update_domain_token(&self, _name: &str, _token: &str) -> QueryResult<usize> {
+    pub fn update_domain_token(&self, _name: &str, _token: &str, _continent: &str) -> QueryResult<usize> {
         diesel::update(domains.filter(name.eq(_name)))
-            .set(token.eq(_token))
+            .set((
+                token.eq(_token),
+                continent.eq(_continent),
+            ))
             .execute(self.conn())
     }
 
@@ -350,6 +355,7 @@ fn test_domain_store() {
         reclamation_token: "".to_owned(),
         verification_token: "verification-token".to_owned(),
         verified: false,
+        continent: "".to_owned(),
     };
     assert_eq!(
         conn.add_domain(
@@ -361,7 +367,8 @@ fn test_domain_store() {
             "",
             "",
             "verification-token",
-            false
+            false,
+            ""
         ),
         Ok(no_challenge_record.clone())
     );
@@ -394,6 +401,7 @@ fn test_domain_store() {
         reclamation_token: "".to_owned(),
         verification_token: "verification-token".to_owned(),
         verified: false,
+        continent: "".to_owned(),
     };
     assert_eq!(
         conn.update_domain_dns_challenge("test-token", "dns-challenge"),
@@ -432,7 +440,8 @@ fn test_domain_store() {
             "",
             "",
             "",
-            false
+            false,
+            ""
         ),
         Ok(no_challenge_record.clone())
     );
@@ -455,9 +464,10 @@ fn test_domain_store() {
         reclamation_token: "test-reclamation-token".to_owned(),
         verification_token: "".to_owned(),
         verified: false,
+        continent: "".to_owned(),
     };
     assert_eq!(
-        conn.update_domain_token("test.example.org", "new-token"),
+        conn.update_domain_token("test.example.org", "new-token", ""),
         Ok(1)
     );
     assert_eq!(
@@ -529,7 +539,8 @@ fn test_email() {
         "",
         "",
         "",
-        false
+        false,
+        ""
     ).is_ok());
     assert!(
         conn.get_domains_by_account_id(test_account_id)

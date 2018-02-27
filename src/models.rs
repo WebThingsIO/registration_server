@@ -28,6 +28,7 @@ pub struct Domain {
     pub reclamation_token: String,
     pub verification_token: String,
     pub verified: bool,
+    pub continent: String,
 }
 
 #[derive(Insertable)]
@@ -42,4 +43,5 @@ pub struct NewDomain<'a> {
     pub reclamation_token: &'a str,
     pub verification_token: &'a str,
     pub verified: bool,
+    pub continent: &'a str,
 }

@@ -115,6 +115,9 @@ log-dns-details=yes
 log-dns-queries=yes
 loglevel=5
 
+# If using geoip in the registration server, uncomment the following:
+#query-cache-ttl=0
+#cache-ttl=0
 ```
 
 * The `CONFIG_DIR/config.toml` file holds the registration server configuration. Here's a sample consistent with the `pdns.conf` shown above:
@@ -130,10 +133,11 @@ db_path = "/home/user/data/domains.sqlite"
 # Uncomment to use TLS (recommended)
 # identity_directory = "/home/user/config"
 # identity_password = "mypassword"
-tunnel_ip = "1.2.3.4"
 
 [pdns]
-dns_ttl = 1203
+api_ttl = 10
+dns_ttl = 60
+tunnel_ttl = 600
 # Check your DNS configuration to fill in this field.
 soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
 socket_path = "/tmp/powerdns_tunnel.sock"
@@ -142,6 +146,19 @@ caa_record = "0 issue \"letsencrypt.org\""
 txt_record = ""
 # Uncomment to set a PSL authentication record
 # psl_record = "https://github.com/publicsuffix/list/pull/XYZ"
+
+  [pdns.geoip]
+  default = "5.6.7.8"
+  database = "/home/user/geoip/GeoLite2-Country.mmdb"
+
+    [pdns.geoip.continent]
+    AF = "1.2.3.4"
+    AN = "2.3.4.5"
+    AS = "3.4.5.6"
+    EU = "4.5.6.7"
+    NA = "5.6.7.8"
+    OC = "6.7.8.9"
+    SA = "9.8.7.6"
 
 [email]
 server = "mail.gandi.net"

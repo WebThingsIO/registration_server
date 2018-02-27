@@ -17,6 +17,7 @@ table! {
         reclamation_token -> Text,
         verification_token -> Text,
         verified -> Bool,
+        continent -> Text,
     }
 }
 

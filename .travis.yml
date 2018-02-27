@@ -7,7 +7,7 @@ services:
 
 # run builds for all the trains (and more)
 rust:
-  - stable
+  - nightly
 
 env:
   global:

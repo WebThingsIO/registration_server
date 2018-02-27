@@ -13,6 +13,7 @@ iron-cors = { git = "https://github.com/mozilla-iot/iron-cors.git" }
 lettre = "0.7"
 lettre_email = "0.7"
 log = "0.4"
+maxminddb = "0.8.1"
 mount = "0.4"
 params = "0.8"
 r2d2 = "0.8"

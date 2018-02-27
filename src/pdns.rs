@@ -10,15 +10,15 @@
 use config::Config;
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
-use errors::*;
-use iron::headers::ContentType;
-use iron::prelude::*;
-use iron::status::{self, Status};
+use maxminddb;
+use maxminddb::geoip2;
 use serde_json;
 use std::fs;
 use std::io::{Read, Write};
+use std::net::IpAddr;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
+use std::str::FromStr;
 use std::thread;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -69,28 +69,67 @@ struct PdnsResponse {
     result: Vec<PdnsResponseParams>,
 }
 
-fn pdns_failure_as_iron(reason: &str) -> IronResult<Response> {
-    debug!("pdns_failure: {}", reason);
-    let mut response = Response::with("{\"result\":false}");
-    response.status = Some(Status::Ok);
-    response.headers.set(ContentType::json());
-    Ok(response)
+fn get_geoip(continent: Option<String>, config: &Config) -> String {
+    let geoip = config.options.pdns.geoip.clone();
+
+    match continent {
+        Some(code) => match code.as_ref() {
+            "AF" => geoip.continent.AF.unwrap_or(geoip.default),
+            "AN" => geoip.continent.AN.unwrap_or(geoip.default),
+            "AS" => geoip.continent.AS.unwrap_or(geoip.default),
+            "EU" => geoip.continent.EU.unwrap_or(geoip.default),
+            "NA" => geoip.continent.NA.unwrap_or(geoip.default),
+            "OC" => geoip.continent.OC.unwrap_or(geoip.default),
+            "SA" => geoip.continent.SA.unwrap_or(geoip.default),
+            _ => geoip.default,
+        },
+        None => geoip.default,
+    }
 }
 
-fn pdns_response_as_iron(response: &PdnsResponse) -> IronResult<Response> {
-    match serde_json::to_string(response) {
-        Ok(serialized) => {
-            debug!("Response is: {}", serialized);
-            let mut response = Response::with(serialized);
-            response.status = Some(Status::Ok);
-            response.headers.set(ContentType::json());
+pub fn lookup_continent(remote: IpAddr, config: &Config) -> Option<String> {
+    let reader =
+        maxminddb::Reader::open(&config.clone().options.pdns.geoip.database.unwrap()).unwrap();
 
-            Ok(response)
+    let result = reader.lookup(remote);
+    if result.is_err() {
+        return None;
+    }
+
+    let country: geoip2::Country = result.unwrap();
+
+    match country.continent {
+        Some(continent) => continent.code,
+        None => None,
+    }
+}
+
+// Returns an A record for a given qname.
+fn a_response(qname: &str, ttl: u32, config: &Config, remote: Option<String>, continent: Option<String>) -> PdnsLookupResponse {
+    // Do a GeoIP lookup on the remote IP, if the GeoIP database is configured. If the remote is
+    // not set, use the passed in continent value.
+    let c = match config.options.pdns.geoip.database {
+        Some(_) => match remote {
+            Some(remote_ip) => {
+                let ip: IpAddr = FromStr::from_str(&remote_ip).unwrap();
+                lookup_continent(ip, config)
+            }
+            None => continent,
         }
-        Err(err) => {
-            error!("{}", err);
-            EndpointError::with(status::InternalServerError, 501)
-        }
+        None => continent,
+    };
+
+    // Determine the proper IP address to return, based on the continent.
+    let result = get_geoip(c, config);
+
+    PdnsLookupResponse {
+        qtype: "A".to_owned(),
+        qname: qname.to_owned(),
+        content: result.to_owned(),
+        ttl: ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
     }
 }
 
@@ -100,6 +139,71 @@ fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
         qtype: "SOA".to_owned(),
         qname: qname.to_owned(),
         content: config.options.pdns.soa_content.to_owned(),
+        ttl: config.options.pdns.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
+// Returns an MX record for a given qname.
+fn mx_response(qname: &str, config: &Config) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "MX".to_owned(),
+        qname: qname.to_owned(),
+        content: config.options.pdns.mx_record.to_owned(),
+        ttl: config.options.pdns.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
+// Returns a CAA record for a given qname.
+fn caa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "CAA".to_owned(),
+        qname: qname.to_owned(),
+        content: config.options.pdns.caa_record.to_owned(),
+        ttl: config.options.pdns.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
+// Returns a TXT record for a given qname.
+fn txt_response(qname: &str, config: &Config) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "TXT".to_owned(),
+        qname: qname.to_owned(),
+        content: config.options.pdns.txt_record.to_owned(),
+        ttl: config.options.pdns.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
+// Returns a TXT record with the DNS challenge content.
+fn dns_challenge_response(qname: &str, config: &Config, challenge: &str) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "TXT".to_owned(),
+        qname: qname.to_owned(),
+        content: challenge.to_owned(),
+        ttl: config.options.pdns.dns_ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
+// Returns a TXT record containing the Public Suffix List authorization.
+fn psl_response(qname: &str, config: &Config) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "TXT".to_owned(),
+        qname: qname.to_owned(),
+        content: config.options.pdns.clone().psl_record.unwrap(),
         ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
@@ -173,7 +277,7 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
         qtype: "A".to_owned(),
         qname: qname.to_owned(),
         content: ip.to_owned(),
-        ttl: config.options.pdns.dns_ttl,
+        ttl: config.options.pdns.tunnel_ttl,
         domain_id: None,
         scope_mask: None,
         auth: None,
@@ -190,6 +294,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
     if req.method == "lookup" {
         let original_qname = req.parameters.qname.unwrap().to_lowercase();
+        let remote = req.parameters.remote;
         let mut qname = original_qname.clone();
         let qtype = req.parameters.qtype.unwrap();
         debug!("lookup for qtype={} qname={}", qtype, original_qname);
@@ -234,18 +339,12 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
         if qtype == "ANY" {
             // Add an "MX" record.
-            let mx_record = PdnsLookupResponse {
-                qtype: "MX".to_owned(),
-                qname: original_qname.to_owned(),
-                content: config.options.pdns.mx_record.to_owned(),
-                ttl: config.options.pdns.dns_ttl,
-                domain_id: None,
-                scope_mask: None,
-                auth: None,
-            };
             pdns_response
                 .result
-                .push(PdnsResponseParams::Lookup(mx_record));
+                .push(PdnsResponseParams::Lookup(mx_response(
+                    &original_qname,
+                    config,
+                )));
         }
 
         let conn = config.db.get_connection();
@@ -262,18 +361,12 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
             // Add the PSL record if known. If not, just return, as this subdomain is forbidden
             // otherwise.
             if (qtype == "ANY" || qtype == "TXT") && config.options.pdns.psl_record.is_some() {
-                let psl_record = PdnsLookupResponse {
-                    qtype: "TXT".to_owned(),
-                    qname: original_qname.to_owned(),
-                    content: config.options.pdns.clone().psl_record.unwrap(),
-                    ttl: config.options.pdns.dns_ttl,
-                    domain_id: None,
-                    scope_mask: None,
-                    auth: None,
-                };
                 pdns_response
                     .result
-                    .push(PdnsResponseParams::Lookup(psl_record));
+                    .push(PdnsResponseParams::Lookup(psl_response(
+                        &original_qname,
+                        config,
+                    )));
             }
 
             return Ok(pdns_response);
@@ -281,112 +374,86 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
         // Look for a record with the qname.
         if qname == api_domain || domain_lookup.is_ok() {
+            let record = match domain_lookup {
+                Ok(val) => Some(val),
+                Err(_) => None,
+            };
+
             if qtype == "ANY" || qtype == "A" {
                 // Add an "A" record.
-                let a_record = PdnsLookupResponse {
-                    qtype: "A".to_owned(),
-                    qname: original_qname.to_owned(),
-                    content: config.options.general.tunnel_ip.to_owned(),
-                    ttl: config.options.pdns.dns_ttl,
-                    domain_id: None,
-                    scope_mask: None,
-                    auth: None,
-                };
-                pdns_response
-                    .result
-                    .push(PdnsResponseParams::Lookup(a_record));
-            }
-
-            if (qtype == "ANY" || qtype == "TXT") && domain_lookup.is_ok() {
-                let record = domain_lookup.unwrap();
-                if !record.dns_challenge.is_empty() {
-                    // Add a "TXT" record with the DNS challenge content.
-                    let txt_record = PdnsLookupResponse {
-                        qtype: "TXT".to_owned(),
-                        qname: original_qname.to_owned(),
-                        content: record.dns_challenge,
-                        ttl: config.options.pdns.dns_ttl,
-                        domain_id: None,
-                        scope_mask: None,
-                        auth: None,
-                    };
+                if qname == api_domain {
+                    // For the API domain, we can do a GeoIP lookup based on the remote IP.
                     pdns_response
                         .result
-                        .push(PdnsResponseParams::Lookup(txt_record));
+                        .push(PdnsResponseParams::Lookup(a_response(
+                            &original_qname,
+                            config.options.pdns.api_ttl,
+                            config,
+                            remote,
+                            None,
+                        )));
+                } else {
+                    let record = record.clone().unwrap();
+                    let continent = if record.continent.is_empty() {
+                        None
+                    } else {
+                        Some(record.continent)
+                    };
+
+                    // For a PageKite subdomain, we need to use the continent stored in the
+                    // database.
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(a_response(
+                            &original_qname,
+                            config.options.pdns.tunnel_ttl,
+                            config,
+                            None,
+                            continent,
+                        )));
+                }
+            }
+
+            if (qtype == "ANY" || qtype == "TXT") && qname != api_domain {
+                let record = record.clone().unwrap();
+                if !record.dns_challenge.is_empty() {
+                    // Add a "TXT" record with the DNS challenge content.
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(dns_challenge_response(
+                            &original_qname,
+                            config,
+                            &record.dns_challenge,
+                        )));
                 }
             }
 
             if qtype == "ANY" {
                 // Add a "CAA" record.
-                let caa_record = PdnsLookupResponse {
-                    qtype: "CAA".to_owned(),
-                    qname: original_qname.to_owned(),
-                    content: config.options.pdns.caa_record.to_owned(),
-                    ttl: config.options.pdns.dns_ttl,
-                    domain_id: None,
-                    scope_mask: None,
-                    auth: None,
-                };
                 pdns_response
                     .result
-                    .push(PdnsResponseParams::Lookup(caa_record));
+                    .push(PdnsResponseParams::Lookup(caa_response(
+                        &original_qname,
+                        config,
+                    )));
             }
         } else {
             info!("No record for this name {}", qname);
+
             // If there's no record in the database, we add the "TXT" record from the config file.
             if qtype == "ANY" {
-                let txt_record = PdnsLookupResponse {
-                    qtype: "TXT".to_owned(),
-                    qname: original_qname.to_owned(),
-                    content: config.options.pdns.txt_record.to_owned(),
-                    ttl: config.options.pdns.dns_ttl,
-                    domain_id: None,
-                    scope_mask: None,
-                    auth: None,
-                };
                 pdns_response
                     .result
-                    .push(PdnsResponseParams::Lookup(txt_record));
+                    .push(PdnsResponseParams::Lookup(txt_response(
+                        &original_qname,
+                        config,
+                    )));
             }
         }
         return Ok(pdns_response);
     }
 
     Err(format!("Unsupported method: {}", req.method))
-}
-
-// Answer an HTTP request when using the HTTP remote backend.
-pub fn pdns(req: &mut Request, config: &Config) -> IronResult<Response> {
-    use std::net::SocketAddr::V4;
-    use std::net::Ipv4Addr;
-
-    info!("GET /pdns");
-    // Only allow clients from localhost.
-    match req.remote_addr {
-        V4(addr) => if addr.ip() != &Ipv4Addr::new(127, 0, 0, 1) {
-            return EndpointError::with(status::BadRequest, 400);
-        },
-        _ => return EndpointError::with(status::BadRequest, 400),
-    }
-
-    // Read the request from the json body.
-    let mut s = String::new();
-    itry!(req.body.read_to_string(&mut s));
-
-    debug!("Body is: {}", s);
-
-    let input: PdnsRequest = match serde_json::from_str(&s) {
-        Ok(value) => value,
-        Err(err) => {
-            error!("Bad request: {}", err);
-            return EndpointError::with(status::BadRequest, 400);
-        }
-    };
-
-    match process_request(input, config) {
-        Ok(ref response) => pdns_response_as_iron(response),
-        Err(err) => pdns_failure_as_iron(&err),
-    }
 }
 
 // Custom method to read just enough characters from the stream to build a JSON
@@ -525,7 +592,12 @@ mod tests {
     use database::DatabasePool;
     use std::time::Duration;
 
-    fn build_request(method: &str, qtype: Option<&str>, qname: Option<&str>) -> PdnsRequest {
+    fn build_request(
+        method: &str,
+        qtype: Option<&str>,
+        qname: Option<&str>,
+        remote: Option<&str>,
+    ) -> PdnsRequest {
         let qtype = match qtype {
             Some(val) => Some(val.to_owned()),
             None => None,
@@ -534,6 +606,11 @@ mod tests {
             Some(val) => Some(val.to_owned()),
             None => None,
         };
+        let remote = match remote {
+            Some(val) => Some(val.to_owned()),
+            None => None,
+        };
+
         PdnsRequest {
             method: method.to_owned(),
             parameters: PdnsRequestParameters {
@@ -544,7 +621,7 @@ mod tests {
                 qtype: qtype,
                 qname: qname,
                 zone_id: None,
-                remote: None,
+                remote: remote,
                 local: None,
                 real_remote: None,
             },
@@ -578,7 +655,7 @@ mod tests {
         let mut stream =
             UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap()).unwrap();
         // Build an initialization request and send it to the stream.
-        let request = build_request("initialize", None, None);
+        let request = build_request("initialize", None, None, None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -592,7 +669,7 @@ mod tests {
         assert_eq!(&answer[..15], empty_success);
 
         // Build a lookup request and send it to the stream.
-        let request = build_request("lookup", Some("A"), Some("example.org"));
+        let request = build_request("lookup", Some("A"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -601,12 +678,12 @@ mod tests {
         assert_eq!(&answer[..13], empty_error);
 
         // Build a SOA lookup request and send it to the stream.
-        let request = build_request("lookup", Some("SOA"), Some("example.org"));
+        let request = build_request("lookup", Some("SOA"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 143);
+        assert_eq!(stream.read(&mut answer).unwrap(), 144);
         assert_eq!(&answer[..25], soa_exampleorg);
 
         // SOA PageKite query, to create a successful response without having
@@ -615,6 +692,7 @@ mod tests {
             "lookup",
             Some("A"),
             Some("1d48.https-4443.test.mydomain.org.mydomain.org."),
+            None,
         );
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
@@ -624,37 +702,170 @@ mod tests {
         let result = String::from_utf8(answer[..119].to_vec()).unwrap();
         let soa_success = "{\"result\":[{\"qtype\":\"A\",\
                            \"qname\":\"1d48.https-4443.test.mydomain.org.mydomain.org.\",\
-                           \"content\":\"255.255.255.0\",\"ttl\":89}]}";
+                           \"content\":\"255.255.255.0\",\"ttl\":60}]}";
         assert_eq!(&result, soa_success);
 
         // ANY query
-        let request = build_request("lookup", Some("ANY"), Some("example.org"));
+        let request = build_request("lookup", Some("ANY"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 131);
-        let result = String::from_utf8(answer[..131].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 133);
+        let result = String::from_utf8(answer[..133].to_vec()).unwrap();
         let any_success = "{\"result\":[{\"qtype\":\"MX\",\
                            \"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":89},\
+                           \"content\":\"\",\"ttl\":600},\
                            {\"qtype\":\"TXT\",\
                            \"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":89}]}";
+                           \"content\":\"\",\"ttl\":600}]}";
         assert_eq!(&result, any_success);
 
         // PSL query
-        let request = build_request("lookup", Some("TXT"), Some("_psl.mydomain.org."));
+        let request = build_request("lookup", Some("TXT"), Some("_psl.mydomain.org."), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 124);
-        let result = String::from_utf8(answer[..124].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 125);
+        let result = String::from_utf8(answer[..125].to_vec()).unwrap();
         let psl_success = "{\"result\":[{\"qtype\":\"TXT\",\
                            \"qname\":\"_psl.mydomain.org.\",\
                            \"content\":\"https://github.com/publicsuffix/list/pull/XYZ\",\
-                           \"ttl\":89}]}";
+                           \"ttl\":600}]}";
         assert_eq!(&result, psl_success);
+
+        // A query (AF)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("41.189.192.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"1.2.3.4\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
+
+        // A query (AN)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("204.120.204.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"2.3.4.5\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
+
+        // A query (AS)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("1.0.32.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"3.4.5.6\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
+
+        // A query (EU)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("2.23.192.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"4.5.6.7\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
+
+        // A query (NA)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("8.8.8.8"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"5.6.7.8\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
+
+        // A query (OC)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("1.40.0.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"6.7.8.9\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
+
+        // A query (SA)
+        let request = build_request(
+            "lookup",
+            Some("A"),
+            Some("api.mydomain.org."),
+            Some("57.74.224.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 83);
+        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"api.mydomain.org.\",\
+                         \"content\":\"9.8.7.6\",\
+                         \"ttl\":10}]}";
+        assert_eq!(&result, a_success);
     }
 }
