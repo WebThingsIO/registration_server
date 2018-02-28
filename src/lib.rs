@@ -9,6 +9,8 @@ extern crate crypto;
 #[macro_use]
 extern crate diesel;
 extern crate email;
+#[macro_use]
+extern crate hyper;
 extern crate iron;
 extern crate iron_cors;
 #[cfg(test)]

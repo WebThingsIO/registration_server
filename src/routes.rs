@@ -17,8 +17,11 @@ use pdns::lookup_continent;
 use regex::Regex;
 use router::Router;
 use serde_json;
+use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+
+header! { (XRealIP, "X-Real-IP") => [IpAddr] }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NameAndToken {
@@ -206,7 +209,12 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let conn = conn.unwrap();
 
-    let continent = match lookup_continent(req.remote_addr.ip(), &config) {
+    let real_ip = match req.headers.get::<XRealIP>() {
+        Some(x) => x.0.clone(),
+        None => req.remote_addr.ip(),
+    };
+
+    let continent = match lookup_continent(real_ip, &config) {
         Some(val) => val,
         None => "".to_owned(),
     };
@@ -433,12 +441,11 @@ pub fn create_chain(root_path: &str, config: &Config) -> Chain {
 
 #[cfg(test)]
 mod tests {
-    extern crate hyper;
-
     use super::*;
     use args::ArgsParser;
     use config::Config;
     use database::DatabasePool;
+    use hyper;
     use iron::{Handler, Url};
     use iron::status::Status;
     use iron::method;
