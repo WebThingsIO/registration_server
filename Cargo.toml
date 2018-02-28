@@ -7,6 +7,7 @@ authors = ["fabrice <fabrice@desre.org>"]
 clap = "2.29"
 email = "0.0"
 env_logger = "0.4"
+hyper = "0.10"
 hyper-native-tls = "0.2"
 iron = "0.6"
 iron-cors = { git = "https://github.com/mozilla-iot/iron-cors.git" }
@@ -28,7 +29,6 @@ uuid = { version = "0.5", features = ["v4"] }
 
 [dev-dependencies]
 iron-test = "0.6"
-hyper = "0.10"
 
 [features]
 default = []

@@ -251,12 +251,14 @@ impl Database {
             .execute(self.conn())
     }
 
-    pub fn update_domain_token(&self, _name: &str, _token: &str, _continent: &str) -> QueryResult<usize> {
+    pub fn update_domain_token(
+        &self,
+        _name: &str,
+        _token: &str,
+        _continent: &str,
+    ) -> QueryResult<usize> {
         diesel::update(domains.filter(name.eq(_name)))
-            .set((
-                token.eq(_token),
-                continent.eq(_continent),
-            ))
+            .set((token.eq(_token), continent.eq(_continent)))
             .execute(self.conn())
     }
 
@@ -355,7 +357,7 @@ fn test_domain_store() {
         reclamation_token: "".to_owned(),
         verification_token: "verification-token".to_owned(),
         verified: false,
-        continent: "".to_owned(),
+        continent: "EU".to_owned(),
     };
     assert_eq!(
         conn.add_domain(
@@ -368,7 +370,7 @@ fn test_domain_store() {
             "",
             "verification-token",
             false,
-            ""
+            "EU"
         ),
         Ok(no_challenge_record.clone())
     );
@@ -401,7 +403,7 @@ fn test_domain_store() {
         reclamation_token: "".to_owned(),
         verification_token: "verification-token".to_owned(),
         verified: false,
-        continent: "".to_owned(),
+        continent: "EU".to_owned(),
     };
     assert_eq!(
         conn.update_domain_dns_challenge("test-token", "dns-challenge"),
@@ -441,7 +443,7 @@ fn test_domain_store() {
             "",
             "",
             false,
-            ""
+            "EU"
         ),
         Ok(no_challenge_record.clone())
     );

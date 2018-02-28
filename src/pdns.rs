@@ -105,7 +105,13 @@ pub fn lookup_continent(remote: IpAddr, config: &Config) -> Option<String> {
 }
 
 // Returns an A record for a given qname.
-fn a_response(qname: &str, ttl: u32, config: &Config, remote: Option<String>, continent: Option<String>) -> PdnsLookupResponse {
+fn a_response(
+    qname: &str,
+    ttl: u32,
+    config: &Config,
+    remote: Option<String>,
+    continent: Option<String>,
+) -> PdnsLookupResponse {
     // Do a GeoIP lookup on the remote IP, if the GeoIP database is configured. If the remote is
     // not set, use the passed in continent value.
     let c = match config.options.pdns.geoip.database {
@@ -115,7 +121,7 @@ fn a_response(qname: &str, ttl: u32, config: &Config, remote: Option<String>, co
                 lookup_continent(ip, config)
             }
             None => continent,
-        }
+        },
         None => continent,
     };
 
