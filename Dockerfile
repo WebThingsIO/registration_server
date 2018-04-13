@@ -44,7 +44,7 @@ USER user
 
 WORKDIR /home/user
 
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
 ENV PATH=/home/user/.cargo/bin:/home/user/bin:$PATH
 
 WORKDIR /home/user/server

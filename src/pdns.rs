@@ -7,6 +7,7 @@
 // See https://doc.powerdns.com/md/authoritative/backend-remote/ for
 // details about the various requests and responses.
 
+extern crate env_logger;
 use config::Config;
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
@@ -222,7 +223,7 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
     // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
     // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.mozilla-iot.org.mozilla-iot.org
     // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
-    debug!("PageKite query for {} {}", qtype, qname);
+    debug!("pagekite_query(): PageKite query for {} {}", qtype, qname);
 
     let mut pdns_response = PdnsResponse { result: Vec::new() };
 
@@ -239,7 +240,11 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
 
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return Err("Failed to get database connection.".to_owned());
+        error!(
+            "pagekite_query(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return Err("pagekite_query(): Failed to get database connection.".to_owned());
     }
     let conn = conn.unwrap();
 
@@ -256,7 +261,10 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
             let payload = format!("{}:{}:{}:{}", proto, kite_domain, srand, token);
             let salt = sign[..8].to_owned();
 
-            debug!("{} {} {} {} {}", srand, token, sign, proto, kite_domain);
+            debug!(
+                "pagekit_query(): {} {} {} {} {}",
+                srand, token, sign, proto, kite_domain
+            );
 
             let mut hasher = Sha1::new();
             hasher.input_str(&format!("{}{}{}", record.token, payload, salt));
@@ -265,7 +273,7 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
             let calc_sub = calc[..28].to_owned();
             let sign_sub = sign[8..36].to_owned();
 
-            debug!("Signatures: {} {}", calc_sub, sign_sub);
+            debug!("pagekite_query(): Signatures: {} {}", calc_sub, sign_sub);
 
             if calc_sub == sign_sub {
                 "255.255.254.255"
@@ -296,14 +304,17 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
 }
 
 fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, String> {
-    debug!("pdns request is {:?}", req);
+    debug!("process_request(): pdns request is {:?}", req);
 
     if req.method == "lookup" {
         let original_qname = req.parameters.qname.unwrap().to_lowercase();
         let remote = req.parameters.remote;
         let mut qname = original_qname.clone();
         let qtype = req.parameters.qtype.unwrap();
-        debug!("lookup for qtype={} qname={}", qtype, original_qname);
+        debug!(
+            "process_request(): lookup for qtype={} qname={}",
+            qtype, original_qname
+        );
 
         // Example payload:
         //
@@ -330,7 +341,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
             qname = qname[16..].to_owned();
         }
 
-        debug!("final qname={}", qname);
+        debug!("process_request(): final qname={}", qname);
 
         let mut pdns_response = PdnsResponse { result: Vec::new() };
 
@@ -355,6 +366,10 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
         let conn = config.db.get_connection();
         if conn.is_err() {
+            error!(
+                "process_request(): Failed to get database connection: {:?}",
+                conn.err()
+            );
             return Ok(pdns_response);
         }
         let conn = conn.unwrap();
@@ -444,7 +459,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                     )));
             }
         } else {
-            info!("No record for this name {}", qname);
+            info!("process_request(): No record for: {}", qname);
 
             // If there's no record in the database, we add the "TXT" record from the config file.
             if qtype == "ANY" {
@@ -481,7 +496,7 @@ fn read_json_from_stream(mut stream: &UnixStream) -> String {
                 result.push(buffer[0] as char);
             }
             Err(err) => {
-                error!("Stream reading error: {}", err);
+                error!("read_json_from_stream(): Stream reading error: {}", err);
             }
         }
 
@@ -510,11 +525,11 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
 
     loop {
         let s = read_json_from_stream(&stream);
-        debug!("JSON String is {}", s);
+        debug!("handle_socket_request(): JSON String is {}", s);
         let input: PdnsRequest = match serde_json::from_str(&s) {
             Ok(value) => value,
             Err(err) => {
-                error!("JSON error: {}", err);
+                error!("handle_socket_request(): JSON error: {}", err);
                 break;
             }
         };
@@ -522,7 +537,7 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
         // Special case for the `initialize` method which is a no-op that just
         // returns success.
         if input.method == "initialize" {
-            debug!("Answering to initialization request");
+            debug!("handle_socket_request(): Answering to initialization request");
             send!(b"{\"result\":true}");
             continue;
         }
@@ -530,16 +545,16 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
         match process_request(input, config) {
             Ok(ref response) => match serde_json::to_string(response) {
                 Ok(serialized) => {
-                    debug!("Response is: {}", serialized);
+                    debug!("handle_socket_request(): Response is: {}", serialized);
                     send!(serialized.as_bytes());
                 }
                 Err(err) => {
-                    error!("Error serializing JSON: {}", err);
+                    error!("handle_socket_request(): Error serializing JSON: {}", err);
                     send!(error_response);
                 }
             },
             Err(err) => {
-                error!("Error processing request: {}", err);
+                error!("handle_socket_request(): Error processing request: {}", err);
                 send!(error_response);
             }
         }
@@ -548,13 +563,16 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
 
 pub fn start_socket_endpoint(config: &Config) {
     if config.options.pdns.socket_path.is_none() {
-        error!("No socket path configured!");
+        error!("start_socket_endpoint(): No socket path configured!");
         return;
     }
 
     let path = &config.options.pdns.socket_path.clone().unwrap();
 
-    debug!("Starting the pdns socket endpoint at {}", path);
+    debug!(
+        "start_socket_endpoint(): Starting the pdns socket endpoint at {}",
+        path
+    );
 
     if Path::exists(Path::new(&path)) {
         #[allow(unused_must_use)]
@@ -571,7 +589,7 @@ pub fn start_socket_endpoint(config: &Config) {
             let socket = match UnixListener::bind(path) {
                 Ok(sock) => sock,
                 Err(e) => {
-                    error!("Couldn't bind: {:?}", e);
+                    error!("start_socket_endpoint(): Couldn't bind: {:?}", e);
                     return;
                 }
             };
@@ -636,6 +654,8 @@ mod tests {
 
     #[test]
     fn test_socket() {
+        let _ = env_logger::init();
+
         let args = ArgsParser::from_vec(vec![
             "registration_server",
             "--config-file=./config/config.toml",
