@@ -5,13 +5,19 @@ services:
   - mysql
   - postgresql
 
-# run builds for all the trains (and more)
 rust:
+  - stable
+  - beta
   - nightly
+
+matrix:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
 
 env:
   global:
-  - RUSTFLAGS="-C link-dead-code"
+    - RUSTFLAGS="-C link-dead-code"
 
 addons:
   apt:
@@ -37,6 +43,3 @@ script:
 
 after_success:
   - ./run_coverage.sh
-
-notifications:
-  irc: "irc.mozilla.org#iot"

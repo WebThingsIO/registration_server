@@ -56,6 +56,17 @@ macro_rules! html_response {
     )
 }
 
+macro_rules! html_error_response {
+    ($status:expr, $html:expr) => (
+        {
+            let mut response = Response::with($html);
+            response.headers.set(ContentType::html());
+            response.status = Some($status);
+            Ok(response)
+        }
+    )
+}
+
 macro_rules! ok_response {
     () => (
         {

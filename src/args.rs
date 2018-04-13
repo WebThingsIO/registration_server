@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+extern crate env_logger;
 use clap::{App, ArgMatches};
 use config::{Args, Continent, EmailOptions, GeneralOptions, GeoIp, PdnsOptions};
 use std::fs::File;
@@ -184,6 +185,8 @@ impl ArgsParser {
 
 #[test]
 fn test_args() {
+    let _ = env_logger::init();
+
     let args = ArgsParser::from_vec(vec!["registration_server", "--geoip-default=1.2.3.4"]);
 
     assert_eq!(args.general.host, "0.0.0.0");

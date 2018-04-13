@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+extern crate env_logger;
 use config::Config;
 use diesel;
 use email_routes::{revokeemail, setemail, verifyemail, EmailSender};
@@ -34,11 +35,13 @@ fn domain_for_name(name: &str, config: &Config) -> String {
 }
 
 fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /ping");
-
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return EndpointError::with(status::InternalServerError, 501);
+        error!(
+            "ping(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
     }
     let conn = conn.unwrap();
 
@@ -46,7 +49,10 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
 
+    info!("GET /ping {:?}", map);
+
     if token.is_none() {
+        error!("ping(): Token not provided");
         return EndpointError::with(status::BadRequest, 400);
     }
 
@@ -55,45 +61,62 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Save this ping in the database if we know about this token.
     match conn.update_domain_timestamp(&token) {
         Ok(count) if count > 0 => ok_response!(),
-        Ok(_) => EndpointError::with(status::BadRequest, 400),
-        Err(_) => EndpointError::with(status::InternalServerError, 501),
+        Ok(_) => EndpointError::with(status::NotFound, 404),
+        Err(err) => {
+            error!("ping(): Failed to update domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
     }
 }
 
 fn info(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /info");
-
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return EndpointError::with(status::InternalServerError, 501);
+        error!(
+            "info(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
     }
     let conn = conn.unwrap();
 
     let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
+
+    info!("GET /info {:?}", map);
+
     if token.is_none() {
+        error!("info(): Token not provided");
         return EndpointError::with(status::BadRequest, 400);
     }
     let token = String::from_value(token.unwrap()).unwrap();
 
     match conn.get_domain_by_token(&token) {
         Ok(record) => json_response!(&record),
-        Err(diesel::result::Error::NotFound) => EndpointError::with(status::BadRequest, 400),
-        Err(_) => EndpointError::with(status::InternalServerError, 501),
+        Err(diesel::result::Error::NotFound) => EndpointError::with(status::NotFound, 404),
+        Err(err) => {
+            error!("info(): Failed to get domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
     }
 }
 
 fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /unsubscribe");
-
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return EndpointError::with(status::InternalServerError, 501);
+        error!(
+            "unsubscribe(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
     }
     let conn = conn.unwrap();
 
     let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
+
+    info!("GET /unsubscribe {:?}", map);
+
     if token.is_none() {
         let reclamation_token = map.find(&["reclamationToken"]);
         match reclamation_token {
@@ -101,10 +124,13 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 return match conn.delete_domain_by_reclamation_token(reclamation_token) {
                     Ok(0) => {
                         // No record found for this token.
-                        EndpointError::with(status::BadRequest, 400)
+                        EndpointError::with(status::NotFound, 404)
                     }
                     Ok(_) => ok_response!(),
-                    Err(_) => EndpointError::with(status::InternalServerError, 501),
+                    Err(err) => {
+                        error!("unsubscribe(): Failed to delete domain: {:?}", err);
+                        EndpointError::with(status::InternalServerError, 500)
+                    }
                 };
             }
             _ => {
@@ -118,22 +144,31 @@ fn unsubscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     match conn.delete_domain_by_token(&token) {
         Ok(0) => EndpointError::with(status::BadRequest, 400), // No record found for this token.
         Ok(_) => ok_response!(),
-        Err(_) => EndpointError::with(status::InternalServerError, 501),
+        Err(err) => {
+            error!("unsubscribe(): Failed to delete domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
     }
 }
 
 fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /reclaim");
-
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return EndpointError::with(status::InternalServerError, 501);
+        error!(
+            "reclaim(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
     }
     let conn = conn.unwrap();
 
     let map = req.get_ref::<Params>().unwrap();
     let name = map.find(&["name"]);
+
+    info!("GET /reclaim {:?}", map);
+
     if name.is_none() {
+        error!("reclaim(): Name not provided");
         return EndpointError::with(status::BadRequest, 400);
     }
     let name = String::from_value(name.unwrap()).unwrap();
@@ -153,8 +188,13 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
 
                     let token = format!("{}", Uuid::new_v4());
                     let result = conn.update_domain_reclamation_token(&record.token, &token);
-                    if result.is_err() || result.unwrap() == 0 {
-                        return EndpointError::with(status::InternalServerError, 501);
+                    if result.is_err() {
+                        error!("reclaim(): Failed to update domain: {:?}", result.err());
+                        return EndpointError::with(status::InternalServerError, 500);
+                    }
+
+                    if result.unwrap() == 0 {
+                        return EndpointError::with(status::NotFound, 404);
                     }
 
                     // Send the reclamation token to the user via email.
@@ -173,10 +213,16 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
                                 &config.options.email.clone().reclamation_title.unwrap(),
                             ) {
                                 Ok(_) => ok_response!(),
-                                Err(_) => EndpointError::with(status::InternalServerError, 501),
+                                Err(err) => {
+                                    error!("reclaim(): Failed to send email: {:?}", err);
+                                    EndpointError::with(status::InternalServerError, 500)
+                                }
                             }
                         }
-                        Err(_) => EndpointError::with(status::InternalServerError, 501),
+                        Err(err) => {
+                            error!("reclaim(): Failed to create email sender: {:?}", err);
+                            EndpointError::with(status::InternalServerError, 500)
+                        }
                     }
                 }
                 Err(_) => {
@@ -196,16 +242,21 @@ fn reclaim(req: &mut Request, config: &Config) -> IronResult<Response> {
             Ok(response)
         }
         // Other error, like a db issue.
-        Err(_) => EndpointError::with(status::InternalServerError, 501),
+        Err(err) => {
+            error!("reclaim(): Failed to look up domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
     }
 }
 
 fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /subscribe");
-
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return EndpointError::with(status::InternalServerError, 501);
+        error!(
+            "subscribe(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
     }
     let conn = conn.unwrap();
 
@@ -222,7 +273,11 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Extract the name parameter.
     let map = req.get_ref::<Params>().unwrap();
     let name = map.find(&["name"]);
+
+    info!("GET /subscribe {:?}", map);
+
     if name.is_none() {
+        error!("subscribe(): Name not provided");
         return EndpointError::with(status::BadRequest, 400);
     }
     let name = String::from_value(name.unwrap()).unwrap();
@@ -243,7 +298,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
         return Ok(response);
     }
 
-    info!("trying to subscribe {}", full_name);
+    info!("subscribe(): Trying to subscribe: {}", full_name);
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -269,8 +324,11 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                             };
                             json_response!(&n_and_t)
                         }
-                        Ok(_) => EndpointError::with(status::BadRequest, 400),
-                        Err(_) => EndpointError::with(status::InternalServerError, 501),
+                        Ok(_) => EndpointError::with(status::NotFound, 404),
+                        Err(err) => {
+                            error!("subscribe(): Failed to update domain: {:?}", err);
+                            EndpointError::with(status::InternalServerError, 500)
+                        }
                     }
                 } else {
                     let mut response = Response::with(r#"{"error": "ReclamationTokenMismatch"}"#);
@@ -325,7 +383,11 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
 
             let result = conn.get_unknown_account();
             if result.is_err() {
-                return EndpointError::with(status::InternalServerError, 501);
+                error!(
+                    "subscribe(): Failed to get the unknown account: {:?}",
+                    result.err()
+                );
+                return EndpointError::with(status::InternalServerError, 500);
             }
 
             let account = result.unwrap();
@@ -351,20 +413,28 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                     };
                     json_response!(&n_and_t)
                 }
-                Err(_) => EndpointError::with(status::InternalServerError, 501),
+                Err(err) => {
+                    error!("subscribe(): Failed to add domain: {:?}", err);
+                    EndpointError::with(status::InternalServerError, 500)
+                }
             }
         }
         // Other error, like a db issue.
-        Err(_) => EndpointError::with(status::InternalServerError, 501),
+        Err(err) => {
+            error!("subscribe(): Failed to look up domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
     }
 }
 
 fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
-    info!("GET /dnsconfig");
-
     let conn = config.db.get_connection();
     if conn.is_err() {
-        return EndpointError::with(status::InternalServerError, 501);
+        error!(
+            "dnsconfig(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
     }
     let conn = conn.unwrap();
 
@@ -373,13 +443,17 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
     let challenge = map.find(&["challenge"]);
     let token = map.find(&["token"]);
 
+    info!("GET /dnsconfig {:?}", map);
+
     // Both parameters are mandatory.
     if challenge.is_none() || token.is_none() {
+        error!("dnsconfig(): Challenge or token not provided");
         return EndpointError::with(status::BadRequest, 400);
     }
 
     let challenge = String::from_value(challenge.unwrap()).unwrap();
     if challenge.len() > 63 {
+        error!("dnsconfig(): Invalid challenge: {}", challenge);
         return EndpointError::with(status::BadRequest, 400);
     }
 
@@ -387,8 +461,11 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     match conn.update_domain_dns_challenge(&token, &challenge) {
         Ok(count) if count > 0 => ok_response!(),
-        Ok(_) => EndpointError::with(status::BadRequest, 400),
-        Err(_) => EndpointError::with(status::InternalServerError, 501),
+        Ok(_) => EndpointError::with(status::NotFound, 404),
+        Err(err) => {
+            error!("dnsconfig(): Failed to update domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
     }
 }
 
@@ -503,6 +580,8 @@ mod tests {
 
     #[test]
     fn test_router() {
+        let _ = env_logger::init();
+
         #[cfg(feature = "mysql")]
         let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_routes");
         #[cfg(feature = "postgres")]
@@ -522,6 +601,10 @@ mod tests {
         let bad_request_error = (
             r#"{"code":400,"errno":400,"error":"Bad Request"}"#.to_owned(),
             status::BadRequest,
+        );
+        let not_found_error = (
+            r#"{"code":404,"errno":404,"error":"Not Found"}"#.to_owned(),
+            status::NotFound,
         );
         let empty_ok = ("".to_owned(), status::Ok);
 
@@ -639,7 +722,7 @@ mod tests {
         // Ping without the expected parameters.
         assert_eq!(get("ping", &router), bad_request_error);
         assert_eq!(get("ping?name=test", &router), bad_request_error);
-        assert_eq!(get("ping?token=wrong_token", &router), bad_request_error);
+        assert_eq!(get("ping?token=wrong_token", &router), not_found_error);
 
         // Ping properly.
         sleep(time::Duration::from_secs(1));
@@ -647,7 +730,7 @@ mod tests {
 
         // Get the full info
         assert_eq!(get("info", &router), bad_request_error);
-        assert_eq!(get("info?token=wrong_token", &router), bad_request_error);
+        assert_eq!(get("info?token=wrong_token", &router), not_found_error);
 
         let response = get(&format!("info?token={}", token), &router);
         assert_eq!(response.1, status::Ok);
@@ -671,7 +754,7 @@ mod tests {
                 "dnsconfig?token=wrong_token&challenge=test_challenge",
                 &router
             ),
-            bad_request_error
+            not_found_error
         );
         assert_eq!(
             get(
@@ -701,7 +784,7 @@ mod tests {
         );
         assert_eq!(
             get("setemail?token=wrong_token&email=me@example.com", &router),
-            bad_request_error
+            not_found_error
         );
         assert_eq!(
             get(
@@ -740,7 +823,7 @@ mod tests {
         assert_eq!(get("verifyemail", &router), bad_request_error);
         assert_eq!(
             get("verifyemail?s=wrong_link", &router),
-            (config.options.email.error_page.unwrap(), status::Ok)
+            (config.options.email.error_page.unwrap(), status::NotFound)
         );
         assert_eq!(
             get(&format!("verifyemail?s={}", link), &router),
@@ -784,7 +867,7 @@ mod tests {
         assert_eq!(get("revokeemail", &router), bad_request_error);
         assert_eq!(
             get("revokeemail?token=wrong_token", &router),
-            bad_request_error
+            not_found_error
         );
         assert_eq!(
             get(&format!("revokeemail?token={}", token), &router),

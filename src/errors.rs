@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+extern crate env_logger;
 use iron::status;
 use iron::prelude::*;
 use serde_json;
@@ -50,11 +51,13 @@ impl EndpointError {
 
 #[test]
 fn test_error() {
+    let _ = env_logger::init();
+
     let s_error = StringError(status::BadRequest.canonical_reason().unwrap().to_owned());
     let error = format!("{} {}", s_error, s_error.description());
     assert_eq!(error, r#"StringError("Bad Request") Bad Request"#);
 
-    let ep_error = EndpointError::with(status::InternalServerError, 501);
+    let ep_error = EndpointError::with(status::InternalServerError, 500);
     let error = ep_error.unwrap_err();
     assert_eq!(error.description(), "Internal Server Error");
     assert_eq!(error.response.status.unwrap(), status::InternalServerError);

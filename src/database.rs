@@ -6,6 +6,7 @@
 // Each record is made of the name, the private token, and the Let's Encrypt
 // challenge value.
 
+extern crate env_logger;
 use diesel;
 use diesel::prelude::*;
 #[cfg(feature = "mysql")]
@@ -36,7 +37,7 @@ pub struct DatabasePool(r2d2::Pool<ConnectionManager<SqliteConnection>>);
 
 impl DatabasePool {
     pub fn new(db_path: &str) -> Self {
-        debug!("Opening database at {}", db_path);
+        debug!("new(): Opening database at {}", db_path);
 
         #[cfg(feature = "mysql")]
         let manager = ConnectionManager::<MysqlConnection>::new(db_path);
@@ -303,6 +304,8 @@ impl Database {
 
 #[test]
 fn test_domain_store() {
+    let _ = env_logger::init();
+
     #[cfg(feature = "mysql")]
     let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_domains");
     #[cfg(feature = "postgres")]
@@ -494,6 +497,8 @@ fn test_domain_store() {
 
 #[test]
 fn test_email() {
+    let _ = env_logger::init();
+
     #[cfg(feature = "mysql")]
     let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_email");
     #[cfg(feature = "postgres")]
