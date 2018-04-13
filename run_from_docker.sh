@@ -14,4 +14,4 @@ else
     pagekite.py --isfrontend --ports=4443 --protos=https --authdomain=$DOMAIN &
 fi
 
-RUST_LOG=maxminddb=info ./target/release/main --config-file=$ROOT_DIR/config.toml
+RUST_LOG=registration_server=debug,maxminddb=info ./target/release/main --config-file=$ROOT_DIR/config.toml
