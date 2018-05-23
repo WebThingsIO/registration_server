@@ -39,7 +39,7 @@ impl EmailSender {
             return Err(());
         }
 
-        let builder = match SmtpTransport::simple_builder(options.clone().email.server.unwrap()) {
+        let builder = match SmtpTransport::simple_builder(&options.clone().email.server.unwrap()) {
             Ok(builder) => builder,
             Err(error) => {
                 error!("new(): Error building transport: {:?}", error);
