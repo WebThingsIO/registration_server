@@ -9,15 +9,15 @@ use diesel;
 use email::Mailbox;
 use errors::*;
 use iron::headers::ContentType;
-use lettre_email::EmailBuilder;
-use lettre::{EmailTransport, SmtpTransport};
-use lettre::smtp::ConnectionReuseParameters;
-use lettre::smtp::authentication::{Credentials, Mechanism};
-use lettre::smtp::extension::ClientId;
-#[cfg(test)]
-use lettre::stub::StubEmailTransport;
 use iron::prelude::*;
 use iron::status::{self, Status};
+use lettre::smtp::authentication::{Credentials, Mechanism};
+use lettre::smtp::extension::ClientId;
+use lettre::smtp::ConnectionReuseParameters;
+#[cfg(test)]
+use lettre::stub::StubEmailTransport;
+use lettre::{EmailTransport, SmtpTransport};
+use lettre_email::EmailBuilder;
 use params::{FromValue, Params};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -32,8 +32,10 @@ impl EmailSender {
     pub fn new(config: &Config) -> Result<EmailSender, ()> {
         let options = &config.options;
 
-        if options.email.server.is_none() || options.email.user.is_none()
-            || options.email.password.is_none() || options.email.sender.is_none()
+        if options.email.server.is_none()
+            || options.email.user.is_none()
+            || options.email.password.is_none()
+            || options.email.sender.is_none()
         {
             error!("new(): All email fields need to be set.");
             return Err(());

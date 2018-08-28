@@ -18,15 +18,16 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --db-path=[path]                'The database path: file path, postgres://..., mysql://...'
 --identity-directory=[dir]      'Identity directory.'
 --identity-password=[password]  'Identity password.'
---dns-ttl=[ttl]                 'TTL of the SOA/MX/TXT/CAA DNS records, in seconds.'
+--dns-ttl=[ttl]                 'TTL of the SOA/NS/MX/TXT/CAA DNS records, in seconds.'
 --api-ttl=[ttl]                 'TTL of the DNS records for the api subdomain, in seconds.'
 --tunnel-ttl=[ttl]              'TTL of the DNS records for tunnels, in seconds.'
---soa-content=[dns]             'The content of the SOA record for this tunnel.'
 --socket-path=[path]            'The path to the socket used to communicate with PowerDNS.'
---mx-record=[record]            'The MX record the PowerDNS server should return.'
 --caa-record=[record]           'The CAA record the PowerDNS server should return.'
---txt-record=[record]           'The TXT record the PowerDNS server should return.'
+--mx-record=[record]            'The MX record the PowerDNS server should return.'
 --psl-record=[record]           'The TXT record used to authenticate against the Public Suffix List.'
+--ns-record=[record]...         'An NS record the PowerDNS server should return as host=ip (can be specified multiple times).'
+--soa-record=[record]           'The SOA record the PowerDNS server should return.'
+--txt-record=[record]           'The TXT record the PowerDNS server should return.'
 --geoip-default=[ip]            'The IP address of the default tunnel endpoint.'
 --geoip-database=[path]         'Path to the GeoIP2/GeoLite2 database.'
 --geoip-continent-af=[ip]       'The IP address of the tunnel endpoint for Africa.'
@@ -64,13 +65,24 @@ impl ArgsParser {
         }
 
         macro_rules! optional {
-            ($var:ident, $name:expr) => (
+            ($var:ident, $name:expr) => {
                 let $var = if matches.is_present($name) {
                     Some(matches.value_of($name).unwrap().to_owned())
                 } else {
                     None
                 };
-            )
+            };
+        }
+
+        let mut ns_records = vec![];
+        if matches.is_present("ns-record") {
+            let vals: Vec<&str> = matches.values_of("ns-record").unwrap().collect();
+            for val in &vals {
+                let parts: Vec<&str> = val.split('=').collect();
+                if parts.len() == 2 {
+                    ns_records.push(vec![parts[0].to_owned(), parts[1].to_owned()]);
+                }
+            }
         }
 
         optional!(identity_dir, "identity-directory");
@@ -117,24 +129,25 @@ impl ArgsParser {
                 api_ttl: value_t!(matches, "api-ttl", u32).unwrap_or(10),
                 dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(600),
                 tunnel_ttl: value_t!(matches, "tunnel-ttl", u32).unwrap_or(60),
-                soa_content: matches
-                    .value_of("soa-content")
-                    .unwrap_or("_soa_not_configured_")
-                    .to_owned(),
                 socket_path: matches.value_of("socket-path").map(|s| s.to_owned()),
+                caa_record: matches
+                    .value_of("caa-record")
+                    .unwrap_or("_caa_not_configured_")
+                    .to_owned(),
                 mx_record: matches
                     .value_of("mx-record")
                     .unwrap_or("_mx_not_configured_")
                     .to_owned(),
-                caa_record: matches
-                    .value_of("caa-record")
-                    .unwrap_or("_caa_not_configured_")
+                ns_records: ns_records,
+                psl_record: psl_record,
+                soa_record: matches
+                    .value_of("soa-record")
+                    .unwrap_or("_soa_not_configured_")
                     .to_owned(),
                 txt_record: matches
                     .value_of("txt-record")
                     .unwrap_or("_txt_not_configured_")
                     .to_owned(),
-                psl_record: psl_record,
                 geoip: GeoIp {
                     default: matches
                         .value_of("geoip-default")
@@ -169,17 +182,21 @@ impl ArgsParser {
 
     // Gets the args from the default command line.
     pub fn from_env() -> Args {
-        ArgsParser::from_matches(&App::new("registration_server")
-            .args_from_usage(USAGE)
-            .get_matches())
+        ArgsParser::from_matches(
+            &App::new("registration_server")
+                .args_from_usage(USAGE)
+                .get_matches(),
+        )
     }
 
     // Gets the args from a string array.
     #[cfg(test)]
     pub fn from_vec(params: Vec<&str>) -> Args {
-        ArgsParser::from_matches(&App::new("registration_server")
-            .args_from_usage(USAGE)
-            .get_matches_from(params))
+        ArgsParser::from_matches(
+            &App::new("registration_server")
+                .args_from_usage(USAGE)
+                .get_matches_from(params),
+        )
     }
 }
 
@@ -199,12 +216,13 @@ fn test_args() {
     assert_eq!(args.pdns.api_ttl, 10);
     assert_eq!(args.pdns.dns_ttl, 600);
     assert_eq!(args.pdns.tunnel_ttl, 60);
-    assert_eq!(args.pdns.soa_content, "_soa_not_configured_");
     assert_eq!(args.pdns.socket_path, None);
-    assert_eq!(args.pdns.mx_record, "_mx_not_configured_");
     assert_eq!(args.pdns.caa_record, "_caa_not_configured_");
-    assert_eq!(args.pdns.txt_record, "_txt_not_configured_");
+    assert_eq!(args.pdns.mx_record, "_mx_not_configured_");
+    assert_eq!(args.pdns.ns_records.len(), 0);
     assert_eq!(args.pdns.psl_record, None);
+    assert_eq!(args.pdns.soa_record, "_soa_not_configured_");
+    assert_eq!(args.pdns.txt_record, "_txt_not_configured_");
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, None);
     assert_eq!(args.pdns.geoip.continent.AF, None);
@@ -246,12 +264,14 @@ fn test_args() {
         "--api-ttl=120",
         "--dns-ttl=140",
         "--tunnel-ttl=160",
-        "--soa-content=_my_soa",
         "--socket-path=/tmp/socket",
-        "--mx-record=_my_mx",
         "--caa-record=_my_caa",
-        "--txt-record=_my_txt",
+        "--mx-record=_my_mx",
+        "--ns-record=ns1.example.com.=1.1.1.1",
+        "--ns-record=ns2.example.com.=2.2.2.2",
         "--psl-record=_my_psl",
+        "--soa-record=_my_soa",
+        "--txt-record=_my_txt",
         "--email-server=test.email.com",
         "--email-user=my_email_user",
         "--email-password=my_password",
@@ -277,12 +297,19 @@ fn test_args() {
     assert_eq!(args.pdns.api_ttl, 120);
     assert_eq!(args.pdns.dns_ttl, 140);
     assert_eq!(args.pdns.tunnel_ttl, 160);
-    assert_eq!(args.pdns.soa_content, "_my_soa");
     assert_eq!(args.pdns.socket_path, Some("/tmp/socket".to_owned()));
-    assert_eq!(args.pdns.mx_record, "_my_mx");
     assert_eq!(args.pdns.caa_record, "_my_caa");
-    assert_eq!(args.pdns.txt_record, "_my_txt");
+    assert_eq!(args.pdns.mx_record, "_my_mx");
+    assert_eq!(
+        args.pdns.ns_records,
+        [
+            ["ns1.example.com.", "1.1.1.1"],
+            ["ns2.example.com.", "2.2.2.2"]
+        ]
+    );
     assert_eq!(args.pdns.psl_record, Some("_my_psl".to_owned()));
+    assert_eq!(args.pdns.soa_record, "_my_soa");
+    assert_eq!(args.pdns.txt_record, "_my_txt");
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, Some("/path/to/mmdb".to_owned()));
     assert_eq!(args.pdns.geoip.continent.AF, Some("1.1.1.1".to_owned()));
@@ -315,10 +342,10 @@ fn test_args() {
     assert_eq!(args.email.success_page, Some("this is success".to_owned()));
     assert_eq!(args.email.error_page, Some("this is error".to_owned()));
 
-    let soa = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800";
-    let mx = "";
     let caa = "0 issue \"letsencrypt.org\"";
+    let mx = "";
     let txt = "";
+    let soa = "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60";
     let recl_title = "Reclaim your Mozilla IoT Gateway Domain";
     let recl_body = "Hello,\n\nYour reclamation token is: {token}\n\nIf you \
                      did not request to reclaim your gateway domain, you can \
@@ -361,17 +388,24 @@ fn test_args() {
     assert_eq!(args.pdns.api_ttl, 10);
     assert_eq!(args.pdns.dns_ttl, 600);
     assert_eq!(args.pdns.tunnel_ttl, 60);
-    assert_eq!(args.pdns.soa_content, soa);
-    assert_eq!(
-        args.pdns.socket_path,
-        Some("/tmp/powerdns_tunnel.sock".to_owned())
-    );
-    assert_eq!(args.pdns.mx_record, mx);
     assert_eq!(args.pdns.caa_record, caa);
-    assert_eq!(args.pdns.txt_record, txt);
+    assert_eq!(args.pdns.mx_record, mx);
+    assert_eq!(
+        args.pdns.ns_records,
+        [
+            ["ns1.mydomain.org.", "5.6.7.8"],
+            ["ns2.mydomain.org.", "4.5.6.7"]
+        ]
+    );
     assert_eq!(
         args.pdns.psl_record,
         Some("https://github.com/publicsuffix/list/pull/XYZ".to_owned())
+    );
+    assert_eq!(args.pdns.soa_record, soa);
+    assert_eq!(args.pdns.txt_record, txt);
+    assert_eq!(
+        args.pdns.socket_path,
+        Some("/tmp/powerdns_tunnel.sock".to_owned())
     );
     assert_eq!(args.pdns.geoip.default, "5.6.7.8");
     assert_eq!(

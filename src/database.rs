@@ -8,19 +8,19 @@
 
 extern crate env_logger;
 use diesel;
-use diesel::prelude::*;
 #[cfg(feature = "mysql")]
 use diesel::mysql::MysqlConnection;
 #[cfg(feature = "postgres")]
 use diesel::pg::PgConnection;
+use diesel::prelude::*;
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection;
 use models::{Account, Domain, NewAccount, NewDomain};
 use r2d2;
 use r2d2_diesel::ConnectionManager;
-use schema::{accounts, domains};
 use schema::accounts::dsl::*;
 use schema::domains::dsl::*;
+use schema::{accounts, domains};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(feature = "mysql")]
@@ -231,14 +231,12 @@ impl Database {
                     account_id.eq(_account_id),
                     verification_token.eq(_verification_token),
                     verified.eq(_verified),
-                ))
-                .execute(self.conn()),
+                )).execute(self.conn()),
             None => diesel::update(domains.filter(token.eq(_token)))
                 .set((
                     verification_token.eq(_verification_token),
                     verified.eq(_verified),
-                ))
-                .execute(self.conn()),
+                )).execute(self.conn()),
         }
     }
 
@@ -537,28 +535,32 @@ fn test_email() {
     // Create a domain linked to an account, and verify that deleting the account also deletes the
     // domain.
     let test_account_id = conn.add_account(&test_account.email).unwrap().id;
-    assert!(conn.add_domain(
-        "test.example.org",
-        test_account_id,
-        "test-token",
-        "Test Server",
-        0,
-        "",
-        "",
-        "",
-        false,
-        ""
-    ).is_ok());
+    assert!(
+        conn.add_domain(
+            "test.example.org",
+            test_account_id,
+            "test-token",
+            "Test Server",
+            0,
+            "",
+            "",
+            "",
+            false,
+            ""
+        ).is_ok()
+    );
     assert!(
         conn.get_domains_by_account_id(test_account_id)
             .unwrap()
-            .len() == 1
+            .len()
+            == 1
     );
     assert!(conn.delete_account(&test_account.email).is_ok());
     assert!(
         conn.get_domains_by_account_id(test_account_id)
             .unwrap()
-            .len() == 0
+            .len()
+            == 0
     );
 
     assert_eq!(
