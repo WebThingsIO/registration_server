@@ -37,15 +37,16 @@ pub struct GeneralOptions {
 
 #[derive(Clone, Deserialize)]
 pub struct PdnsOptions {
-    pub soa_content: String,
     pub socket_path: Option<String>,
     pub dns_ttl: u32,
     pub tunnel_ttl: u32,
     pub api_ttl: u32,
-    pub mx_record: String,
     pub caa_record: String,
-    pub txt_record: String,
+    pub mx_record: String,
+    pub ns_records: Vec<Vec<String>>,
     pub psl_record: Option<String>,
+    pub soa_record: String,
+    pub txt_record: String,
     pub geoip: GeoIp,
 }
 

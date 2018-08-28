@@ -13,8 +13,17 @@ pub struct NewAccount<'a> {
     pub email: &'a str,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, AsChangeset, Associations, Identifiable,
-         Queryable)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    AsChangeset,
+    Associations,
+    Identifiable,
+    Queryable,
+)]
 #[table_name = "domains"]
 #[belongs_to(Account)]
 pub struct Domain {

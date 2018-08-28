@@ -289,8 +289,14 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     //   with hyphen.
     // - Is not equal to "api", "www", or "_psl" as those are reserved.
     let re = Regex::new(r"^([a-z0-9]|[a-z0-9][a-z0-9-]*[a-z0-9])$").unwrap();
-    if !re.is_match(&subdomain) || subdomain == "api" || subdomain == "www" || subdomain == "_psl"
-        || subdomain.len() > 63 || full_name.len() > 253
+    let ns_regex = Regex::new(r"^ns\d*$").unwrap();
+    if !re.is_match(&subdomain)
+        || ns_regex.is_match(&subdomain)
+        || subdomain == "api"
+        || subdomain == "www"
+        || subdomain == "_psl"
+        || subdomain.len() > 63
+        || full_name.len() > 253
     {
         let mut response = Response::with(r#"{"error": "UnavailableName"}"#);
         response.status = Some(status::BadRequest);
@@ -473,13 +479,14 @@ pub fn create_router(config: &Config) -> Router {
     let mut router = Router::new();
 
     macro_rules! handler {
-        ($name:ident) => (
+        ($name:ident) => {
             let config_ = config.clone();
-            router.get(stringify!($name),
-                       move |req: &mut Request| -> IronResult<Response> {
-                $name(req, &config_)
-            }, stringify!($name));
-        )
+            router.get(
+                stringify!($name),
+                move |req: &mut Request| -> IronResult<Response> { $name(req, &config_) },
+                stringify!($name),
+            );
+        };
     }
 
     handler!(ping);
@@ -518,24 +525,24 @@ pub fn create_chain(root_path: &str, config: &Config) -> Chain {
 
 #[cfg(test)]
 mod tests {
+    use self::hyper::buffer::BufReader;
+    use self::hyper::net::NetworkStream;
     use super::*;
     use args::ArgsParser;
     use config::Config;
     use database::DatabasePool;
     use hyper;
-    use iron::{Handler, Url};
-    use iron::status::Status;
-    use iron::method;
     use iron;
-    use iron_test::response;
+    use iron::method;
+    use iron::status::Status;
+    use iron::{Handler, Url};
     use iron_test::mock_stream::MockStream;
+    use iron_test::response;
     use models::Domain;
+    use std;
     use std::io::Cursor;
     use std::thread::sleep;
-    use std;
     use std::time;
-    use self::hyper::buffer::BufReader;
-    use self::hyper::net::NetworkStream;
 
     fn get(path: &str, router: &Router) -> (String, Status) {
         let resp = match request(method::Method::Get, path, "", router) {
@@ -632,6 +639,20 @@ mod tests {
             )
         );
         assert_eq!(
+            get("subscribe?name=ns", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
+            get("subscribe?name=ns123", &router),
+            (
+                r#"{"error": "UnavailableName"}"#.to_owned(),
+                status::BadRequest
+            )
+        );
+        assert_eq!(
             get("subscribe?name=api", &router),
             (
                 r#"{"error": "UnavailableName"}"#.to_owned(),
@@ -704,7 +725,7 @@ mod tests {
             get(&format!("subscribe?name=test&email={}", email), &router),
             (
                 r#"{"error": "UnavailableName"}"#.to_owned(),
-                status::BadRequest
+                status::BadRequest,
             )
         );
         assert_eq!(get("reclaim", &router), bad_request_error);
@@ -839,7 +860,7 @@ mod tests {
             get(&format!("subscribe?name=test&email={}", email), &router),
             (
                 r#"{"error": "UnavailableNameReclamationPossible"}"#.to_owned(),
-                status::BadRequest
+                status::BadRequest,
             )
         );
         assert_eq!(get("reclaim?name=test", &router), empty_ok);

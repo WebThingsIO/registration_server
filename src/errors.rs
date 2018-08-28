@@ -3,8 +3,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 extern crate env_logger;
-use iron::status;
 use iron::prelude::*;
+use iron::status;
 use serde_json;
 use std::error::Error;
 use std::fmt::{self, Debug};

@@ -136,16 +136,20 @@ db_path = "/home/user/data/domains.sqlite"
 
 [pdns]
 api_ttl = 10
-dns_ttl = 60
-tunnel_ttl = 600
-# Check your DNS configuration to fill in this field.
-soa_content = "a.dns.gandi.net hostmaster.gandi.net 1476196782 10800 3600 604800 10800"
+dns_ttl = 600
+tunnel_ttl = 60
 socket_path = "/tmp/powerdns_tunnel.sock"
-mx_record = ""
 caa_record = "0 issue \"letsencrypt.org\""
-txt_record = ""
+mx_record = ""
+ns_records = [
+  [ "ns1.yourdomain.org.", "5.6.7.8" ],
+  [ "ns2.yourdomain.org.", "4.5.6.7" ],
+]
 # Uncomment to set a PSL authentication record
 # psl_record = "https://github.com/publicsuffix/list/pull/XYZ"
+# Check your DNS configuration to fill in this field.
+soa_record = "ns1.yourdomain.org. dns-admin.yourdomain.org. 2018082801 900 900 1209600 60"
+txt_record = ""
 
   [pdns.geoip]
   default = "5.6.7.8"
@@ -165,13 +169,15 @@ server = "mail.gandi.net"
 user = "accounts@mydomain.org"
 password = "******"
 sender = "accounts@mydomain.org"
+reclamation_title = "Reclaim your Mozilla IoT Gateway Domain"
+reclamation_body = "Hello,\n\nYour reclamation token is: {token}\n\nIf you did not request to reclaim your gateway domain, you can ignore this email."
 confirmation_title = "Welcome to your Mozilla IoT Gateway"
 confirmation_body = "Hello,\n\nWelcome to your Mozilla IoT Gateway! To confirm your email address, follow this link: {link}"
 success_page = """<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Successful!</title></head>
   <body>
-    <h1>Thank you for verifying your email, {email}.</h1>
+    <h1>Thank you for verifying your email.</h1>
   </body>
 </html>"""
 error_page = """<!DOCTYPE html>

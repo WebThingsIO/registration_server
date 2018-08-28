@@ -13,6 +13,7 @@ use crypto::digest::Digest;
 use crypto::sha1::Sha1;
 use maxminddb;
 use maxminddb::geoip2;
+use regex::Regex;
 use serde_json;
 use std::fs;
 use std::io::{Read, Write};
@@ -145,12 +146,30 @@ fn soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "SOA".to_owned(),
         qname: qname.to_owned(),
-        content: config.options.pdns.soa_content.to_owned(),
+        content: config.options.pdns.soa_record.to_owned(),
         ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
         auth: None,
     }
+}
+
+// Returns all NS records for a given qname.
+fn ns_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
+    let mut records = vec![];
+    for ns in &config.options.pdns.ns_records {
+        records.push(PdnsLookupResponse {
+            qtype: "NS".to_owned(),
+            qname: qname.to_owned(),
+            content: ns[0].to_owned(),
+            ttl: config.options.pdns.dns_ttl,
+            domain_id: None,
+            scope_mask: None,
+            auth: None,
+        });
+    }
+
+    records
 }
 
 // Returns an MX record for a given qname.
@@ -234,6 +253,15 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
         return Ok(pdns_response);
     }
 
+    if qtype == "NS" {
+        for record in ns_response(qname, config) {
+            pdns_response
+                .result
+                .push(PdnsResponseParams::Lookup(record));
+        }
+        return Ok(pdns_response);
+    }
+
     if qtype != "A" && qtype != "ANY" {
         return Err(format!("Unsupported PageKite request type: {}", qtype));
     }
@@ -310,6 +338,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         let original_qname = req.parameters.qname.unwrap().to_lowercase();
         let remote = req.parameters.remote;
         let mut qname = original_qname.clone();
+        let subdomain: &str = &original_qname.split('.').next().unwrap();
         let qtype = req.parameters.qtype.unwrap();
         debug!(
             "process_request(): lookup for qtype={} qname={}",
@@ -354,6 +383,14 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 )));
         }
 
+        if qtype == "NS" || qtype == "ANY" {
+            for record in ns_response(&original_qname, config) {
+                pdns_response
+                    .result
+                    .push(PdnsResponseParams::Lookup(record));
+            }
+        }
+
         if qtype == "ANY" {
             // Add an "MX" record.
             pdns_response
@@ -374,6 +411,8 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         }
         let conn = conn.unwrap();
 
+        let ns_regex = Regex::new(r"^ns\d*$").unwrap();
+        let is_ns_subdomain = ns_regex.is_match(&subdomain);
         let api_domain = format!("api.{}.", domain);
         let psl_domain = format!("_psl.{}.", domain);
         let domain_lookup = conn.get_domain_by_name(&qname);
@@ -394,7 +433,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
         }
 
         // Look for a record with the qname.
-        if qname == api_domain || domain_lookup.is_ok() {
+        if is_ns_subdomain || qname == api_domain || domain_lookup.is_ok() {
             let record = match domain_lookup {
                 Ok(val) => Some(val),
                 Err(_) => None,
@@ -402,7 +441,24 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
             if qtype == "ANY" || qtype == "A" {
                 // Add an "A" record.
-                if qname == api_domain {
+                if is_ns_subdomain {
+                    for ns in &config.options.pdns.ns_records {
+                        if qname == ns[0] {
+                            pdns_response.result.push(PdnsResponseParams::Lookup(
+                                PdnsLookupResponse {
+                                    qtype: "A".to_owned(),
+                                    qname: qname.to_owned(),
+                                    content: ns[1].clone(),
+                                    ttl: config.options.pdns.dns_ttl,
+                                    domain_id: None,
+                                    scope_mask: None,
+                                    auth: None,
+                                },
+                            ));
+                            break;
+                        }
+                    }
+                } else if qname == api_domain {
                     // For the API domain, we can do a GeoIP lookup based on the remote IP.
                     pdns_response
                         .result
@@ -435,7 +491,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 }
             }
 
-            if (qtype == "ANY" || qtype == "TXT") && qname != api_domain {
+            if (qtype == "ANY" || qtype == "TXT") && qname != api_domain && !is_ns_subdomain {
                 let record = record.clone().unwrap();
                 if !record.dns_challenge.is_empty() {
                     // Add a "TXT" record with the DNS challenge content.
@@ -518,9 +574,11 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
     let error_response = b"{\"result\":false}";
 
     macro_rules! send {
-        ($content:expr) => (
-            stream.write_all($content).expect("Failed to write answer to the pdns socket");
-        )
+        ($content:expr) => {
+            stream
+                .write_all($content)
+                .expect("Failed to write answer to the pdns socket");
+        };
     }
 
     loop {
@@ -604,8 +662,7 @@ pub fn start_socket_endpoint(config: &Config) {
                     }
                 }
             }
-        })
-        .expect("Failed to start pdns socket thread.");
+        }).expect("Failed to start pdns socket thread.");
 }
 
 #[cfg(test)]
@@ -690,7 +747,7 @@ mod tests {
         let empty_error = b"{\"result\":[]}";
         let soa_exampleorg = b"{\"result\":[{\"qtype\":\"SOA\"";
 
-        let mut answer: [u8; 256] = [0; 256];
+        let mut answer: [u8; 512] = [0; 512];
         assert_eq!(stream.read(&mut answer).unwrap(), 15);
         assert_eq!(&answer[..15], empty_success);
 
@@ -703,7 +760,7 @@ mod tests {
         assert_eq!(stream.read(&mut answer).unwrap(), 13);
         assert_eq!(&answer[..13], empty_error);
 
-        // Build a SOA lookup request and send it to the stream.
+        // Build an SOA lookup request and send it to the stream.
         let request = build_request("lookup", Some("SOA"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
@@ -711,6 +768,20 @@ mod tests {
 
         assert_eq!(stream.read(&mut answer).unwrap(), 144);
         assert_eq!(&answer[..25], soa_exampleorg);
+
+        // Build an NS lookup request and send it to the stream.
+        let request = build_request("lookup", Some("NS"), Some("example.org"), None);
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 166);
+        let result = String::from_utf8(answer[..166].to_vec()).unwrap();
+        let ns_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
+                          \"content\":\"ns1.mydomain.org.\",\"ttl\":600},{\
+                          \"qtype\":\"NS\",\"qname\":\"example.org\",\
+                          \"content\":\"ns2.mydomain.org.\",\"ttl\":600}]}";
+        assert_eq!(&result, ns_success);
 
         // SOA PageKite query, to create a successful response without having
         // to setup records in the db.
@@ -737,13 +808,14 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 133);
-        let result = String::from_utf8(answer[..133].to_vec()).unwrap();
-        let any_success = "{\"result\":[{\"qtype\":\"MX\",\
-                           \"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":600},\
-                           {\"qtype\":\"TXT\",\
-                           \"qname\":\"example.org\",\
+        assert_eq!(stream.read(&mut answer).unwrap(), 287);
+        let result = String::from_utf8(answer[..287].to_vec()).unwrap();
+        let any_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
+                           \"content\":\"ns1.mydomain.org.\",\"ttl\":600},{\
+                           \"qtype\":\"NS\",\"qname\":\"example.org\",\
+                           \"content\":\"ns2.mydomain.org.\",\"ttl\":600},{\
+                           \"qtype\":\"MX\",\"qname\":\"example.org\",\"content\":\"\",\
+                           \"ttl\":600},{\"qtype\":\"TXT\",\"qname\":\"example.org\",\
                            \"content\":\"\",\"ttl\":600}]}";
         assert_eq!(&result, any_success);
 
@@ -760,6 +832,43 @@ mod tests {
                            \"content\":\"https://github.com/publicsuffix/list/pull/XYZ\",\
                            \"ttl\":600}]}";
         assert_eq!(&result, psl_success);
+
+        // A query for ns1
+        let request = build_request("lookup", Some("A"), Some("ns1.mydomain.org."), None);
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 84);
+        let result = String::from_utf8(answer[..84].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"ns1.mydomain.org.\",\
+                         \"content\":\"5.6.7.8\",\
+                         \"ttl\":600}]}";
+        assert_eq!(&result, a_success);
+
+        // A query for ns2
+        let request = build_request("lookup", Some("A"), Some("ns2.mydomain.org."), None);
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 84);
+        let result = String::from_utf8(answer[..84].to_vec()).unwrap();
+        let a_success = "{\"result\":[{\"qtype\":\"A\",\
+                         \"qname\":\"ns2.mydomain.org.\",\
+                         \"content\":\"4.5.6.7\",\
+                         \"ttl\":600}]}";
+        assert_eq!(&result, a_success);
+
+        // A query for ns3
+        let request = build_request("lookup", Some("A"), Some("ns3.mydomain.org."), None);
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 13);
+        assert_eq!(&answer[..13], empty_error);
 
         // A query (AF)
         let request = build_request(

@@ -6,7 +6,7 @@ table! {
 }
 
 table! {
-    domains (name) {
+    domains (id) {
         id -> Integer,
         name -> Text,
         account_id -> Integer,

@@ -16,8 +16,8 @@ use std::thread;
 
 use registration_server::args::ArgsParser;
 use registration_server::config::Config;
-use registration_server::routes;
 use registration_server::pdns;
+use registration_server::routes;
 
 fn main() {
     env_logger::init().unwrap();
