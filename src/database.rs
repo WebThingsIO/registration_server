@@ -93,8 +93,11 @@ impl Database {
         &*self.0
     }
 
-    pub fn add_account<'a>(&self, _email: &'a str) -> QueryResult<Account> {
-        let new_account = NewAccount { email: _email };
+    pub fn add_account<'a>(&self, _email: &'a str, _optout: bool) -> QueryResult<Account> {
+        let new_account = NewAccount {
+            email: _email,
+            optout: _optout,
+        };
 
         match diesel::insert_into(accounts::table)
             .values(&new_account)
@@ -103,6 +106,12 @@ impl Database {
             Ok(_) => self.get_account_by_email(_email),
             Err(e) => Err(e),
         }
+    }
+
+    pub fn update_account_optout(&self, _email: &str, _optout: bool) -> QueryResult<usize> {
+        diesel::update(accounts.filter(email.eq(_email)))
+            .set(optout.eq(_optout))
+            .execute(self.conn())
     }
 
     pub fn delete_account(&self, _email: &str) -> QueryResult<usize> {
@@ -139,7 +148,7 @@ impl Database {
             .first::<Account>(self.conn())
         {
             Ok(a) => Ok(a),
-            Err(diesel::result::Error::NotFound) => self.add_account(""),
+            Err(diesel::result::Error::NotFound) => self.add_account("", true),
             Err(e) => Err(e),
         }
     }
@@ -319,14 +328,17 @@ fn test_domain_store() {
     let test_account = Account {
         id: 1,
         email: "test@example.com".to_owned(),
+        optout: true,
     };
     assert_eq!(
-        conn.add_account(&test_account.email),
+        conn.add_account(&test_account.email, test_account.optout),
         Ok(test_account.clone())
     );
 
     // Fail to add same account.
-    let e = conn.add_account(&test_account.email).unwrap_err();
+    let e = conn
+        .add_account(&test_account.email, test_account.optout)
+        .unwrap_err();
     match e {
         diesel::result::Error::DatabaseError(
             diesel::result::DatabaseErrorKind::UniqueViolation,
@@ -511,6 +523,7 @@ fn test_email() {
     let test_account = Account {
         id: 1,
         email: "test@example.com".to_owned(),
+        optout: true,
     };
 
     assert_eq!(
@@ -518,7 +531,7 @@ fn test_email() {
         Err(diesel::result::Error::NotFound)
     );
     assert_eq!(
-        conn.add_account(&test_account.email),
+        conn.add_account(&test_account.email, test_account.optout),
         Ok(test_account.clone())
     );
     assert_eq!(
@@ -534,7 +547,10 @@ fn test_email() {
 
     // Create a domain linked to an account, and verify that deleting the account also deletes the
     // domain.
-    let test_account_id = conn.add_account(&test_account.email).unwrap().id;
+    let test_account_id = conn
+        .add_account(&test_account.email, test_account.optout)
+        .unwrap()
+        .id;
     assert!(
         conn.add_domain(
             "test.example.org",
@@ -568,6 +584,7 @@ fn test_email() {
         Account {
             id: 3,
             email: "".to_owned(),
+            optout: true,
         }
     );
 }

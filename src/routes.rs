@@ -829,6 +829,17 @@ mod tests {
         );
         assert_eq!(
             get(
+                &format!("setemail?token={}&email={}&optout=1", token, email),
+                &router
+            ),
+            empty_ok
+        );
+        let record = conn.get_domain_by_token(&token).unwrap();
+        let account = conn.get_account_by_id(record.account_id).unwrap();
+        assert_eq!(account.email, email);
+        assert_eq!(account.optout, true);
+        assert_eq!(
+            get(
                 &format!("setemail?token={}&email={}", token, email),
                 &router
             ),
@@ -837,6 +848,7 @@ mod tests {
         let record = conn.get_domain_by_token(&token).unwrap();
         let account = conn.get_account_by_id(record.account_id).unwrap();
         assert_eq!(account.email, email);
+        assert_eq!(account.optout, false);
         assert!(!record.verified);
         let link = record.verification_token;
 

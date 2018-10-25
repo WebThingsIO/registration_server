@@ -5,12 +5,14 @@ use schema::{accounts, domains};
 pub struct Account {
     pub id: i32,
     pub email: String,
+    pub optout: bool,
 }
 
 #[derive(Insertable)]
 #[table_name = "accounts"]
 pub struct NewAccount<'a> {
     pub email: &'a str,
+    pub optout: bool,
 }
 
 #[derive(
