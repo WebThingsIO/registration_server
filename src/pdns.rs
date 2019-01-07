@@ -91,7 +91,8 @@ fn get_geoip(continent: Option<String>, config: &Config) -> String {
 
 pub fn lookup_continent(remote: IpAddr, config: &Config) -> Option<String> {
     let reader =
-        maxminddb::Reader::open(&config.clone().options.pdns.geoip.database.unwrap()).unwrap();
+        maxminddb::Reader::open_readfile(&config.clone().options.pdns.geoip.database.unwrap())
+            .unwrap();
 
     let result = reader.lookup(remote);
     if result.is_err() {
@@ -662,7 +663,8 @@ pub fn start_socket_endpoint(config: &Config) {
                     }
                 }
             }
-        }).expect("Failed to start pdns socket thread.");
+        })
+        .expect("Failed to start pdns socket thread.");
 }
 
 #[cfg(test)]
