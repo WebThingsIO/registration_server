@@ -1,0 +1,2 @@
+ALTER TABLE accounts ADD COLUMN optout BOOLEAN NOT NULL DEFAULT FALSE;
+UPDATE accounts SET optout = TRUE WHERE email = '';

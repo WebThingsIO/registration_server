@@ -117,6 +117,7 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
     let email = map.find(&["email"]);
+    let optout = map.find(&["optout"]);
 
     info!("GET /setemail {:?}", map);
 
@@ -128,6 +129,15 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     let token = String::from_value(token.unwrap()).unwrap();
     let email = String::from_value(email.unwrap()).unwrap();
 
+    let optout = match optout {
+        Some(val) => if String::from_value(val).unwrap() == "1" {
+            true
+        } else {
+            false
+        },
+        None => false,
+    };
+
     // Check that this is a valid email address.
     if Mailbox::from_str(&email).is_err() || email.len() > 254 {
         error!("setemail(): Invalid email address: {}", email);
@@ -135,8 +145,17 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
 
     let account_id = match conn.get_account_by_email(&email) {
-        Ok(account) => account.id,
-        Err(_) => match conn.add_account(&email) {
+        Ok(account) => match conn.update_account_optout(&email, optout) {
+            Ok(_) => account.id,
+            Err(err) => {
+                error!(
+                    "setemail(): Failed to update account opt-out status: {:?}",
+                    err
+                );
+                return EndpointError::with(status::InternalServerError, 500);
+            }
+        },
+        Err(_) => match conn.add_account(&email, optout) {
             Ok(account) => account.id,
             Err(err) => {
                 error!("setemail(): Failed to add account: {:?}", err);
