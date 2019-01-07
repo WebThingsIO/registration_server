@@ -240,12 +240,14 @@ impl Database {
                     account_id.eq(_account_id),
                     verification_token.eq(_verification_token),
                     verified.eq(_verified),
-                )).execute(self.conn()),
+                ))
+                .execute(self.conn()),
             None => diesel::update(domains.filter(token.eq(_token)))
                 .set((
                     verification_token.eq(_verification_token),
                     verified.eq(_verified),
-                )).execute(self.conn()),
+                ))
+                .execute(self.conn()),
         }
     }
 
@@ -551,8 +553,8 @@ fn test_email() {
         .add_account(&test_account.email, test_account.optout)
         .unwrap()
         .id;
-    assert!(
-        conn.add_domain(
+    assert!(conn
+        .add_domain(
             "test.example.org",
             test_account_id,
             "test-token",
@@ -563,8 +565,8 @@ fn test_email() {
             "",
             false,
             ""
-        ).is_ok()
-    );
+        )
+        .is_ok());
     assert!(
         conn.get_domains_by_account_id(test_account_id)
             .unwrap()

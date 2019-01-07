@@ -130,11 +130,13 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     let email = String::from_value(email.unwrap()).unwrap();
 
     let optout = match optout {
-        Some(val) => if String::from_value(val).unwrap() == "1" {
-            true
-        } else {
-            false
-        },
+        Some(val) => {
+            if String::from_value(val).unwrap() == "1" {
+                true
+            } else {
+                false
+            }
+        }
         None => false,
     };
 
