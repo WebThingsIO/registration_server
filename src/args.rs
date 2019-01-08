@@ -351,12 +351,8 @@ fn test_args() {
                      did not request to reclaim your gateway domain, you can ignore this email.";
     let conf_title = "Welcome to your Mozilla IoT Gateway";
     let conf_body = "Hello,\n<br>\n<br>\nWelcome to your Mozilla IoT Gateway! To confirm your \
-                     email address, follow <a href=\"{link}\">this link</a>.\n<br>\n<br>\nIf the \
-                     above link does not work, you can copy and paste the following URL into your \
-                     browser:\n<br>\n{link}\n<br>\n<br>\nYour gateway can be accessed \
-                     <a href=\"https://{domain}\">here</a>.\n<br>\n<br>\nIf the above link does \
-                     not work, you can copy and paste the following URL into your browser:\n<br>\n\
-                     https://{domain}";
+                     email address, navigate to <a href=\"{link}\">{link}</a>.\n<br>\n<br>\nYour \
+                     gateway can be accessed at <a href=\"https://{domain}\">https://{domain}</a>.";
     let success = "<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Successful!</title></head>

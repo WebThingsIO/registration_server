@@ -54,20 +54,10 @@ confirmation_title = "Welcome to your Mozilla IoT Gateway"
 confirmation_body = """Hello,
 <br>
 <br>
-Welcome to your Mozilla IoT Gateway! To confirm your email address, follow <a href="{link}">this link</a>.
+Welcome to your Mozilla IoT Gateway! To confirm your email address, navigate to <a href="{link}">{link}</a>.
 <br>
 <br>
-If the above link does not work, you can copy and paste the following URL into your browser:
-<br>
-{link}
-<br>
-<br>
-Your gateway can be accessed <a href="https://{domain}">here</a>.
-<br>
-<br>
-If the above link does not work, you can copy and paste the following URL into your browser:
-<br>
-https://{domain}"""
+Your gateway can be accessed at <a href="https://{domain}">https://{domain}</a>."""
 success_page = """<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Successful!</title></head>
