@@ -170,9 +170,31 @@ user = "accounts@mydomain.org"
 password = "******"
 sender = "accounts@mydomain.org"
 reclamation_title = "Reclaim your Mozilla IoT Gateway Domain"
-reclamation_body = "Hello,\n\nYour reclamation token is: {token}\n\nIf you did not request to reclaim your gateway domain, you can ignore this email."
+reclamation_body = """Hello,
+<br>
+<br>
+Your reclamation token is: {token}
+<br>
+<br>
+If you did not request to reclaim your gateway domain, you can ignore this email."""
 confirmation_title = "Welcome to your Mozilla IoT Gateway"
-confirmation_body = "Hello,\n\nWelcome to your Mozilla IoT Gateway! To confirm your email address, follow this link: {link}"
+confirmation_body = """Hello,
+<br>
+<br>
+Welcome to your Mozilla IoT Gateway! To confirm your email address, follow <a href="{link}">this link</a>.
+<br>
+<br>
+If the above link does not work, you can copy and paste the following URL into your browser:
+<br>
+{link}
+<br>
+<br>
+Your gateway can be accessed <a href="https://{domain}">here</a>.
+<br>
+<br>
+If the above link does not work, you can copy and paste the following URL into your browser:
+<br>
+https://{domain}"""
 success_page = """<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Successful!</title></head>
