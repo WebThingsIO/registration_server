@@ -168,8 +168,12 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
 
     let domain = conn.get_domain_by_token(&token);
     if domain.is_err() {
-        error!("setemail(): Failed to find domain for token {}: {:?}", token, domain.unwrap_err());
-        return EndpointError::with(status::BadRequest, 400);
+        error!(
+            "setemail(): Failed to find domain for token {}: {:?}",
+            token,
+            domain.unwrap_err()
+        );
+        return EndpointError::with(status::NotFound, 404);
     }
     let domain = domain.unwrap();
     let domain = domain.name.trim_end_matches('.');
