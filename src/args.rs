@@ -346,13 +346,14 @@ fn test_args() {
     let mx = "";
     let txt = "";
     let soa = "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60";
-    let recl_title = "Reclaim your Mozilla IoT Gateway Domain";
+    let recl_title = "Reclaim your Mozilla WebThings Gateway Domain";
     let recl_body = "Hello,\n<br>\n<br>\nYour reclamation token is: {token}\n<br>\n<br>\nIf you \
                      did not request to reclaim your gateway domain, you can ignore this email.";
-    let conf_title = "Welcome to your Mozilla IoT Gateway";
-    let conf_body = "Hello,\n<br>\n<br>\nWelcome to your Mozilla IoT Gateway! To confirm your \
-                     email address, navigate to <a href=\"{link}\">{link}</a>.\n<br>\n<br>\nYour \
-                     gateway can be accessed at <a href=\"https://{domain}\">https://{domain}</a>.";
+    let conf_title = "Welcome to your Mozilla WebThings Gateway";
+    let conf_body = "Hello,\n<br>\n<br>\nWelcome to your Mozilla WebThings Gateway! To confirm \
+                     your email address, navigate to <a href=\"{link}\">{link}</a>.\n<br>\n<br>\n\
+                     Your gateway can be accessed at \
+                     <a href=\"https://{domain}\">https://{domain}</a>.";
     let success = "<!DOCTYPE html>
 <html>
   <head><title>Email Confirmation Successful!</title></head>
