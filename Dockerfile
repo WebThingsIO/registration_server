@@ -28,10 +28,10 @@ RUN apt-get update && \
        --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Install powerdns 4.1.5
-RUN curl https://downloads.powerdns.com/releases/pdns-4.1.5.tar.bz2 | tar xvjf -
+# Install powerdns 4.1.8
+RUN curl https://downloads.powerdns.com/releases/pdns-4.1.8.tar.bz2 | tar xvjf -
 
-RUN cd pdns-4.1.5 && ./configure --with-modules=remote && make && make install 
+RUN cd pdns-4.1.8 && ./configure --with-modules=remote && make && make install 
 
 # Install PageKite
 RUN curl -s https://pagekite.net/pk/ | bash
