@@ -13,10 +13,10 @@ use iron::prelude::*;
 use iron::status::{self, Status};
 use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::smtp::extension::ClientId;
-use lettre::smtp::ConnectionReuseParameters;
+use lettre::smtp::{ConnectionReuseParameters, SmtpClient, SmtpTransport};
 #[cfg(test)]
-use lettre::stub::StubEmailTransport;
-use lettre::{EmailTransport, SmtpTransport};
+use lettre::stub::StubTransport;
+use lettre::Transport;
 use lettre_email::EmailBuilder;
 use params::{FromValue, Params};
 use std::str::FromStr;
@@ -41,7 +41,7 @@ impl EmailSender {
             return Err(());
         }
 
-        let builder = match SmtpTransport::simple_builder(&options.clone().email.server.unwrap()) {
+        let builder = match SmtpClient::new_simple(&options.clone().email.server.unwrap()) {
             Ok(builder) => builder,
             Err(error) => {
                 error!("new(): Error building transport: {:?}", error);
@@ -57,7 +57,7 @@ impl EmailSender {
             .smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
-            .build();
+            .transport();
 
         Ok(EmailSender {
             connection: connection,
@@ -81,7 +81,7 @@ impl EmailSender {
         };
 
         #[cfg(not(test))]
-        match self.connection.send(&email.clone()) {
+        match self.connection.send(email.clone().into()) {
             Ok(_) => Ok(()),
             Err(error) => {
                 error!("send(): Error sending email: {:?}", error);
@@ -91,8 +91,8 @@ impl EmailSender {
 
         #[cfg(test)]
         {
-            let mut transport = StubEmailTransport::new_positive();
-            match transport.send(&email.clone()) {
+            let mut transport = StubTransport::new_positive();
+            match transport.send(email.clone().into()) {
                 Ok(_) => Ok(()),
                 Err(error) => {
                     error!("send(): Error sending email: {:?}", error);
