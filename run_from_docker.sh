@@ -22,7 +22,9 @@ else
         --isfrontend \
         --ports=4443 \
         --protos=https \
-        --authdomain=$DOMAIN
+        --authdomain=$DOMAIN \
+        --nullui \
+        --daemonize
 fi
 
 RUST_LOG=info ./target/release/main --config-file=$ROOT_DIR/config.toml
