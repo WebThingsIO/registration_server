@@ -1,5 +1,0 @@
-# Domain specific configuration for pagekite.
-DOMAIN=mydomain.org
-
-# Other variables useful for other purposes.
-export RUST_LOG=debug

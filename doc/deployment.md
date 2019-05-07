@@ -93,16 +93,16 @@ Port 53 over TCP and UDP needs to be forwarded for PowerDNS. The ports used for 
       	}
 ```
 
-* The `$CONFIG_DIR/env` file is used to set any environment variable need. It is mandatory to declare DOMAIN to configure PageKite. For instance, set DOMAIN to `yourdomain.com`. Here's a full example:
+* The `$CONFIG_DIR/pagekite.conf` file is used to set any options for PageKite. Here's a full example:
 ```
-# Domain specific configuration for pagekite.
-DOMAIN=yourdomain.com
-
-# Other variables useful for other purposes.
-export RUST_LOG=debug
+--isfrontend
+--ports=4443
+--protos=https
+--authdomain=mydomain.org
+--nullui
 ```
 
-* The `CONFIG_DIR/pdns.conf` is the PowerDNS configuration file. It needs to be consistent with the registration configuration to connect on the correct socket for the remote queries:
+* The `$CONFIG_DIR/pdns.conf` is the PowerDNS configuration file. It needs to be consistent with the registration configuration to connect on the correct socket for the remote queries:
 ```
 daemon=yes
 local-port=53
@@ -120,7 +120,7 @@ loglevel=5
 #cache-ttl=0
 ```
 
-* The `CONFIG_DIR/config.toml` file holds the registration server configuration. Here's a sample consistent with the `pdns.conf` shown above:
+* The `$CONFIG_DIR/config.toml` file holds the registration server configuration. Here's a sample consistent with the `pdns.conf` shown above:
 ```
 # Configuration used for tests.
 
