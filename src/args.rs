@@ -406,7 +406,7 @@ fn test_args() {
     assert_eq!(args.pdns.txt_record, txt);
     assert_eq!(
         args.pdns.socket_path,
-        Some("/tmp/powerdns_tunnel.sock".to_owned())
+        Some("/tmp/pdns_tunnel.sock".to_owned())
     );
     assert_eq!(args.pdns.geoip.default, "5.6.7.8");
     assert_eq!(
