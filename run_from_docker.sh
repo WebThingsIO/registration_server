@@ -16,7 +16,8 @@ if [ -n "$SECRET" ]; then
         --domain=https:*.$DOMAIN:$SECRET \
         --authdomain=$DOMAIN \
         --nullui \
-        --daemonize
+        --daemonize \
+        --logfile=/dev/null
 else
     pagekite.py \
         --isfrontend \
@@ -24,7 +25,8 @@ else
         --protos=https \
         --authdomain=$DOMAIN \
         --nullui \
-        --daemonize
+        --daemonize \
+        --logfile=/dev/null
 fi
 
 RUST_LOG=info ./target/release/main --config-file=$ROOT_DIR/config.toml
