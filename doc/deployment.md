@@ -104,7 +104,7 @@ Port 53 over TCP and UDP needs to be forwarded for PowerDNS. The ports used for 
 
 * The `$CONFIG_DIR/pdns.conf` is the PowerDNS configuration file. It needs to be consistent with the registration configuration to connect on the correct socket for the remote queries:
 ```
-daemon=yes
+daemon=no
 local-port=53
 local-address=0.0.0.0
 socket-dir=.
@@ -138,7 +138,7 @@ db_path = "/home/user/data/domains.sqlite"
 api_ttl = 10
 dns_ttl = 600
 tunnel_ttl = 60
-socket_path = "/tmp/powerdns_tunnel.sock"
+socket_path = "/tmp/pdns_tunnel.sock"
 caa_record = "0 issue \"letsencrypt.org\""
 mx_record = ""
 ns_records = [
