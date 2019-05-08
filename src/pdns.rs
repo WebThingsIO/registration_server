@@ -335,203 +335,202 @@ fn pagekite_query(qname: &str, qtype: &str, config: &Config) -> Result<PdnsRespo
 fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, String> {
     debug!("process_request(): pdns request is {:?}", req);
 
-    if req.method == "lookup" {
-        let original_qname = req.parameters.qname.unwrap().to_lowercase();
-        let remote = req.parameters.remote;
-        let mut qname = original_qname.clone();
-        let subdomain: &str = &original_qname.split('.').next().unwrap();
-        let qtype = req.parameters.qtype.unwrap();
-        debug!(
-            "process_request(): lookup for qtype={} qname={}",
-            qtype, original_qname
-        );
-
-        // Example payload:
-        //
-        // {"method": "lookup",
-        //  "parameters": {"local": "0.0.0.0",
-        //                 "qname": "fabrice.mozilla-iot.org.",
-        //                 "qtype": "SOA",
-        //                 "real-remote": "63.245.221.198/32",
-        //                 "remote": "63.245.221.198",
-        //                 "zone-id": -1}}
-
-        // If the qname ends up with .$domain.$domain. we consider that
-        // it's a PageKite request and process it separately.
-        let domain = &config.options.general.domain;
-        if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
-            return pagekite_query(&qname, &qtype, config);
-        }
-
-        // If the qname starts with `_acme-challenge.` this is a DNS-01
-        // challenge verification, so remove that part of the domain to
-        // retrieve our record.
-        // See https://tools.ietf.org/html/draft-ietf-acme-acme-06#section-8.4
-        if qname.starts_with("_acme-challenge.") {
-            qname = qname[16..].to_owned();
-        }
-
-        debug!("process_request(): final qname={}", qname);
-
-        let mut pdns_response = PdnsResponse { result: Vec::new() };
-
-        if qtype == "SOA" {
-            pdns_response
-                .result
-                .push(PdnsResponseParams::Lookup(soa_response(
-                    &original_qname,
-                    config,
-                )));
-        }
-
-        if qtype == "NS" || qtype == "ANY" {
-            for record in ns_response(&original_qname, config) {
-                pdns_response
-                    .result
-                    .push(PdnsResponseParams::Lookup(record));
-            }
-        }
-
-        if qtype == "ANY" {
-            // Add an "MX" record.
-            pdns_response
-                .result
-                .push(PdnsResponseParams::Lookup(mx_response(
-                    &original_qname,
-                    config,
-                )));
-        }
-
-        let conn = config.db.get_connection();
-        if conn.is_err() {
-            error!(
-                "process_request(): Failed to get database connection: {:?}",
-                conn.err()
+    match req.method.as_ref() {
+        "lookup" => {
+            let original_qname = req.parameters.qname.unwrap().to_lowercase();
+            let remote = req.parameters.remote;
+            let mut qname = original_qname.clone();
+            let subdomain: &str = &original_qname.split('.').next().unwrap();
+            let qtype = req.parameters.qtype.unwrap();
+            debug!(
+                "process_request(): lookup for qtype={} qname={}",
+                qtype, original_qname
             );
-            return Ok(pdns_response);
-        }
-        let conn = conn.unwrap();
 
-        let ns_regex = Regex::new(r"^ns\d*$").unwrap();
-        let is_ns_subdomain = ns_regex.is_match(&subdomain);
-        let api_domain = format!("api.{}.", domain);
-        let psl_domain = format!("_psl.{}.", domain);
-        let domain_lookup = conn.get_domain_by_name(&qname);
+            // Example payload:
+            //
+            // {"method": "lookup",
+            //  "parameters": {"local": "0.0.0.0",
+            //                 "qname": "fabrice.mozilla-iot.org.",
+            //                 "qtype": "SOA",
+            //                 "real-remote": "63.245.221.198/32",
+            //                 "remote": "63.245.221.198",
+            //                 "zone-id": -1}}
 
-        if qname == psl_domain {
-            // Add the PSL record if known. If not, just return, as this subdomain is forbidden
-            // otherwise.
-            if (qtype == "ANY" || qtype == "TXT") && config.options.pdns.psl_record.is_some() {
+            // If the qname ends up with .$domain.$domain. we consider that
+            // it's a PageKite request and process it separately.
+            let domain = &config.options.general.domain;
+            if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
+                return pagekite_query(&qname, &qtype, config);
+            }
+
+            // If the qname starts with `_acme-challenge.` this is a DNS-01
+            // challenge verification, so remove that part of the domain to
+            // retrieve our record.
+            // See https://tools.ietf.org/html/draft-ietf-acme-acme-06#section-8.4
+            if qname.starts_with("_acme-challenge.") {
+                qname = qname[16..].to_owned();
+            }
+
+            debug!("process_request(): final qname={}", qname);
+
+            let mut pdns_response = PdnsResponse { result: Vec::new() };
+
+            if qtype == "SOA" {
                 pdns_response
                     .result
-                    .push(PdnsResponseParams::Lookup(psl_response(
+                    .push(PdnsResponseParams::Lookup(soa_response(
                         &original_qname,
                         config,
                     )));
             }
 
-            return Ok(pdns_response);
-        }
+            if qtype == "NS" || qtype == "ANY" {
+                for record in ns_response(&original_qname, config) {
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(record));
+                }
+            }
 
-        // Look for a record with the qname.
-        if is_ns_subdomain || qname == api_domain || domain_lookup.is_ok() {
-            let record = match domain_lookup {
-                Ok(val) => Some(val),
-                Err(_) => None,
-            };
+            if qtype == "ANY" {
+                // Add an "MX" record.
+                pdns_response
+                    .result
+                    .push(PdnsResponseParams::Lookup(mx_response(
+                        &original_qname,
+                        config,
+                    )));
+            }
 
-            if qtype == "ANY" || qtype == "A" {
-                // Add an "A" record.
-                if is_ns_subdomain {
-                    for ns in &config.options.pdns.ns_records {
-                        if qname == ns[0] {
-                            pdns_response.result.push(PdnsResponseParams::Lookup(
-                                PdnsLookupResponse {
-                                    qtype: "A".to_owned(),
-                                    qname: qname.to_owned(),
-                                    content: ns[1].clone(),
-                                    ttl: config.options.pdns.dns_ttl,
-                                    domain_id: None,
-                                    scope_mask: None,
-                                    auth: None,
-                                },
-                            ));
-                            break;
+            let conn = config.db.get_connection();
+            if conn.is_err() {
+                error!(
+                    "process_request(): Failed to get database connection: {:?}",
+                    conn.err()
+                );
+                return Ok(pdns_response);
+            }
+            let conn = conn.unwrap();
+
+            let ns_regex = Regex::new(r"^ns\d*$").unwrap();
+            let is_ns_subdomain = ns_regex.is_match(&subdomain);
+            let api_domain = format!("api.{}.", domain);
+            let psl_domain = format!("_psl.{}.", domain);
+            let domain_lookup = conn.get_domain_by_name(&qname);
+
+            if qname == psl_domain {
+                // Add the PSL record if known. If not, just return, as this subdomain is forbidden
+                // otherwise.
+                if (qtype == "ANY" || qtype == "TXT") && config.options.pdns.psl_record.is_some() {
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(psl_response(
+                            &original_qname,
+                            config,
+                        )));
+                }
+
+                return Ok(pdns_response);
+            }
+
+            // Look for a record with the qname.
+            if is_ns_subdomain || qname == api_domain || domain_lookup.is_ok() {
+                let record = match domain_lookup {
+                    Ok(val) => Some(val),
+                    Err(_) => None,
+                };
+
+                if qtype == "ANY" || qtype == "A" {
+                    // Add an "A" record.
+                    if is_ns_subdomain {
+                        for ns in &config.options.pdns.ns_records {
+                            if qname == ns[0] {
+                                pdns_response.result.push(PdnsResponseParams::Lookup(
+                                    PdnsLookupResponse {
+                                        qtype: "A".to_owned(),
+                                        qname: qname.to_owned(),
+                                        content: ns[1].clone(),
+                                        ttl: config.options.pdns.dns_ttl,
+                                        domain_id: None,
+                                        scope_mask: None,
+                                        auth: None,
+                                    },
+                                ));
+                                break;
+                            }
                         }
-                    }
-                } else if qname == api_domain {
-                    // For the API domain, we can do a GeoIP lookup based on the remote IP.
-                    pdns_response
-                        .result
-                        .push(PdnsResponseParams::Lookup(a_response(
-                            &original_qname,
-                            config.options.pdns.api_ttl,
-                            config,
-                            remote,
-                            None,
-                        )));
-                } else {
-                    let record = record.clone().unwrap();
-                    let continent = if record.continent.is_empty() {
-                        None
+                    } else if qname == api_domain {
+                        // For the API domain, we can do a GeoIP lookup based on the remote IP.
+                        pdns_response
+                            .result
+                            .push(PdnsResponseParams::Lookup(a_response(
+                                &original_qname,
+                                config.options.pdns.api_ttl,
+                                config,
+                                remote,
+                                None,
+                            )));
                     } else {
-                        Some(record.continent)
-                    };
+                        let record = record.clone().unwrap();
+                        let continent = if record.continent.is_empty() {
+                            None
+                        } else {
+                            Some(record.continent)
+                        };
 
-                    // For a PageKite subdomain, we need to use the continent stored in the
-                    // database.
+                        // For a PageKite subdomain, we need to use the continent stored in the
+                        // database.
+                        pdns_response
+                            .result
+                            .push(PdnsResponseParams::Lookup(a_response(
+                                &original_qname,
+                                config.options.pdns.tunnel_ttl,
+                                config,
+                                None,
+                                continent,
+                            )));
+                    }
+                }
+
+                if (qtype == "ANY" || qtype == "TXT") && qname != api_domain && !is_ns_subdomain {
+                    let record = record.clone().unwrap();
+                    if !record.dns_challenge.is_empty() {
+                        // Add a "TXT" record with the DNS challenge content.
+                        pdns_response.result.push(PdnsResponseParams::Lookup(
+                            dns_challenge_response(&original_qname, config, &record.dns_challenge),
+                        ));
+                    }
+                }
+
+                if qtype == "ANY" {
+                    // Add a "CAA" record.
                     pdns_response
                         .result
-                        .push(PdnsResponseParams::Lookup(a_response(
+                        .push(PdnsResponseParams::Lookup(caa_response(
                             &original_qname,
-                            config.options.pdns.tunnel_ttl,
                             config,
-                            None,
-                            continent,
+                        )));
+                }
+            } else {
+                info!("process_request(): No record for: {}", qname);
+
+                // If there's no record in the database, we add the "TXT" record from the config file.
+                if qtype == "ANY" {
+                    pdns_response
+                        .result
+                        .push(PdnsResponseParams::Lookup(txt_response(
+                            &original_qname,
+                            config,
                         )));
                 }
             }
 
-            if (qtype == "ANY" || qtype == "TXT") && qname != api_domain && !is_ns_subdomain {
-                let record = record.clone().unwrap();
-                if !record.dns_challenge.is_empty() {
-                    // Add a "TXT" record with the DNS challenge content.
-                    pdns_response
-                        .result
-                        .push(PdnsResponseParams::Lookup(dns_challenge_response(
-                            &original_qname,
-                            config,
-                            &record.dns_challenge,
-                        )));
-                }
-            }
-
-            if qtype == "ANY" {
-                // Add a "CAA" record.
-                pdns_response
-                    .result
-                    .push(PdnsResponseParams::Lookup(caa_response(
-                        &original_qname,
-                        config,
-                    )));
-            }
-        } else {
-            info!("process_request(): No record for: {}", qname);
-
-            // If there's no record in the database, we add the "TXT" record from the config file.
-            if qtype == "ANY" {
-                pdns_response
-                    .result
-                    .push(PdnsResponseParams::Lookup(txt_response(
-                        &original_qname,
-                        config,
-                    )));
-            }
+            Ok(pdns_response)
         }
-        return Ok(pdns_response);
+        "getDomainMetadata" => Ok(PdnsResponse { result: Vec::new() }),
+        _ => Err(format!("Unsupported method: {}", req.method)),
     }
-
-    Err(format!("Unsupported method: {}", req.method))
 }
 
 // Custom method to read just enough characters from the stream to build a JSON
@@ -675,7 +674,7 @@ mod tests {
     use database::DatabasePool;
     use std::time::Duration;
 
-    fn build_request(
+    fn build_lookup(
         method: &str,
         qtype: Option<&str>,
         qname: Option<&str>,
@@ -740,7 +739,7 @@ mod tests {
         let mut stream =
             UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap()).unwrap();
         // Build an initialization request and send it to the stream.
-        let request = build_request("initialize", None, None, None);
+        let request = build_lookup("initialize", None, None, None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -754,7 +753,7 @@ mod tests {
         assert_eq!(&answer[..15], empty_success);
 
         // Build a lookup request and send it to the stream.
-        let request = build_request("lookup", Some("A"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("A"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -763,7 +762,7 @@ mod tests {
         assert_eq!(&answer[..13], empty_error);
 
         // Build an SOA lookup request and send it to the stream.
-        let request = build_request("lookup", Some("SOA"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("SOA"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -772,7 +771,7 @@ mod tests {
         assert_eq!(&answer[..25], soa_exampleorg);
 
         // Build an NS lookup request and send it to the stream.
-        let request = build_request("lookup", Some("NS"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("NS"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -787,7 +786,7 @@ mod tests {
 
         // SOA PageKite query, to create a successful response without having
         // to setup records in the db.
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("1d48.https-4443.test.mydomain.org.mydomain.org."),
@@ -805,7 +804,7 @@ mod tests {
         assert_eq!(&result, soa_success);
 
         // ANY query
-        let request = build_request("lookup", Some("ANY"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("ANY"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -822,7 +821,7 @@ mod tests {
         assert_eq!(&result, any_success);
 
         // PSL query
-        let request = build_request("lookup", Some("TXT"), Some("_psl.mydomain.org."), None);
+        let request = build_lookup("lookup", Some("TXT"), Some("_psl.mydomain.org."), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -836,7 +835,7 @@ mod tests {
         assert_eq!(&result, psl_success);
 
         // A query for ns1
-        let request = build_request("lookup", Some("A"), Some("ns1.mydomain.org."), None);
+        let request = build_lookup("lookup", Some("A"), Some("ns1.mydomain.org."), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -850,7 +849,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query for ns2
-        let request = build_request("lookup", Some("A"), Some("ns2.mydomain.org."), None);
+        let request = build_lookup("lookup", Some("A"), Some("ns2.mydomain.org."), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -864,7 +863,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query for ns3
-        let request = build_request("lookup", Some("A"), Some("ns3.mydomain.org."), None);
+        let request = build_lookup("lookup", Some("A"), Some("ns3.mydomain.org."), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -873,7 +872,7 @@ mod tests {
         assert_eq!(&answer[..13], empty_error);
 
         // A query (AF)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -892,7 +891,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query (AN)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -911,7 +910,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query (AS)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -930,7 +929,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query (EU)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -949,7 +948,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query (NA)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -968,7 +967,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query (OC)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -987,7 +986,7 @@ mod tests {
         assert_eq!(&result, a_success);
 
         // A query (SA)
-        let request = build_request(
+        let request = build_lookup(
             "lookup",
             Some("A"),
             Some("api.mydomain.org."),
@@ -1004,5 +1003,16 @@ mod tests {
                          \"content\":\"9.8.7.6\",\
                          \"ttl\":10}]}";
         assert_eq!(&result, a_success);
+
+        // getDomainMetadata
+        let body = "{\"method\":\"getDomainMetadata\",\"parameters\":{\
+                    \"name\":\"api.mydomain.org\",\"kind\":\"PRESIGNED\"}}";
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        assert_eq!(stream.read(&mut answer).unwrap(), 13);
+        let result = String::from_utf8(answer[..13].to_vec()).unwrap();
+        let success = "{\"result\":[]}";
+        assert_eq!(&result, success);
     }
 }
