@@ -68,7 +68,7 @@ See the `config/config.toml` for an example configuration file.
 
 ## Deploying
 
-Deployment details are provided in the [deployment guide](doc/deployment.md).
+A Docker image has been provided [here](https://github.com/mozilla-iot/registration-server-docker).
 
 ## API
 

@@ -10,8 +10,8 @@ identity_directory = "/tmp/certs"
 identity_password = "mypassword"
 
 [pdns]
-api_ttl = 10
-dns_ttl = 600
+api_ttl = 1
+dns_ttl = 86400
 tunnel_ttl = 60
 socket_path = "/tmp/pdns_tunnel.sock"
 caa_record = "0 issue \"letsencrypt.org\""

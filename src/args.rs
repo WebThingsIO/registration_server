@@ -386,8 +386,8 @@ fn test_args() {
         args.general.identity_password,
         Some("mypassword".to_owned())
     );
-    assert_eq!(args.pdns.api_ttl, 10);
-    assert_eq!(args.pdns.dns_ttl, 600);
+    assert_eq!(args.pdns.api_ttl, 1);
+    assert_eq!(args.pdns.dns_ttl, 86400);
     assert_eq!(args.pdns.tunnel_ttl, 60);
     assert_eq!(args.pdns.caa_record, caa);
     assert_eq!(args.pdns.mx_record, mx);

@@ -767,7 +767,7 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 144);
+        assert_eq!(stream.read(&mut answer).unwrap(), 146);
         assert_eq!(&answer[..25], soa_exampleorg);
 
         // Build an NS lookup request and send it to the stream.
@@ -776,12 +776,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 166);
-        let result = String::from_utf8(answer[..166].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 170);
+        let result = String::from_utf8(answer[..170].to_vec()).unwrap();
         let ns_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
-                          \"content\":\"ns1.mydomain.org.\",\"ttl\":600},{\
+                          \"content\":\"ns1.mydomain.org.\",\"ttl\":86400},{\
                           \"qtype\":\"NS\",\"qname\":\"example.org\",\
-                          \"content\":\"ns2.mydomain.org.\",\"ttl\":600}]}";
+                          \"content\":\"ns2.mydomain.org.\",\"ttl\":86400}]}";
         assert_eq!(&result, ns_success);
 
         // SOA PageKite query, to create a successful response without having
@@ -809,15 +809,15 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 287);
-        let result = String::from_utf8(answer[..287].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 295);
+        let result = String::from_utf8(answer[..295].to_vec()).unwrap();
         let any_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
-                           \"content\":\"ns1.mydomain.org.\",\"ttl\":600},{\
+                           \"content\":\"ns1.mydomain.org.\",\"ttl\":86400},{\
                            \"qtype\":\"NS\",\"qname\":\"example.org\",\
-                           \"content\":\"ns2.mydomain.org.\",\"ttl\":600},{\
+                           \"content\":\"ns2.mydomain.org.\",\"ttl\":86400},{\
                            \"qtype\":\"MX\",\"qname\":\"example.org\",\"content\":\"\",\
-                           \"ttl\":600},{\"qtype\":\"TXT\",\"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":600}]}";
+                           \"ttl\":86400},{\"qtype\":\"TXT\",\"qname\":\"example.org\",\
+                           \"content\":\"\",\"ttl\":86400}]}";
         assert_eq!(&result, any_success);
 
         // PSL query
@@ -826,12 +826,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 125);
-        let result = String::from_utf8(answer[..125].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 127);
+        let result = String::from_utf8(answer[..127].to_vec()).unwrap();
         let psl_success = "{\"result\":[{\"qtype\":\"TXT\",\
                            \"qname\":\"_psl.mydomain.org.\",\
                            \"content\":\"https://github.com/publicsuffix/list/pull/XYZ\",\
-                           \"ttl\":600}]}";
+                           \"ttl\":86400}]}";
         assert_eq!(&result, psl_success);
 
         // A query for ns1
@@ -840,12 +840,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 84);
-        let result = String::from_utf8(answer[..84].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 86);
+        let result = String::from_utf8(answer[..86].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"ns1.mydomain.org.\",\
                          \"content\":\"5.6.7.8\",\
-                         \"ttl\":600}]}";
+                         \"ttl\":86400}]}";
         assert_eq!(&result, a_success);
 
         // A query for ns2
@@ -854,12 +854,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 84);
-        let result = String::from_utf8(answer[..84].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 86);
+        let result = String::from_utf8(answer[..86].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"ns2.mydomain.org.\",\
                          \"content\":\"4.5.6.7\",\
-                         \"ttl\":600}]}";
+                         \"ttl\":86400}]}";
         assert_eq!(&result, a_success);
 
         // A query for ns3
@@ -882,12 +882,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"1.2.3.4\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // A query (AN)
@@ -901,12 +901,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"2.3.4.5\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // A query (AS)
@@ -920,12 +920,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"3.4.5.6\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // A query (EU)
@@ -939,12 +939,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"4.5.6.7\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // A query (NA)
@@ -958,12 +958,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"5.6.7.8\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // A query (OC)
@@ -977,12 +977,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"6.7.8.9\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // A query (SA)
@@ -996,12 +996,12 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 83);
-        let result = String::from_utf8(answer[..83].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 82);
+        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
         let a_success = "{\"result\":[{\"qtype\":\"A\",\
                          \"qname\":\"api.mydomain.org.\",\
                          \"content\":\"9.8.7.6\",\
-                         \"ttl\":10}]}";
+                         \"ttl\":1}]}";
         assert_eq!(&result, a_success);
 
         // getDomainMetadata
