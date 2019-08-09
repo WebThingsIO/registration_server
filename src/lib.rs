@@ -21,6 +21,9 @@ extern crate lettre_email;
 extern crate log;
 extern crate maxminddb;
 extern crate mount;
+#[macro_use]
+extern crate num_derive;
+extern crate num_traits;
 extern crate params;
 extern crate r2d2;
 #[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
@@ -71,6 +74,7 @@ macro_rules! ok_response {
 
 pub mod args;
 pub mod config;
+pub mod constants;
 pub mod database;
 pub mod email_routes;
 pub mod errors;

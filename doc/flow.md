@@ -16,7 +16,7 @@
 4.  **[gateway <-> cloud]** Use `/dnsconfig` to send the LE challenge token to the registration server.
 5.  **[LE <-> cloud]** LE does a DNS lookup for the desired domain. Lookup is handled by registration server, and the challenge token is returned.
 6.  **[gateway <-> LE]** Generate the certificates, restart the server on HTTPS.
-7.  **[gateway <-> cloud]** Gateway sets up a secure tunnel to the registration server through PageKite. This makes the gateway UI accessible through the internet, at the desired domain, with no extra effort by the user.
+7.  **[gateway <-> cloud]** (If using tunneling, rather than dynamic DNS) Gateway sets up a secure tunnel to the registration server through PageKite. This makes the gateway UI accessible through the internet, at the desired domain, with no extra effort by the user.
 8.  **[gateway <-> browser]** Redirect from http://gateway.local:8080 to https://mydomain.mozilla-iot.org.
 9.  **[gateway <-> browser]** Create the gateway admin account with an email address.
 10. **[gateway <-> cloud]** Set domain's email address with `/setemail`.
@@ -37,7 +37,7 @@
 8.  **[gateway <-> cloud]** Use `/dnsconfig` to send the LE challenge token to the registration server.
 9.  **[LE <-> cloud]** LE does a DNS lookup for the desired domain. Lookup is handled by registration server, and the challenge token is returned.
 10. **[gateway <-> LE]** Generate the certificates, restart the server on HTTPS.
-11. **[gateway <-> cloud]** Gateway sets up a secure tunnel to the registration server through PageKite. This makes the gateway UI accessible through the internet, at the desired domain, with no extra effort by the user.
+11. **[gateway <-> cloud]** (If using tunneling, rather than dynamic DNS) Gateway sets up a secure tunnel to the registration server through PageKite. This makes the gateway UI accessible through the internet, at the desired domain, with no extra effort by the user.
 12. **[gateway <-> browser]** Redirect from http://gateway.local:8080 to https://mydomain.mozilla-iot.org.
 13. **[gateway <-> browser]** Create the gateway admin account with an email address.
 14. **[gateway <-> cloud]** Periodically ping the cloud service using `/ping`.

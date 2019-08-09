@@ -2,7 +2,7 @@
 
 set -e
 
-for db_type in sqlite; do
+for db_type in mysql postgres sqlite; do
     for database in domain_db_test_domains domain_db_test_email domain_db_test_pdns domain_db_test_routes; do
         if [ "${db_type}" = "mysql" ]; then
             db_path="mysql://root@127.0.0.1/${database}"

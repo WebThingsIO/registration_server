@@ -19,12 +19,11 @@ table! {
         verification_token -> Text,
         verified -> Bool,
         continent -> Text,
+        mode -> Integer,
+        last_ip -> Text,
     }
 }
 
 joinable!(domains -> accounts (account_id));
 
-allow_tables_to_appear_in_same_query!(
-    accounts,
-    domains,
-);
+allow_tables_to_appear_in_same_query!(accounts, domains,);

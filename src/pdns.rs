@@ -9,10 +9,12 @@
 
 extern crate env_logger;
 use config::Config;
+use constants::DomainMode;
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
 use maxminddb;
 use maxminddb::geoip2;
+use num_traits::FromPrimitive;
 use regex::Regex;
 use serde_json;
 use std::fs;
@@ -107,8 +109,8 @@ pub fn lookup_continent(remote: IpAddr, config: &Config) -> Option<String> {
     }
 }
 
-// Returns an A record for a given qname.
-fn a_response(
+// Returns an A record for a given qname, using the tunnel IP.
+fn a_response_tunnel(
     qname: &str,
     ttl: u32,
     config: &Config,
@@ -135,6 +137,19 @@ fn a_response(
         qtype: "A".to_owned(),
         qname: qname.to_owned(),
         content: result.to_owned(),
+        ttl: ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
+// Returns an A record for a given qname, using the real IP.
+fn a_response_real(qname: &str, ttl: u32, ip: String) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "A".to_owned(),
+        qname: qname.to_owned(),
+        content: ip,
         ttl: ttl,
         domain_id: None,
         scope_mask: None,
@@ -464,7 +479,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         // For the API domain, we can do a GeoIP lookup based on the remote IP.
                         pdns_response
                             .result
-                            .push(PdnsResponseParams::Lookup(a_response(
+                            .push(PdnsResponseParams::Lookup(a_response_tunnel(
                                 &original_qname,
                                 config.options.pdns.api_ttl,
                                 config,
@@ -473,23 +488,46 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                             )));
                     } else {
                         let record = record.clone().unwrap();
+
                         let continent = if record.continent.is_empty() {
                             None
                         } else {
                             Some(record.continent)
                         };
 
-                        // For a PageKite subdomain, we need to use the continent stored in the
-                        // database.
-                        pdns_response
-                            .result
-                            .push(PdnsResponseParams::Lookup(a_response(
-                                &original_qname,
-                                config.options.pdns.tunnel_ttl,
-                                config,
-                                None,
-                                continent,
-                            )));
+                        let last_ip = if record.last_ip.is_empty() {
+                            None
+                        } else {
+                            Some(record.last_ip)
+                        };
+
+                        match FromPrimitive::from_i32(record.mode) {
+                            Some(DomainMode::Tunneled) => {
+                                // For a PageKite subdomain, we need to use the continent stored in
+                                // the database.
+                                pdns_response.result.push(PdnsResponseParams::Lookup(
+                                    a_response_tunnel(
+                                        &original_qname,
+                                        config.options.pdns.tunnel_ttl,
+                                        config,
+                                        None,
+                                        continent,
+                                    ),
+                                ));
+                            }
+                            Some(DomainMode::DynamicDNS) => {
+                                if last_ip.is_some() {
+                                    pdns_response.result.push(PdnsResponseParams::Lookup(
+                                        a_response_real(
+                                            &original_qname,
+                                            config.options.pdns.tunnel_ttl,
+                                            last_ip.unwrap(),
+                                        ),
+                                    ));
+                                }
+                            }
+                            None => {}
+                        }
                     }
                 }
 

@@ -4,6 +4,7 @@
 
 extern crate env_logger;
 use config::Config;
+use constants::DomainMode;
 use diesel;
 use email_routes::{revokeemail, setemail, verifyemail, EmailSender};
 use errors::*;
@@ -45,6 +46,11 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     }
     let conn = conn.unwrap();
 
+    let real_ip = match req.headers.get::<XRealIP>() {
+        Some(x) => x.0.clone(),
+        None => req.remote_addr.ip(),
+    };
+
     // Extract the token parameter.
     let map = req.get_ref::<Params>().unwrap();
     let token = map.find(&["token"]);
@@ -59,7 +65,7 @@ fn ping(req: &mut Request, config: &Config) -> IronResult<Response> {
     let token = String::from_value(token.unwrap()).unwrap();
 
     // Save this ping in the database if we know about this token.
-    match conn.update_domain_timestamp(&token) {
+    match conn.update_domain_timestamp_and_ip(&token, &real_ip.to_string()) {
         Ok(count) if count > 0 => ok_response!(),
         Ok(_) => EndpointError::with(status::NotFound, 404),
         Err(err) => {
@@ -273,6 +279,7 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     // Extract the name parameter.
     let map = req.get_ref::<Params>().unwrap();
     let name = map.find(&["name"]);
+    let mode = map.find(&["mode"]);
 
     info!("GET /subscribe {:?}", map);
 
@@ -283,6 +290,14 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
     let name = String::from_value(name.unwrap()).unwrap();
     let subdomain = name.trim().to_lowercase();
     let full_name = domain_for_name(&subdomain, config);
+
+    let domain_mode = match mode {
+        Some(m) => match String::from_value(m).unwrap().parse::<i32>() {
+            Ok(m) => m,
+            Err(_) => DomainMode::Tunneled as i32,
+        },
+        None => DomainMode::Tunneled as i32,
+    };
 
     // Ensure that subdomain is valid:
     // - Contains only a-z, 0-9, and hyphens, but does not start or end
@@ -319,7 +334,13 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 if reclamation_token == record.reclamation_token {
                     // Create a new token and update the existing record.
                     let token = format!("{}", Uuid::new_v4());
-                    match conn.update_domain_token(&record.name, &token, &continent) {
+                    match conn.update_domain_token(
+                        &record.name,
+                        &token,
+                        &continent,
+                        domain_mode,
+                        &real_ip.to_string(),
+                    ) {
                         Ok(count) if count > 0 => {
                             // We don't want the full domain name or the DNS
                             // challenge in the response, so we create a local
@@ -408,6 +429,8 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
                 "",
                 false,
                 &continent,
+                domain_mode,
+                &real_ip.to_string(),
             ) {
                 Ok(_) => {
                     // We don't want the full domain name or the DNS
