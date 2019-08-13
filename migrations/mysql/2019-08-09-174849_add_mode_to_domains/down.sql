@@ -1,0 +1,2 @@
+ALTER TABLE domains DROP COLUMN mode;
+ALTER TABLE domains DROP COLUMN last_ip;

@@ -15,6 +15,7 @@ This endpoint reserves a new name for the gateway as a subdomain managed by the 
 * `desc`: optional, a friendly description of this gateway. If this parameter is not present, a default description is generated including the gateway's name.
 * `email`: optional, used to determine if an existing domain is associated with the provided email or not.
 * `reclamationToken`: optional, the reclamation token assigned to this domain.
+* `mode`: optional, used to indicate whether this domain should be tunneled via PageKite (mode=0, default) or if we should just return the gateway's IP address (mode=1). In the latter mode, the registration server just acts as a dynamic DNS provider.
 
 *Returns:*
 
@@ -47,7 +48,7 @@ An empty HTTP 200 response. This will trigger an email being sent to the registe
 
 # /ping
 
-This needs to be called on a regular basis to let the system know that the gateway is still active.
+This needs to be called on a regular basis to let the system know that the gateway is still active. This route is also used to keep the gateway's IP address up to date, which is needed for dynamic DNS.
 
 *Parameters:*
 * `token`: the secret token assigned to this domain.
