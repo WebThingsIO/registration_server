@@ -758,9 +758,9 @@ mod tests {
         ]);
 
         #[cfg(feature = "mysql")]
-        let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_pdns");
+        let db = DatabasePool::new("mysql://root:root@127.0.0.1/domain_db_test_pdns");
         #[cfg(feature = "postgres")]
-        let db = DatabasePool::new("postgres://postgres@127.0.0.1/domain_db_test_pdns");
+        let db = DatabasePool::new("postgres://postgres:password@127.0.0.1/domain_db_test_pdns");
         #[cfg(feature = "sqlite")]
         let db = DatabasePool::new("domain_db_test_pdns.sqlite");
         let conn = db.get_connection().expect("Getting connection.");

@@ -613,9 +613,9 @@ mod tests {
         let _ = env_logger::init();
 
         #[cfg(feature = "mysql")]
-        let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_routes");
+        let db = DatabasePool::new("mysql://root:root@127.0.0.1/domain_db_test_routes");
         #[cfg(feature = "postgres")]
-        let db = DatabasePool::new("postgres://postgres@127.0.0.1/domain_db_test_routes");
+        let db = DatabasePool::new("postgres://postgres:password@127.0.0.1/domain_db_test_routes");
         #[cfg(feature = "sqlite")]
         let db = DatabasePool::new("domain_db_test_routes.sqlite");
         let conn = db.get_connection().expect("Getting connection.");

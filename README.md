@@ -1,6 +1,6 @@
 # Registration server
 
-[![Build Status](https://travis-ci.org/mozilla-iot/registration_server.svg?branch=master)](https://travis-ci.org/mozilla-iot/registration_server)
+[![Build Status](https://github.com/mozilla-iot/registration_server/workflows/Rust%20application/badge.svg)](https://github.com/mozilla-iot/registration_server/workflows/Rust%20application)
 [![codecov](https://codecov.io/gh/mozilla-iot/registration_server/branch/master/graph/badge.svg)](https://codecov.io/gh/mozilla-iot/registration_server)
 [![license](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 

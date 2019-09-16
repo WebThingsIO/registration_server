@@ -327,9 +327,9 @@ fn test_domain_store() {
     let _ = env_logger::init();
 
     #[cfg(feature = "mysql")]
-    let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_domains");
+    let db = DatabasePool::new("mysql://root:root@127.0.0.1/domain_db_test_domains");
     #[cfg(feature = "postgres")]
-    let db = DatabasePool::new("postgres://postgres@127.0.0.1/domain_db_test_domains");
+    let db = DatabasePool::new("postgres://postgres:password@127.0.0.1/domain_db_test_domains");
     #[cfg(feature = "sqlite")]
     let db = DatabasePool::new("domain_db_test_domains.sqlite");
     let conn = db.get_connection().expect("Getting connection.");
@@ -536,9 +536,9 @@ fn test_email() {
     let _ = env_logger::init();
 
     #[cfg(feature = "mysql")]
-    let db = DatabasePool::new("mysql://root@127.0.0.1/domain_db_test_email");
+    let db = DatabasePool::new("mysql://root:root@127.0.0.1/domain_db_test_email");
     #[cfg(feature = "postgres")]
-    let db = DatabasePool::new("postgres://postgres@127.0.0.1/domain_db_test_email");
+    let db = DatabasePool::new("postgres://postgres:password@127.0.0.1/domain_db_test_email");
     #[cfg(feature = "sqlite")]
     let db = DatabasePool::new("domain_db_test_email.sqlite");
     let conn = db.get_connection().expect("Getting connection.");

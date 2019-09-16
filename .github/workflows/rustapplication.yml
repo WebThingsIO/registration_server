@@ -1,0 +1,50 @@
+name: Rust application
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-16.04
+    strategy:
+      matrix:
+        rust_version: ['stable', 'beta', 'nightly']
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install dependencies
+        run: |
+          sudo apt -qq update
+          sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev libmysqlclient-dev libpq-dev libsqlite3-dev postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'password';"
+          curl -O https://www.openssl.org/source/openssl-1.0.2t.tar.gz
+          tar xf openssl-1.0.2t.tar.gz
+          cd openssl-1.0.2t
+          ./Configure --prefix=/usr/local linux-x86_64 -fPIC
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+          rustup install ${{matrix.rust_version }}
+          rustup default ${{matrix.rust_version }}
+          cargo install diesel_cli
+      - name: Check builds
+        run: |
+          cargo build --features mysql
+          cargo build --features postgres
+          cargo build --features sqlite
+        env:
+          RUSTFLAGS: '-C link-dead-code -L /usr/local/lib'
+      - name: Run integration tests
+        run: |
+          ./run_tests.sh
+        env:
+          RUSTFLAGS: '-C link-dead-code -L /usr/local/lib'
+      - name: Run coverage
+        run: |
+          ./run_coverage.sh
+        env:
+          RUSTFLAGS: '-C link-dead-code -L /usr/local/lib'
