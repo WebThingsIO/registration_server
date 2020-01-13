@@ -601,7 +601,7 @@ mod tests {
         };
 
         let mut stream = MockStream::new(Cursor::new(buffer.as_bytes().to_vec()));
-        let mut buf_reader = BufReader::new(&mut stream as &mut NetworkStream);
+        let mut buf_reader = BufReader::new(&mut stream as &mut dyn NetworkStream);
         let http_request = hyper::server::Request::new(&mut buf_reader, addr).unwrap();
         let mut req = Request::from_http(http_request, addr, &protocol).unwrap();
 

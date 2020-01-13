@@ -60,7 +60,7 @@ impl DatabasePool {
         DatabasePool(pool)
     }
 
-    pub fn get_connection(&self) -> Result<(Database), &'static str> {
+    pub fn get_connection(&self) -> Result<Database, &'static str> {
         match self.0.get() {
             Ok(conn) => Ok(Database(conn)),
             Err(_) => Err("Failed to get database connection."),
