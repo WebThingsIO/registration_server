@@ -1,16 +1,15 @@
 [package]
 name = "registration_server"
-version = "0.1.0"
-authors = ["fabrice <fabrice@desre.org>"]
+version = "0.2.0"
+authors = ["Mozilla IoT <iot@mozilla.com>"]
 
 [dependencies]
 clap = "2.33"
 email = "0.0"
 env_logger = "0.4"
 hyper = "0.10"
-hyper-native-tls = "0.2"
 iron = "0.6"
-iron-cors = { git = "https://github.com/mozilla-iot/iron-cors.git" }
+iron-cors = "0.8"
 lettre = "0.9"
 lettre_email = "0.9"
 log = "0.4"

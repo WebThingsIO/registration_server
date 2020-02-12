@@ -183,13 +183,9 @@ pub fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
     {
         Ok(count) if count > 0 => match EmailSender::new(config) {
             Ok(mut sender) => {
-                let scheme = match config.options.general.identity_directory {
-                    Some(_) => "https",
-                    None => "http",
-                };
                 let full_link = format!(
-                    "{}://api.{}/verifyemail?s={}",
-                    scheme, config.options.general.domain, verification_token
+                    "http://api.{}/verifyemail?s={}",
+                    config.options.general.domain, verification_token
                 );
                 let body = config
                     .options

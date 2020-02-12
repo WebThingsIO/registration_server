@@ -3,11 +3,8 @@
 [general]
 host = "127.0.0.1"
 http_port = 4141
-https_port = 4142
 domain = "mydomain.org"
 db_path = "/tmp/domains.sqlite"
-identity_directory = "/tmp/certs"
-identity_password = "mypassword"
 
 [pdns]
 api_ttl = 1

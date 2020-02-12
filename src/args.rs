@@ -13,11 +13,8 @@ use toml;
 const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file.'
 --host=[host]                   'Set local hostname.'
 --http-port=[port]              'Set port to listen on for HTTP connections (0 to turn off).'
---https-port=[port]             'Set port to listen on for TLS connections (0 to turn off).'
 --domain=[domain]               'The domain that will be tied to this registration server.'
 --db-path=[path]                'The database path: file path, postgres://..., mysql://...'
---identity-directory=[dir]      'Identity directory.'
---identity-password=[password]  'Identity password.'
 --dns-ttl=[ttl]                 'TTL of the SOA/NS/MX/TXT/CAA DNS records, in seconds.'
 --api-ttl=[ttl]                 'TTL of the DNS records for the api subdomain, in seconds.'
 --tunnel-ttl=[ttl]              'TTL of the DNS records for tunnels, in seconds.'
@@ -85,13 +82,6 @@ impl ArgsParser {
             }
         }
 
-        optional!(identity_dir, "identity-directory");
-        let identity_directory = match identity_dir {
-            Some(dir) => Some(PathBuf::from(dir)),
-            None => None,
-        };
-
-        optional!(identity_password, "identity-password");
         optional!(email_server, "email-server");
         optional!(email_user, "email-user");
         optional!(email_password, "email-password");
@@ -116,14 +106,11 @@ impl ArgsParser {
             general: GeneralOptions {
                 host: matches.value_of("host").unwrap_or("0.0.0.0").to_owned(),
                 http_port: value_t!(matches, "http-port", u16).unwrap_or(4242),
-                https_port: value_t!(matches, "https-port", u16).unwrap_or(4343),
                 domain: matches
                     .value_of("domain")
                     .unwrap_or("mydomain.org")
                     .to_owned(),
                 db_path: String::from(matches.value_of("db-path").unwrap_or("./domains.sqlite")),
-                identity_directory: identity_directory,
-                identity_password: identity_password,
             },
             pdns: PdnsOptions {
                 api_ttl: value_t!(matches, "api-ttl", u32).unwrap_or(10),
@@ -208,11 +195,8 @@ fn test_args() {
 
     assert_eq!(args.general.host, "0.0.0.0");
     assert_eq!(args.general.http_port, 4242);
-    assert_eq!(args.general.https_port, 4343);
     assert_eq!(args.general.domain, "mydomain.org");
     assert_eq!(args.general.db_path, "./domains.sqlite");
-    assert_eq!(args.general.identity_directory, None);
-    assert_eq!(args.general.identity_password, None);
     assert_eq!(args.pdns.api_ttl, 10);
     assert_eq!(args.pdns.dns_ttl, 600);
     assert_eq!(args.pdns.tunnel_ttl, 60);
@@ -247,11 +231,8 @@ fn test_args() {
         "registration_server",
         "--host=127.0.1.1",
         "--http-port=4343",
-        "--https-port=4444",
         "--domain=example.com",
         "--db-path=/tmp/mydata/domains.sqlite",
-        "--identity-directory=/tmp/mycerts",
-        "--identity-password=mypass",
         "--geoip-default=1.2.3.4",
         "--geoip-database=/path/to/mmdb",
         "--geoip-continent-af=1.1.1.1",
@@ -286,14 +267,8 @@ fn test_args() {
 
     assert_eq!(args.general.host, "127.0.1.1");
     assert_eq!(args.general.http_port, 4343);
-    assert_eq!(args.general.https_port, 4444);
     assert_eq!(args.general.domain, "example.com");
     assert_eq!(args.general.db_path, "/tmp/mydata/domains.sqlite");
-    assert_eq!(
-        args.general.identity_directory,
-        Some(PathBuf::from("/tmp/mycerts"))
-    );
-    assert_eq!(args.general.identity_password, Some("mypass".to_owned()));
     assert_eq!(args.pdns.api_ttl, 120);
     assert_eq!(args.pdns.dns_ttl, 140);
     assert_eq!(args.pdns.tunnel_ttl, 160);
@@ -375,17 +350,8 @@ fn test_args() {
     ]);
     assert_eq!(args.general.host, "127.0.0.1");
     assert_eq!(args.general.http_port, 4141);
-    assert_eq!(args.general.https_port, 4142);
     assert_eq!(args.general.domain, "mydomain.org");
     assert_eq!(args.general.db_path, "/tmp/domains.sqlite");
-    assert_eq!(
-        args.general.identity_directory,
-        Some(PathBuf::from("/tmp/certs"))
-    );
-    assert_eq!(
-        args.general.identity_password,
-        Some("mypassword".to_owned())
-    );
     assert_eq!(args.pdns.api_ttl, 1);
     assert_eq!(args.pdns.dns_ttl, 86400);
     assert_eq!(args.pdns.tunnel_ttl, 60);
