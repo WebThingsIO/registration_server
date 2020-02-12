@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-16.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         rust_version: ['stable', 'beta', 'nightly']
@@ -21,13 +21,6 @@ jobs:
           sudo apt -qq update
           sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev libmysqlclient-dev libpq-dev libsqlite3-dev postgresql
           sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'password';"
-          curl -O https://www.openssl.org/source/openssl-1.0.2t.tar.gz
-          tar xf openssl-1.0.2t.tar.gz
-          cd openssl-1.0.2t
-          ./Configure --prefix=/usr/local linux-x86_64 -fPIC
-          make -j$(nproc)
-          sudo make install
-          sudo ldconfig
           rustup install ${{matrix.rust_version }}
           rustup default ${{matrix.rust_version }}
           cargo install diesel_cli

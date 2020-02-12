@@ -3,7 +3,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use database::DatabasePool;
-use std::path::PathBuf;
 
 #[derive(Clone, Deserialize)]
 #[allow(non_snake_case)]
@@ -28,10 +27,7 @@ pub struct GeoIp {
 pub struct GeneralOptions {
     pub host: String,
     pub http_port: u16,
-    pub https_port: u16,
     pub db_path: String,
-    pub identity_directory: Option<PathBuf>,
-    pub identity_password: Option<String>,
     pub domain: String,
 }
 

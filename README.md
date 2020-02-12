@@ -41,9 +41,6 @@ OPTIONS:
         --geoip-default <ip>              The IP address of the default tunnel endpoint.
         --host <host>                     Set local hostname.
         --http-port <port>                Set port to listen on for HTTP connections (0 to turn off).
-        --https-port <port>               Set port to listen on for TLS connections (0 to turn off).
-        --identity-directory <dir>        Identity directory.
-        --identity-password <password>    Identity password.
         --mx-record <record>              The MX record the PowerDNS server should return.
         --ns-record <record>...           An NS record the PowerDNS server should return as host=ip (can be specified
                                           multiple times).

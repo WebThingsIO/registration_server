@@ -9,10 +9,9 @@ use diesel;
 use email_routes::{revokeemail, setemail, verifyemail, EmailSender};
 use errors::*;
 use iron::headers::ContentType;
-use iron::method::Method;
 use iron::prelude::*;
 use iron::status::{self, Status};
-use iron_cors::CORS;
+use iron_cors::CorsMiddleware;
 use mount::Mount;
 use params::{FromValue, Params, Value};
 use pdns::lookup_continent;
@@ -531,18 +530,8 @@ pub fn create_chain(root_path: &str, config: &Config) -> Chain {
     mount.mount(root_path, create_router(config));
 
     let mut chain = Chain::new(mount);
-    let cors = CORS::new(vec![
-        (vec![Method::Get], "subscribe".to_owned()),
-        (vec![Method::Get], "unsubscribe".to_owned()),
-        (vec![Method::Get], "reclaim".to_owned()),
-        (vec![Method::Get], "ping".to_owned()),
-        (vec![Method::Get], "dnsconfig".to_owned()),
-        (vec![Method::Get], "info".to_owned()),
-        (vec![Method::Get], "setemail".to_owned()),
-        (vec![Method::Get], "verifyemail".to_owned()),
-        (vec![Method::Get], "revokeemail".to_owned()),
-    ]);
-    chain.link_after(cors);
+    let cors = CorsMiddleware::with_allow_any();
+    chain.link_around(cors);
     chain
 }
 
