@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/mozilla-iot/registration_server/branch/master/graph/badge.svg)](https://codecov.io/gh/mozilla-iot/registration_server)
 [![license](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
-This server exposes a HTTP(S) API that lets you register a gateway with the server.
+This server exposes an HTTP API that lets you register a gateway with the server.
 
 ## Usage
 
