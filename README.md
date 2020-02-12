@@ -59,7 +59,7 @@ See the `config/config.toml` for an example configuration file.
 
 ## Building & Testing
 
-* First, select the database type you'd like: mysql, postgres, sqlite
+* First, select the database type you'd like: `mysql` | `postgres` | `sqlite`
 * Run `cargo build --features <db_type>` to build.
 * Run `./run_tests.sh` to test.
 
