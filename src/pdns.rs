@@ -430,6 +430,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
 
             let ns_regex = Regex::new(r"^ns\d*$").unwrap();
             let is_ns_subdomain = ns_regex.is_match(&subdomain);
+            let bare_domain = format!("{}.", domain);
             let api_domain = format!("api.{}.", domain);
             let psl_domain = format!("_psl.{}.", domain);
             let domain_lookup = conn.get_domain_by_name(&qname);
@@ -551,7 +552,9 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                         )));
                 }
             } else {
-                info!("process_request(): No record for: {}", qname);
+                if qname != bare_domain {
+                    info!("process_request(): No record for: {}", qname);
+                }
 
                 // If there's no record in the database, we add the "TXT" record from the config file.
                 if qtype == "ANY" {

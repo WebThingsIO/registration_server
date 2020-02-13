@@ -5,7 +5,6 @@
 #[macro_use]
 extern crate clap;
 extern crate crypto;
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
 #[macro_use]
 extern crate diesel;
 extern crate email;
@@ -26,7 +25,6 @@ extern crate num_derive;
 extern crate num_traits;
 extern crate params;
 extern crate r2d2;
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
 extern crate r2d2_diesel;
 extern crate regex;
 extern crate router;

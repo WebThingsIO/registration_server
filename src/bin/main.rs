@@ -10,7 +10,6 @@ extern crate mount;
 extern crate registration_server;
 
 use iron::Iron;
-use std::thread;
 
 use registration_server::args::ArgsParser;
 use registration_server::config::Config;
@@ -21,21 +20,17 @@ fn main() {
     env_logger::init().unwrap();
 
     let args = ArgsParser::from_env();
-    let config = Config::from_args(args.clone());
+    let config = Config::from_args(args);
 
-    info!("Managing the domain {}", args.general.domain);
+    info!("Managing the domain {}", config.options.general.domain);
 
     pdns::start_socket_endpoint(&config);
 
-    let cfg = config.clone();
     let addr = format!(
         "{}:{}",
         config.options.general.host, config.options.general.http_port
     );
-    let _ = thread::spawn(move || {
-        let iron_server = Iron::new(routes::create_chain("/", &cfg));
-        info!("Starting HTTP server on {}", addr);
-        iron_server.http(addr.as_ref() as &str).unwrap();
-    })
-    .join();
+
+    info!("Starting HTTP server on {}", addr);
+    let _ = Iron::new(routes::create_chain("/", &config)).http(&addr);
 }
