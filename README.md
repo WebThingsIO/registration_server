@@ -4,7 +4,13 @@
 [![codecov](https://codecov.io/gh/mozilla-iot/registration_server/branch/master/graph/badge.svg)](https://codecov.io/gh/mozilla-iot/registration_server)
 [![license](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
-This server exposes an HTTP API that lets you register a gateway with the server.
+This server exposes an HTTP API that lets you register a WebThings Gateway for
+tunneling support
+
+When combined with a [PowerDNS](https://www.powerdns.com/auth.html) server and
+a [PageKite](https://pagekite.net) server, this acts as an all-in-one dynamic
+DNS or tunneling solution, with distributed GeoIP support. This is not only
+useful for WebThings, but could also be used by a variety of other stacks.
 
 ## Usage
 
@@ -65,8 +71,11 @@ See the `config/config.toml` for an example configuration file.
 
 ## Deploying
 
-A Docker image has been provided [here](https://github.com/mozilla-iot/registration-server-docker).
+A Docker image has been provided
+[here](https://github.com/mozilla-iot/registration-server-docker), containing
+this server, a PowerDNS server, a PageKite server, and geoipupdate.
 
 ## API
 
-The API is documented [here](doc/api.md). Its usage is described in [this document](doc/flow.md).
+The API is documented [here](doc/api.md). Its usage within the WebThings
+ecosystem is described in [this document](doc/flow.md).
