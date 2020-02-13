@@ -17,7 +17,7 @@ use registration_server::pdns;
 use registration_server::routes;
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let args = ArgsParser::from_env();
     let config = Config::from_args(args);

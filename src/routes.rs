@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn test_router() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
 
         #[cfg(feature = "mysql")]
         let db = DatabasePool::new("mysql://root:root@127.0.0.1/domain_db_test_routes");

@@ -753,7 +753,7 @@ mod tests {
 
     #[test]
     fn test_socket() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
 
         let args = ArgsParser::from_vec(vec![
             "registration_server",

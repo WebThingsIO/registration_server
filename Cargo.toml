@@ -6,7 +6,7 @@ authors = ["Mozilla IoT <iot@mozilla.com>"]
 [dependencies]
 clap = "2.33"
 email = "0.0"
-env_logger = "0.4"
+env_logger = "0.7"
 hyper = "0.10"
 iron = "0.6"
 iron-cors = "0.8"

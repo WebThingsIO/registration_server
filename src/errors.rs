@@ -51,7 +51,7 @@ impl EndpointError {
 
 #[test]
 fn test_error() {
-    let _ = env_logger::init();
+    let _ = env_logger::try_init();
 
     let s_error = StringError(status::BadRequest.canonical_reason().unwrap().to_owned());
     let error = format!("{} {}", s_error, s_error.description());

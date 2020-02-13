@@ -189,7 +189,7 @@ impl ArgsParser {
 
 #[test]
 fn test_args() {
-    let _ = env_logger::init();
+    let _ = env_logger::try_init();
 
     let args = ArgsParser::from_vec(vec!["registration_server", "--geoip-default=1.2.3.4"]);
 
