@@ -38,11 +38,11 @@ pub struct PdnsOptions {
     pub tunnel_ttl: u32,
     pub api_ttl: u32,
     pub caa_record: String,
-    pub mx_record: String,
+    pub mx_record: Option<String>,
     pub ns_records: Vec<Vec<String>>,
     pub psl_record: Option<String>,
     pub soa_record: String,
-    pub txt_record: String,
+    pub txt_record: Option<String>,
     pub geoip: GeoIp,
 }
 

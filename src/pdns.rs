@@ -193,7 +193,7 @@ fn mx_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "MX".to_owned(),
         qname: qname.to_owned(),
-        content: config.options.pdns.mx_record.to_owned(),
+        content: config.options.pdns.clone().mx_record.unwrap(),
         ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
@@ -219,7 +219,7 @@ fn txt_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
         qtype: "TXT".to_owned(),
         qname: qname.to_owned(),
-        content: config.options.pdns.txt_record.to_owned(),
+        content: config.options.pdns.clone().txt_record.unwrap(),
         ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
@@ -408,7 +408,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 }
             }
 
-            if qtype == "ANY" {
+            if qtype == "ANY" && config.options.pdns.mx_record.is_some() {
                 // Add an "MX" record.
                 pdns_response
                     .result
@@ -557,7 +557,7 @@ fn process_request(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, St
                 }
 
                 // If there's no record in the database, we add the "TXT" record from the config file.
-                if qtype == "ANY" {
+                if qtype == "ANY" && config.options.pdns.txt_record.is_some() {
                     pdns_response
                         .result
                         .push(PdnsResponseParams::Lookup(txt_response(
@@ -850,15 +850,16 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 295);
-        let result = String::from_utf8(answer[..295].to_vec()).unwrap();
+        assert_eq!(stream.read(&mut answer).unwrap(), 350);
+        let result = String::from_utf8(answer[..350].to_vec()).unwrap();
         let any_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
                            \"content\":\"ns1.mydomain.org.\",\"ttl\":86400},{\
                            \"qtype\":\"NS\",\"qname\":\"example.org\",\
                            \"content\":\"ns2.mydomain.org.\",\"ttl\":86400},{\
-                           \"qtype\":\"MX\",\"qname\":\"example.org\",\"content\":\"\",\
+                           \"qtype\":\"MX\",\"qname\":\"example.org\",\
+                           \"content\":\"10 inbound-smtp.us-west-2.amazonaws.com\",\
                            \"ttl\":86400},{\"qtype\":\"TXT\",\"qname\":\"example.org\",\
-                           \"content\":\"\",\"ttl\":86400}]}";
+                           \"content\":\"something useful\",\"ttl\":86400}]}";
         assert_eq!(&result, any_success);
 
         // PSL query

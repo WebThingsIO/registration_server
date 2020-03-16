@@ -92,7 +92,9 @@ impl ArgsParser {
         optional!(confirmation_body, "confirmation-body");
         optional!(success_page, "success-page");
         optional!(error_page, "error-page");
+        optional!(mx_record, "mx-record");
         optional!(psl_record, "psl-record");
+        optional!(txt_record, "txt-record");
         optional!(geoip_database, "geoip-database");
         optional!(geoip_continent_af, "geoip-continent-af");
         optional!(geoip_continent_an, "geoip-continent-an");
@@ -121,20 +123,14 @@ impl ArgsParser {
                     .value_of("caa-record")
                     .unwrap_or("_caa_not_configured_")
                     .to_owned(),
-                mx_record: matches
-                    .value_of("mx-record")
-                    .unwrap_or("_mx_not_configured_")
-                    .to_owned(),
+                mx_record: mx_record,
                 ns_records: ns_records,
                 psl_record: psl_record,
                 soa_record: matches
                     .value_of("soa-record")
                     .unwrap_or("_soa_not_configured_")
                     .to_owned(),
-                txt_record: matches
-                    .value_of("txt-record")
-                    .unwrap_or("_txt_not_configured_")
-                    .to_owned(),
+                txt_record: txt_record,
                 geoip: GeoIp {
                     default: matches
                         .value_of("geoip-default")
@@ -202,11 +198,11 @@ fn test_args() {
     assert_eq!(args.pdns.tunnel_ttl, 60);
     assert_eq!(args.pdns.socket_path, None);
     assert_eq!(args.pdns.caa_record, "_caa_not_configured_");
-    assert_eq!(args.pdns.mx_record, "_mx_not_configured_");
+    assert_eq!(args.pdns.mx_record, None);
     assert_eq!(args.pdns.ns_records.len(), 0);
     assert_eq!(args.pdns.psl_record, None);
     assert_eq!(args.pdns.soa_record, "_soa_not_configured_");
-    assert_eq!(args.pdns.txt_record, "_txt_not_configured_");
+    assert_eq!(args.pdns.txt_record, None);
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, None);
     assert_eq!(args.pdns.geoip.continent.AF, None);
@@ -274,7 +270,7 @@ fn test_args() {
     assert_eq!(args.pdns.tunnel_ttl, 160);
     assert_eq!(args.pdns.socket_path, Some("/tmp/socket".to_owned()));
     assert_eq!(args.pdns.caa_record, "_my_caa");
-    assert_eq!(args.pdns.mx_record, "_my_mx");
+    assert_eq!(args.pdns.mx_record, Some("_my_mx".to_owned()));
     assert_eq!(
         args.pdns.ns_records,
         [
@@ -284,7 +280,7 @@ fn test_args() {
     );
     assert_eq!(args.pdns.psl_record, Some("_my_psl".to_owned()));
     assert_eq!(args.pdns.soa_record, "_my_soa");
-    assert_eq!(args.pdns.txt_record, "_my_txt");
+    assert_eq!(args.pdns.txt_record, Some("_my_txt".to_owned()));
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, Some("/path/to/mmdb".to_owned()));
     assert_eq!(args.pdns.geoip.continent.AF, Some("1.1.1.1".to_owned()));
@@ -318,8 +314,6 @@ fn test_args() {
     assert_eq!(args.email.error_page, Some("this is error".to_owned()));
 
     let caa = "0 issue \"letsencrypt.org\"";
-    let mx = "";
-    let txt = "";
     let soa = "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60";
     let recl_title = "Reclaim your Mozilla WebThings Gateway Domain";
     let recl_body = "Hello,\n<br>\n<br>\nYour reclamation token is: {token}\n<br>\n<br>\nIf you \
@@ -356,7 +350,10 @@ fn test_args() {
     assert_eq!(args.pdns.dns_ttl, 86400);
     assert_eq!(args.pdns.tunnel_ttl, 60);
     assert_eq!(args.pdns.caa_record, caa);
-    assert_eq!(args.pdns.mx_record, mx);
+    assert_eq!(
+        args.pdns.mx_record,
+        Some("10 inbound-smtp.us-west-2.amazonaws.com".to_owned())
+    );
     assert_eq!(
         args.pdns.ns_records,
         [
@@ -369,7 +366,7 @@ fn test_args() {
         Some("https://github.com/publicsuffix/list/pull/XYZ".to_owned())
     );
     assert_eq!(args.pdns.soa_record, soa);
-    assert_eq!(args.pdns.txt_record, txt);
+    assert_eq!(args.pdns.txt_record, Some("something useful".to_owned()));
     assert_eq!(
         args.pdns.socket_path,
         Some("/tmp/pdns_tunnel.sock".to_owned())
