@@ -270,9 +270,13 @@ fn subscribe(req: &mut Request, config: &Config) -> IronResult<Response> {
         None => req.remote_addr.ip(),
     };
 
-    let continent = match lookup_continent(real_ip, &config) {
-        Some(val) => val,
-        None => "".to_owned(),
+    let continent = if config.options.pdns.geoip.database.is_some() {
+        match lookup_continent(real_ip, &config) {
+            Some(val) => val,
+            None => "".to_owned(),
+        }
+    } else {
+        "".to_owned()
     };
 
     // Extract the name parameter.
