@@ -14,13 +14,26 @@ jobs:
     strategy:
       matrix:
         rust_version: ['stable', 'beta', 'nightly']
+    services:
+      # Label used to access the service container
+      postgres:
+        # Docker Hub image
+        image: postgres
+        # Provide the password for postgres
+        env:
+          POSTGRES_PASSWORD: password
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v1
       - name: Install dependencies
         run: |
           sudo apt -qq update
-          sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev libmysqlclient-dev libpq-dev libsqlite3-dev postgresql
-          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'password';"
+          sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev libmysqlclient-dev libpq-dev libsqlite3-dev
           rustup install ${{matrix.rust_version }}
           rustup default ${{matrix.rust_version }}
           cargo install diesel_cli

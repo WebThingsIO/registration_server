@@ -8,7 +8,7 @@ for db_type in mysql postgres sqlite; do
             db_path="mysql://root:root@127.0.0.1/${database}"
             mysql -uroot -e "drop database ${database}" >/dev/null 2>&1 || true
         elif [ "${db_type}" = "postgres" ]; then
-            db_path="postgres://postgres:password@127.0.0.1/${database}"
+            db_path="postgres://postgres:password@postgres:5432/${database}"
             dropdb -U postgres "${database}" >/dev/null 2>&1 || true
         elif [ "${db_type}" = "sqlite" ]; then
             db_path="./${database}.sqlite"
