@@ -545,9 +545,10 @@ mod tests {
     use self::hyper::buffer::BufReader;
     use self::hyper::net::NetworkStream;
     use super::*;
-    use args::ArgsParser;
-    use config::Config;
-    use database::DatabasePool;
+    use crate::args::ArgsParser;
+    use crate::config::Config;
+    use crate::database::DatabasePool;
+    use crate::models::Domain;
     use hyper;
     use iron;
     use iron::method;
@@ -555,7 +556,6 @@ mod tests {
     use iron::{Handler, Url};
     use iron_test::mock_stream::MockStream;
     use iron_test::response;
-    use models::Domain;
     use std;
     use std::io::Cursor;
     use std::thread::sleep;

@@ -713,9 +713,9 @@ pub fn start_socket_endpoint(config: &Config) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use args::ArgsParser;
-    use config::Config;
-    use database::DatabasePool;
+    use crate::args::ArgsParser;
+    use crate::config::Config;
+    use crate::database::DatabasePool;
     use std::time::Duration;
 
     fn build_lookup(

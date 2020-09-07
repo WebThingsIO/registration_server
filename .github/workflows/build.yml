@@ -33,11 +33,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install dependencies
         run: |
-          sudo apt -qq update
-          sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev
           rustup install ${{matrix.rust_version }}
           rustup default ${{matrix.rust_version }}
           cargo install diesel_cli
@@ -46,15 +44,6 @@ jobs:
           cargo build --features mysql
           cargo build --features postgres
           cargo build --features sqlite
-        env:
-          RUSTFLAGS: '-C link-dead-code -L /usr/local/lib'
       - name: Run integration tests
         run: |
           ./run_tests.sh
-        env:
-          RUSTFLAGS: '-C link-dead-code -L /usr/local/lib'
-      - name: Run coverage
-        run: |
-          ./run_coverage.sh
-        env:
-          RUSTFLAGS: '-C link-dead-code -L /usr/local/lib'
