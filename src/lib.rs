@@ -3,37 +3,12 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #[macro_use]
-extern crate clap;
-extern crate crypto;
-#[macro_use]
 extern crate diesel;
-extern crate email;
 #[macro_use]
 extern crate hyper;
-extern crate iron;
-extern crate iron_cors;
-#[cfg(test)]
-extern crate iron_test;
-extern crate lettre;
-extern crate lettre_email;
-#[macro_use]
-extern crate log;
-extern crate maxminddb;
-extern crate mount;
-#[macro_use]
-extern crate num_derive;
-extern crate num_traits;
-extern crate params;
-extern crate r2d2;
-extern crate r2d2_diesel;
-extern crate regex;
-extern crate router;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate toml;
-extern crate uuid;
+extern crate std;
 
 macro_rules! json_response {
     ($json:expr) => {{

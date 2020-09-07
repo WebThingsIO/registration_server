@@ -4,10 +4,10 @@
 
 // Email related routes.
 
-use config::Config;
+use crate::config::Config;
+use crate::errors::*;
 use diesel;
 use email::Mailbox;
-use errors::*;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
@@ -18,6 +18,7 @@ use lettre::smtp::{ConnectionReuseParameters, SmtpClient, SmtpTransport};
 use lettre::stub::StubTransport;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
+use log::{error, info};
 use params::{FromValue, Params};
 use std::str::FromStr;
 use uuid::Uuid;

@@ -2,6 +2,7 @@
 name = "registration_server"
 version = "0.3.0"
 authors = ["Mozilla IoT <iot@mozilla.com>"]
+edition = "2018"
 
 [dependencies]
 clap = "2.33"

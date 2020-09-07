@@ -2,19 +2,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-extern crate env_logger;
-use config::Config;
-use constants::DomainMode;
+use crate::config::Config;
+use crate::constants::DomainMode;
+use crate::email_routes::{revokeemail, setemail, verifyemail, EmailSender};
+use crate::errors::*;
+use crate::pdns::lookup_continent;
 use diesel;
-use email_routes::{revokeemail, setemail, verifyemail, EmailSender};
-use errors::*;
+use hyper::header;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::{self, Status};
 use iron_cors::CorsMiddleware;
+use log::{error, info};
 use mount::Mount;
 use params::{FromValue, Params, Value};
-use pdns::lookup_continent;
 use regex::Regex;
 use router::Router;
 use serde_json;

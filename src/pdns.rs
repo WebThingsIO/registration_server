@@ -7,11 +7,11 @@
 // See https://doc.powerdns.com/md/authoritative/backend-remote/ for
 // details about the various requests and responses.
 
-extern crate env_logger;
-use config::Config;
-use constants::DomainMode;
+use crate::config::Config;
+use crate::constants::DomainMode;
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
+use log::{debug, error, info};
 use maxminddb;
 use maxminddb::geoip2;
 use num_traits::FromPrimitive;

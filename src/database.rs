@@ -6,7 +6,10 @@
 // Each record is made of the name, the private token, and the Let's Encrypt
 // challenge value.
 
-extern crate env_logger;
+use crate::models::{Account, Domain, NewAccount, NewDomain};
+use crate::schema::accounts::dsl::*;
+use crate::schema::domains::dsl::*;
+use crate::schema::{accounts, domains};
 use diesel;
 #[cfg(feature = "mysql")]
 use diesel::mysql::MysqlConnection;
@@ -15,12 +18,9 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection;
-use models::{Account, Domain, NewAccount, NewDomain};
+use log::debug;
 use r2d2;
 use r2d2_diesel::ConnectionManager;
-use schema::accounts::dsl::*;
-use schema::domains::dsl::*;
-use schema::{accounts, domains};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(feature = "mysql")]

@@ -1,3 +1,5 @@
+use diesel::{allow_tables_to_appear_in_same_query, joinable, table};
+
 table! {
     accounts (id) {
         id -> Integer,

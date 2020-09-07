@@ -1,4 +1,4 @@
-use schema::{accounts, domains};
+use crate::schema::{accounts, domains};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, AsChangeset, Identifiable, Queryable)]
 #[table_name = "accounts"]
