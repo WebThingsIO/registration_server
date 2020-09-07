@@ -17,10 +17,14 @@ jobs:
     services:
       mysql:
         image: mariadb
+        ports:
+          - 3306:3306
         env:
           MYSQL_ROOT_PASSWORD: password
       postgres:
         image: postgres
+        ports:
+          - 5432:5432
         env:
           POSTGRES_PASSWORD: password
         options: >-
@@ -33,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt -qq update
-          sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev libmysqlclient-dev libpq-dev libsqlite3-dev
+          sudo apt install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake binutils-dev libiberty-dev
           rustup install ${{matrix.rust_version }}
           rustup default ${{matrix.rust_version }}
           cargo install diesel_cli
