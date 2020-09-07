@@ -104,7 +104,10 @@ pub fn lookup_continent(remote: IpAddr, config: &Config) -> Option<String> {
     let country: geoip2::Country = result.unwrap();
 
     match country.continent {
-        Some(continent) => continent.code,
+        Some(continent) => match continent.code {
+            Some(code) => Some(code.to_string()),
+            None => None,
+        },
         None => None,
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "registration_server"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Mozilla IoT <iot@mozilla.com>"]
 
 [dependencies]
@@ -13,7 +13,7 @@ iron-cors = "0.8"
 lettre = "0.9"
 lettre_email = "0.9"
 log = "0.4"
-maxminddb = "0.13"
+maxminddb = "0.14"
 mount = "0.4"
 num-derive = "0.3"
 num-traits = "0.2"
