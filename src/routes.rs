@@ -4,10 +4,11 @@
 
 use crate::config::Config;
 use crate::constants::DomainMode;
-use crate::email_routes::{revokeemail, setemail, verifyemail, EmailSender};
+use crate::email::EmailSender;
 use crate::errors::*;
 use crate::pdns::lookup_continent;
 use diesel;
+use email::Mailbox;
 use hyper::header;
 use iron::headers::ContentType;
 use iron::prelude::*;
@@ -20,6 +21,7 @@ use regex::Regex;
 use router::Router;
 use serde_json;
 use std::net::IpAddr;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
@@ -497,6 +499,216 @@ fn dnsconfig(req: &mut Request, config: &Config) -> IronResult<Response> {
         Ok(_) => EndpointError::with(status::NotFound, 404),
         Err(err) => {
             error!("dnsconfig(): Failed to update domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
+    }
+}
+
+fn setemail(req: &mut Request, config: &Config) -> IronResult<Response> {
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        error!(
+            "setemail(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
+    }
+    let conn = conn.unwrap();
+
+    let map = req.get_ref::<Params>().unwrap();
+    let token = map.find(&["token"]);
+    let email = map.find(&["email"]);
+    let optout = map.find(&["optout"]);
+
+    info!("GET /setemail {:?}", map);
+
+    if token.is_none() || email.is_none() {
+        error!("setemail(): Token or email not provided");
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    let token = String::from_value(token.unwrap()).unwrap();
+    let email = String::from_value(email.unwrap()).unwrap();
+
+    let optout = match optout {
+        Some(val) => {
+            if String::from_value(val).unwrap() == "1" {
+                true
+            } else {
+                false
+            }
+        }
+        None => false,
+    };
+
+    // Check that this is a valid email address.
+    if Mailbox::from_str(&email).is_err() || email.len() > 254 {
+        error!("setemail(): Invalid email address: {}", email);
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    let account_id = match conn.get_account_by_email(&email) {
+        Ok(account) => match conn.update_account_optout(&email, optout) {
+            Ok(_) => account.id,
+            Err(err) => {
+                error!(
+                    "setemail(): Failed to update account opt-out status: {:?}",
+                    err
+                );
+                return EndpointError::with(status::InternalServerError, 500);
+            }
+        },
+        Err(_) => match conn.add_account(&email, optout) {
+            Ok(account) => account.id,
+            Err(err) => {
+                error!("setemail(): Failed to add account: {:?}", err);
+                return EndpointError::with(status::InternalServerError, 500);
+            }
+        },
+    };
+
+    let domain = conn.get_domain_by_token(&token);
+    if domain.is_err() {
+        error!(
+            "setemail(): Failed to find domain for token {}: {:?}",
+            token,
+            domain.unwrap_err()
+        );
+        return EndpointError::with(status::NotFound, 404);
+    }
+    let domain = domain.unwrap();
+    let domain = domain.name.trim_end_matches('.');
+
+    let verification_token = format!("{}", Uuid::new_v4());
+    match conn.update_domain_verification_data(&token, Some(account_id), &verification_token, false)
+    {
+        Ok(count) if count > 0 => match EmailSender::new(config) {
+            Ok(mut sender) => {
+                let full_link = format!(
+                    "http://api.{}/verifyemail?s={}",
+                    config.options.general.domain, verification_token
+                );
+                let body = config
+                    .options
+                    .email
+                    .clone()
+                    .confirmation_body
+                    .unwrap()
+                    .replace("{link}", &full_link)
+                    .replace("{domain}", &domain);
+                match sender.send(
+                    &email,
+                    &body,
+                    &config.options.email.clone().confirmation_title.unwrap(),
+                ) {
+                    Ok(_) => ok_response!(),
+                    Err(err) => {
+                        error!("setemail(): Failed to send email: {:?}", err);
+                        EndpointError::with(status::InternalServerError, 500)
+                    }
+                }
+            }
+            Err(err) => {
+                error!("setemail(): Failed to create email sender: {:?}", err);
+                EndpointError::with(status::InternalServerError, 500)
+            }
+        },
+        Ok(_) => {
+            error!("setemail(): Domain not found for token: {}", token);
+            EndpointError::with(status::NotFound, 404)
+        }
+        Err(err) => {
+            error!("setemail(): Failed to update domain: {:?}", err);
+            EndpointError::with(status::InternalServerError, 500)
+        }
+    }
+}
+
+// Process email confirmation links that have the link as the "s" parameter.
+fn verifyemail(req: &mut Request, config: &Config) -> IronResult<Response> {
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        error!(
+            "verifyemail(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
+    }
+    let conn = conn.unwrap();
+
+    let map = req.get_ref::<Params>().unwrap();
+    let link = map.find(&["s"]);
+
+    info!("GET /verifyemail {:?}", map);
+
+    if link.is_none() {
+        error!("verifyemail(): Link not provided");
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    let link = String::from_value(link.unwrap()).unwrap();
+
+    match conn.get_domain_by_verification_token(&link) {
+        Ok(record) => match conn.update_domain_verification_data(
+            &record.token,
+            Some(record.account_id),
+            "",
+            true,
+        ) {
+            Ok(count) if count > 0 => {
+                html_response!(config.options.email.clone().success_page.unwrap())
+            }
+            Ok(_) => html_error_response!(
+                Status::NotFound,
+                config.options.email.clone().error_page.unwrap()
+            ),
+            Err(err) => {
+                error!("verifyemail(): Failed to update domain: {:?}", err);
+                EndpointError::with(status::InternalServerError, 500)
+            }
+        },
+        Err(diesel::result::Error::NotFound) => html_error_response!(
+            Status::NotFound,
+            config.options.email.clone().error_page.unwrap()
+        ),
+        Err(err) => {
+            error!(
+                "verifyemail(): Failed to lookup domain for {}: {:?}",
+                link, err
+            );
+            EndpointError::with(status::InternalServerError, 500)
+        }
+    }
+}
+
+fn revokeemail(req: &mut Request, config: &Config) -> IronResult<Response> {
+    let conn = config.db.get_connection();
+    if conn.is_err() {
+        error!(
+            "revokeemail(): Failed to get database connection: {:?}",
+            conn.err()
+        );
+        return EndpointError::with(status::InternalServerError, 500);
+    }
+    let conn = conn.unwrap();
+
+    let map = req.get_ref::<Params>().unwrap();
+    let token = map.find(&["token"]);
+
+    info!("GET /revokeemail {:?}", map);
+
+    if token.is_none() {
+        error!("revokeemail(): Token not provided");
+        return EndpointError::with(status::BadRequest, 400);
+    }
+
+    let token = String::from_value(token.unwrap()).unwrap();
+
+    match conn.update_domain_verification_data(&token, None, "", false) {
+        Ok(count) if count > 0 => ok_response!(),
+        Ok(_) => EndpointError::with(status::NotFound, 404),
+        Err(err) => {
+            error!("revokeemail(): Failed to update domain: {:?}", err);
             EndpointError::with(status::InternalServerError, 500)
         }
     }

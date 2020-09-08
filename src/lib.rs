@@ -49,7 +49,7 @@ pub mod args;
 pub mod config;
 pub mod constants;
 pub mod database;
-pub mod email_routes;
+pub mod email;
 pub mod errors;
 pub mod models;
 pub mod pdns;
