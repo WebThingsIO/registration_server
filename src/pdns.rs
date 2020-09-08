@@ -716,6 +716,9 @@ mod tests {
     use crate::args::ArgsParser;
     use crate::config::Config;
     use crate::database::DatabasePool;
+    use assert_json_diff::{assert_json_eq, assert_json_include};
+    use serde_json;
+    use serde_json::json;
     use std::time::Duration;
 
     fn build_lookup(
@@ -774,27 +777,30 @@ mod tests {
 
         let config = Config::from_args_with_db(args, db.clone());
 
+        let empty_success = json!({"result": true});
+        let empty_error = json!({"result": []});
+        let soa_exampleorg = json!({"result": [ {"qtype": "SOA"} ]});
+
+        let mut answer: [u8; 512] = [0; 512];
+
         start_socket_endpoint(&config);
 
-        // Allow enough time for the socket thread to start up and bind the
-        // socket.
+        // Allow enough time for the socket thread to start up and bind the socket.
         thread::sleep(Duration::new(1, 0));
+
         // Connect to the socket.
         let mut stream =
             UnixStream::connect(&config.clone().options.pdns.socket_path.unwrap()).unwrap();
+
         // Build an initialization request and send it to the stream.
         let request = build_lookup("initialize", None, None, None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        let empty_success = b"{\"result\":true}";
-        let empty_error = b"{\"result\":[]}";
-        let soa_exampleorg = b"{\"result\":[{\"qtype\":\"SOA\"";
-
-        let mut answer: [u8; 512] = [0; 512];
-        assert_eq!(stream.read(&mut answer).unwrap(), 15);
-        assert_eq!(&answer[..15], empty_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(response, empty_success.clone());
 
         // Build a lookup request and send it to the stream.
         let request = build_lookup("lookup", Some("A"), Some("example.org"), None);
@@ -802,8 +808,9 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 13);
-        assert_eq!(&answer[..13], empty_error);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(response, empty_error.clone());
 
         // Build an SOA lookup request and send it to the stream.
         let request = build_lookup("lookup", Some("SOA"), Some("example.org"), None);
@@ -811,8 +818,9 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 146);
-        assert_eq!(&answer[..25], soa_exampleorg);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_include!(actual: response, expected: soa_exampleorg.clone());
 
         // Build an NS lookup request and send it to the stream.
         let request = build_lookup("lookup", Some("NS"), Some("example.org"), None);
@@ -820,13 +828,27 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 170);
-        let result = String::from_utf8(answer[..170].to_vec()).unwrap();
-        let ns_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
-                          \"content\":\"ns1.mydomain.org.\",\"ttl\":86400},{\
-                          \"qtype\":\"NS\",\"qname\":\"example.org\",\
-                          \"content\":\"ns2.mydomain.org.\",\"ttl\":86400}]}";
-        assert_eq!(&result, ns_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "NS",
+                        "qname": "example.org",
+                        "content": "ns1.mydomain.org.",
+                        "ttl": 86400,
+                    },
+                    {
+                        "qtype": "NS",
+                        "qname": "example.org",
+                        "content": "ns2.mydomain.org.",
+                        "ttl": 86400,
+                    }
+                ]
+            })
+        );
 
         // SOA PageKite query, to create a successful response without having
         // to setup records in the db.
@@ -840,12 +862,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 119);
-        let result = String::from_utf8(answer[..119].to_vec()).unwrap();
-        let soa_success = "{\"result\":[{\"qtype\":\"A\",\
-                           \"qname\":\"1d48.https-4443.test.mydomain.org.mydomain.org.\",\
-                           \"content\":\"255.255.255.0\",\"ttl\":60}]}";
-        assert_eq!(&result, soa_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "1d48.https-4443.test.mydomain.org.mydomain.org.",
+                        "content": "255.255.255.0",
+                        "ttl": 60,
+                    }
+                ]
+            })
+        );
 
         // ANY query
         let request = build_lookup("lookup", Some("ANY"), Some("example.org"), None);
@@ -853,17 +884,39 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 350);
-        let result = String::from_utf8(answer[..350].to_vec()).unwrap();
-        let any_success = "{\"result\":[{\"qtype\":\"NS\",\"qname\":\"example.org\",\
-                           \"content\":\"ns1.mydomain.org.\",\"ttl\":86400},{\
-                           \"qtype\":\"NS\",\"qname\":\"example.org\",\
-                           \"content\":\"ns2.mydomain.org.\",\"ttl\":86400},{\
-                           \"qtype\":\"MX\",\"qname\":\"example.org\",\
-                           \"content\":\"10 inbound-smtp.us-west-2.amazonaws.com\",\
-                           \"ttl\":86400},{\"qtype\":\"TXT\",\"qname\":\"example.org\",\
-                           \"content\":\"something useful\",\"ttl\":86400}]}";
-        assert_eq!(&result, any_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "NS",
+                        "qname": "example.org",
+                        "content": "ns1.mydomain.org.",
+                        "ttl": 86400,
+                    },
+                    {
+                        "qtype": "NS",
+                        "qname": "example.org",
+                        "content": "ns2.mydomain.org.",
+                        "ttl": 86400,
+                    },
+                    {
+                        "qtype": "MX",
+                        "qname": "example.org",
+                        "content": "10 inbound-smtp.us-west-2.amazonaws.com",
+                        "ttl": 86400,
+                    },
+                    {
+                        "qtype": "TXT",
+                        "qname": "example.org",
+                        "content": "something useful",
+                        "ttl": 86400,
+                    }
+                ]
+            })
+        );
 
         // PSL query
         let request = build_lookup("lookup", Some("TXT"), Some("_psl.mydomain.org."), None);
@@ -871,13 +924,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 127);
-        let result = String::from_utf8(answer[..127].to_vec()).unwrap();
-        let psl_success = "{\"result\":[{\"qtype\":\"TXT\",\
-                           \"qname\":\"_psl.mydomain.org.\",\
-                           \"content\":\"https://github.com/publicsuffix/list/pull/XYZ\",\
-                           \"ttl\":86400}]}";
-        assert_eq!(&result, psl_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "TXT",
+                        "qname": "_psl.mydomain.org.",
+                        "content": "https://github.com/publicsuffix/list/pull/XYZ",
+                        "ttl": 86400,
+                    }
+                ]
+            })
+        );
 
         // A query for ns1
         let request = build_lookup("lookup", Some("A"), Some("ns1.mydomain.org."), None);
@@ -885,13 +946,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 86);
-        let result = String::from_utf8(answer[..86].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"ns1.mydomain.org.\",\
-                         \"content\":\"5.6.7.8\",\
-                         \"ttl\":86400}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "ns1.mydomain.org.",
+                        "content": "5.6.7.8",
+                        "ttl": 86400,
+                    }
+                ]
+            })
+        );
 
         // A query for ns2
         let request = build_lookup("lookup", Some("A"), Some("ns2.mydomain.org."), None);
@@ -899,13 +968,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 86);
-        let result = String::from_utf8(answer[..86].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"ns2.mydomain.org.\",\
-                         \"content\":\"4.5.6.7\",\
-                         \"ttl\":86400}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "ns2.mydomain.org.",
+                        "content": "4.5.6.7",
+                        "ttl": 86400,
+                    }
+                ]
+            })
+        );
 
         // A query for ns3
         let request = build_lookup("lookup", Some("A"), Some("ns3.mydomain.org."), None);
@@ -913,8 +990,9 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 13);
-        assert_eq!(&answer[..13], empty_error);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(response, empty_error.clone());
 
         // A query (AF)
         let request = build_lookup(
@@ -927,13 +1005,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"1.2.3.4\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "api.mydomain.org.",
+                        "content": "1.2.3.4",
+                        "ttl": 1,
+                    }
+                ]
+            })
+        );
 
         // A query (AN)
         let request = build_lookup(
@@ -946,13 +1032,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"2.3.4.5\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "api.mydomain.org.",
+                        "content": "2.3.4.5",
+                        "ttl": 1,
+                    }
+                ]
+            })
+        );
 
         // A query (AS)
         let request = build_lookup(
@@ -965,13 +1059,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"3.4.5.6\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "api.mydomain.org.",
+                        "content": "3.4.5.6",
+                        "ttl": 1,
+                    }
+                ]
+            })
+        );
 
         // A query (EU)
         let request = build_lookup(
@@ -984,13 +1086,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"4.5.6.7\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result":[
+                    {
+                        "qtype": "A",
+                        "qname": "api.mydomain.org.",
+                        "content": "4.5.6.7",
+                        "ttl": 1,
+                    }
+                ]
+            })
+        );
 
         // A query (NA)
         let request = build_lookup(
@@ -1003,13 +1113,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"5.6.7.8\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname":"api.mydomain.org.",
+                        "content":"5.6.7.8",
+                        "ttl": 1,
+                    }
+                ]
+            })
+        );
 
         // A query (OC)
         let request = build_lookup(
@@ -1022,13 +1140,21 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"6.7.8.9\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "api.mydomain.org.",
+                        "content": "6.7.8.9",
+                        "ttl": 1,
+                    }
+                ]
+            })
+        );
 
         // A query (SA)
         let request = build_lookup(
@@ -1041,23 +1167,36 @@ mod tests {
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 82);
-        let result = String::from_utf8(answer[..82].to_vec()).unwrap();
-        let a_success = "{\"result\":[{\"qtype\":\"A\",\
-                         \"qname\":\"api.mydomain.org.\",\
-                         \"content\":\"9.8.7.6\",\
-                         \"ttl\":1}]}";
-        assert_eq!(&result, a_success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "api.mydomain.org.",
+                        "content": "9.8.7.6",
+                        "ttl": 1,
+                    }
+                ],
+            })
+        );
 
         // getDomainMetadata
-        let body = "{\"method\":\"getDomainMetadata\",\"parameters\":{\
-                    \"name\":\"api.mydomain.org\",\"kind\":\"PRESIGNED\"}}";
+        let body = serde_json::to_string(&json!({
+            "method": "getDomainMetadata",
+            "parameters": {
+                "name": "api.mydomain.org",
+                "kind": "PRESIGNED",
+            }
+        }))
+        .unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
-        assert_eq!(stream.read(&mut answer).unwrap(), 13);
-        let result = String::from_utf8(answer[..13].to_vec()).unwrap();
-        let success = "{\"result\":[]}";
-        assert_eq!(&result, success);
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(response, empty_error.clone());
     }
 }
