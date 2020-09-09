@@ -18,12 +18,11 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --api-ttl=[ttl]                 'TTL of the DNS records for the api subdomain, in seconds.'
 --tunnel-ttl=[ttl]              'TTL of the DNS records for tunnels, in seconds.'
 --socket-path=[path]            'The path to the socket used to communicate with PowerDNS.'
---caa-record=[record]           'The CAA record the PowerDNS server should return.'
---mx-record=[record]            'The MX record the PowerDNS server should return.'
---psl-record=[record]           'The TXT record used to authenticate against the Public Suffix List.'
+--caa-record=[record]...        'A CAA record the PowerDNS server should return (can be specified multiple times).'
+--mx-record=[record]...         'An MX record the PowerDNS server should return (can be specified multiple times).'
+--txt-record=[record]...        'A TXT record the PowerDNS server should return (can be specified multiple times).'
 --ns-record=[record]...         'An NS record the PowerDNS server should return as host=ip (can be specified multiple times).'
 --soa-record=[record]           'The SOA record the PowerDNS server should return.'
---txt-record=[record]           'The TXT record the PowerDNS server should return.'
 --geoip-default=[ip]            'The IP address of the default tunnel endpoint.'
 --geoip-database=[path]         'Path to the GeoIP2/GeoLite2 database.'
 --geoip-continent-af=[ip]       'The IP address of the tunnel endpoint for Africa.'
@@ -81,6 +80,30 @@ impl ArgsParser {
             }
         }
 
+        let mut caa_records = vec![];
+        if matches.is_present("caa-record") {
+            let vals: Vec<&str> = matches.values_of("caa-record").unwrap().collect();
+            for val in &vals {
+                caa_records.push(val.to_string());
+            }
+        }
+
+        let mut mx_records = vec![];
+        if matches.is_present("mx-record") {
+            let vals: Vec<&str> = matches.values_of("mx-record").unwrap().collect();
+            for val in &vals {
+                mx_records.push(val.to_string());
+            }
+        }
+
+        let mut txt_records = vec![];
+        if matches.is_present("txt-record") {
+            let vals: Vec<&str> = matches.values_of("txt-record").unwrap().collect();
+            for val in &vals {
+                txt_records.push(val.to_string());
+            }
+        }
+
         optional!(email_server, "email-server");
         optional!(email_user, "email-user");
         optional!(email_password, "email-password");
@@ -91,9 +114,6 @@ impl ArgsParser {
         optional!(confirmation_body, "confirmation-body");
         optional!(success_page, "success-page");
         optional!(error_page, "error-page");
-        optional!(mx_record, "mx-record");
-        optional!(psl_record, "psl-record");
-        optional!(txt_record, "txt-record");
         optional!(geoip_database, "geoip-database");
         optional!(geoip_continent_af, "geoip-continent-af");
         optional!(geoip_continent_an, "geoip-continent-an");
@@ -118,18 +138,11 @@ impl ArgsParser {
                 dns_ttl: value_t!(matches, "dns-ttl", u32).unwrap_or(600),
                 tunnel_ttl: value_t!(matches, "tunnel-ttl", u32).unwrap_or(60),
                 socket_path: matches.value_of("socket-path").map(|s| s.to_owned()),
-                caa_record: matches
-                    .value_of("caa-record")
-                    .unwrap_or("_caa_not_configured_")
-                    .to_owned(),
-                mx_record: mx_record,
+                caa_records: caa_records,
+                mx_records: mx_records,
                 ns_records: ns_records,
-                psl_record: psl_record,
-                soa_record: matches
-                    .value_of("soa-record")
-                    .unwrap_or("_soa_not_configured_")
-                    .to_owned(),
-                txt_record: txt_record,
+                txt_records: txt_records,
+                soa_record: String::from(matches.value_of("soa-record").unwrap_or("")),
                 geoip: GeoIp {
                     default: matches
                         .value_of("geoip-default")
@@ -196,12 +209,11 @@ fn test_args() {
     assert_eq!(args.pdns.dns_ttl, 600);
     assert_eq!(args.pdns.tunnel_ttl, 60);
     assert_eq!(args.pdns.socket_path, None);
-    assert_eq!(args.pdns.caa_record, "_caa_not_configured_");
-    assert_eq!(args.pdns.mx_record, None);
+    assert_eq!(args.pdns.caa_records.len(), 0);
+    assert_eq!(args.pdns.mx_records.len(), 0);
     assert_eq!(args.pdns.ns_records.len(), 0);
-    assert_eq!(args.pdns.psl_record, None);
-    assert_eq!(args.pdns.soa_record, "_soa_not_configured_");
-    assert_eq!(args.pdns.txt_record, None);
+    assert_eq!(args.pdns.txt_records.len(), 0);
+    assert_eq!(args.pdns.soa_record, "");
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, None);
     assert_eq!(args.pdns.geoip.continent.AF, None);
@@ -245,9 +257,9 @@ fn test_args() {
         "--mx-record=_my_mx",
         "--ns-record=ns1.example.com.=1.1.1.1",
         "--ns-record=ns2.example.com.=2.2.2.2",
-        "--psl-record=_my_psl",
-        "--soa-record=_my_soa",
+        "--txt-record=_my_psl",
         "--txt-record=_my_txt",
+        "--soa-record=_my_soa",
         "--email-server=test.email.com",
         "--email-user=my_email_user",
         "--email-password=my_password",
@@ -268,8 +280,8 @@ fn test_args() {
     assert_eq!(args.pdns.dns_ttl, 140);
     assert_eq!(args.pdns.tunnel_ttl, 160);
     assert_eq!(args.pdns.socket_path, Some("/tmp/socket".to_owned()));
-    assert_eq!(args.pdns.caa_record, "_my_caa");
-    assert_eq!(args.pdns.mx_record, Some("_my_mx".to_owned()));
+    assert_eq!(args.pdns.caa_records, ["_my_caa"]);
+    assert_eq!(args.pdns.mx_records, ["_my_mx"]);
     assert_eq!(
         args.pdns.ns_records,
         [
@@ -277,9 +289,8 @@ fn test_args() {
             ["ns2.example.com.", "2.2.2.2"]
         ]
     );
-    assert_eq!(args.pdns.psl_record, Some("_my_psl".to_owned()));
     assert_eq!(args.pdns.soa_record, "_my_soa");
-    assert_eq!(args.pdns.txt_record, Some("_my_txt".to_owned()));
+    assert_eq!(args.pdns.txt_records, ["_my_psl", "_my_txt",]);
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, Some("/path/to/mmdb".to_owned()));
     assert_eq!(args.pdns.geoip.continent.AF, Some("1.1.1.1".to_owned()));
@@ -312,7 +323,6 @@ fn test_args() {
     assert_eq!(args.email.success_page, Some("this is success".to_owned()));
     assert_eq!(args.email.error_page, Some("this is error".to_owned()));
 
-    let caa = "0 issue \"letsencrypt.org\"";
     let soa = "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60";
     let recl_title = "Reclaim your Mozilla WebThings Gateway Domain";
     let recl_body = "Hello,\n<br>\n<br>\nYour reclamation token is: {token}\n<br>\n<br>\nIf you \
@@ -348,10 +358,10 @@ fn test_args() {
     assert_eq!(args.pdns.api_ttl, 1);
     assert_eq!(args.pdns.dns_ttl, 86400);
     assert_eq!(args.pdns.tunnel_ttl, 60);
-    assert_eq!(args.pdns.caa_record, caa);
+    assert_eq!(args.pdns.caa_records, ["0 issue \"letsencrypt.org\"",]);
     assert_eq!(
-        args.pdns.mx_record,
-        Some("10 inbound-smtp.us-west-2.amazonaws.com".to_owned())
+        args.pdns.mx_records,
+        ["10 inbound-smtp.us-west-2.amazonaws.com"]
     );
     assert_eq!(
         args.pdns.ns_records,
@@ -360,12 +370,14 @@ fn test_args() {
             ["ns2.mydomain.org.", "4.5.6.7"]
         ]
     );
-    assert_eq!(
-        args.pdns.psl_record,
-        Some("https://github.com/publicsuffix/list/pull/XYZ".to_owned())
-    );
     assert_eq!(args.pdns.soa_record, soa);
-    assert_eq!(args.pdns.txt_record, Some("something useful".to_owned()));
+    assert_eq!(
+        args.pdns.txt_records,
+        [
+            "https://github.com/publicsuffix/list/pull/XYZ",
+            "something useful",
+        ]
+    );
     assert_eq!(
         args.pdns.socket_path,
         Some("/tmp/pdns_tunnel.sock".to_owned())

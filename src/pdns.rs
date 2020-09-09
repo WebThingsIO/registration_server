@@ -204,42 +204,57 @@ fn build_ns_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
 }
 
 // Returns an MX record for a given qname.
-fn build_mx_response(qname: &str, config: &Config) -> PdnsLookupResponse {
-    PdnsLookupResponse {
-        qtype: "MX".to_owned(),
-        qname: qname.to_owned(),
-        content: config.options.pdns.clone().mx_record.unwrap(),
-        ttl: config.options.pdns.dns_ttl,
-        domain_id: None,
-        scope_mask: None,
-        auth: None,
+fn build_mx_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
+    let mut records = vec![];
+    for mx in &config.options.pdns.mx_records {
+        records.push(PdnsLookupResponse {
+            qtype: "MX".to_owned(),
+            qname: qname.to_owned(),
+            content: mx.to_owned(),
+            ttl: config.options.pdns.dns_ttl,
+            domain_id: None,
+            scope_mask: None,
+            auth: None,
+        });
     }
+
+    records
 }
 
 // Returns a CAA record for a given qname.
-fn build_caa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
-    PdnsLookupResponse {
-        qtype: "CAA".to_owned(),
-        qname: qname.to_owned(),
-        content: config.options.pdns.caa_record.to_owned(),
-        ttl: config.options.pdns.dns_ttl,
-        domain_id: None,
-        scope_mask: None,
-        auth: None,
+fn build_caa_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
+    let mut records = vec![];
+    for caa in &config.options.pdns.caa_records {
+        records.push(PdnsLookupResponse {
+            qtype: "CAA".to_owned(),
+            qname: qname.to_owned(),
+            content: caa.to_owned(),
+            ttl: config.options.pdns.dns_ttl,
+            domain_id: None,
+            scope_mask: None,
+            auth: None,
+        });
     }
+
+    records
 }
 
 // Returns a TXT record for a given qname.
-fn build_txt_response(qname: &str, config: &Config) -> PdnsLookupResponse {
-    PdnsLookupResponse {
-        qtype: "TXT".to_owned(),
-        qname: qname.to_owned(),
-        content: config.options.pdns.clone().txt_record.unwrap(),
-        ttl: config.options.pdns.dns_ttl,
-        domain_id: None,
-        scope_mask: None,
-        auth: None,
+fn build_txt_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
+    let mut records = vec![];
+    for txt in &config.options.pdns.txt_records {
+        records.push(PdnsLookupResponse {
+            qtype: "TXT".to_owned(),
+            qname: qname.to_owned(),
+            content: txt.to_owned(),
+            ttl: config.options.pdns.dns_ttl,
+            domain_id: None,
+            scope_mask: None,
+            auth: None,
+        });
     }
+
+    records
 }
 
 // Returns a TXT record with the DNS challenge content.
@@ -252,19 +267,6 @@ fn build_dns_challenge_response(
         qtype: "TXT".to_owned(),
         qname: qname.to_owned(),
         content: challenge.to_owned(),
-        ttl: config.options.pdns.dns_ttl,
-        domain_id: None,
-        scope_mask: None,
-        auth: None,
-    }
-}
-
-// Returns a TXT record containing the Public Suffix List authorization.
-fn build_psl_response(qname: &str, config: &Config) -> PdnsLookupResponse {
-    PdnsLookupResponse {
-        qtype: "TXT".to_owned(),
-        qname: qname.to_owned(),
-        content: config.options.pdns.clone().psl_record.unwrap(),
         ttl: config.options.pdns.dns_ttl,
         domain_id: None,
         scope_mask: None,
@@ -423,12 +425,11 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         }
     }
 
-    if (qtype == "MX" || qtype == "ANY") && config.options.pdns.mx_record.is_some() {
-        // Add an "MX" record.
-        result.push(PdnsResponseParams::Lookup(build_mx_response(
-            &original_qname,
-            config,
-        )));
+    if qtype == "MX" || qtype == "ANY" {
+        // Add "MX" records.
+        for record in build_mx_response(&original_qname, config) {
+            result.push(PdnsResponseParams::Lookup(record));
+        }
     }
 
     let conn = config.db.get_connection();
@@ -449,13 +450,11 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
     let domain_lookup = conn.get_domain_by_name(&qname);
 
     if qname == psl_domain {
-        // Add the PSL record if known. If not, just return, as this subdomain is forbidden
-        // otherwise.
-        if (qtype == "TXT" || qtype == "ANY") && config.options.pdns.psl_record.is_some() {
-            result.push(PdnsResponseParams::Lookup(build_psl_response(
-                &original_qname,
-                config,
-            )));
+        // Add any TXT records, then just return, as this subdomain is forbidden otherwise.
+        if qtype == "TXT" || qtype == "ANY" {
+            for record in build_txt_response(&original_qname, config) {
+                result.push(PdnsResponseParams::Lookup(record));
+            }
         }
 
         return Ok(PdnsResponse::Vector { result: result });
@@ -548,23 +547,21 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         }
 
         if qtype == "CAA" || qtype == "ANY" {
-            // Add a "CAA" record.
-            result.push(PdnsResponseParams::Lookup(build_caa_response(
-                &original_qname,
-                config,
-            )));
+            // Add "CAA" records.
+            for record in build_caa_response(&original_qname, config) {
+                result.push(PdnsResponseParams::Lookup(record));
+            }
         }
     } else {
         if qname != bare_domain {
             info!("process_request(): No record for: {}", qname);
         }
 
-        // If there's no record in the database, we add the "TXT" record from the config file.
-        if (qtype == "TXT" || qtype == "ANY") && config.options.pdns.txt_record.is_some() {
-            result.push(PdnsResponseParams::Lookup(build_txt_response(
-                &original_qname,
-                config,
-            )));
+        // If there's no record in the database, we add the "TXT" records from the config file.
+        if qtype == "TXT" || qtype == "ANY" {
+            for record in build_txt_response(&original_qname, config) {
+                result.push(PdnsResponseParams::Lookup(record));
+            }
         }
     }
 
@@ -782,7 +779,7 @@ mod tests {
         let empty_error = json!({"result": []});
         let soa_exampleorg = json!({"result": [ {"qtype": "SOA"} ]});
 
-        let mut answer: [u8; 512] = [0; 512];
+        let mut answer: [u8; 1024] = [0; 1024];
 
         start_socket_endpoint(&config);
 
@@ -918,9 +915,15 @@ mod tests {
                     {
                         "qtype": "TXT",
                         "qname": "example.org",
+                        "content": "https://github.com/publicsuffix/list/pull/XYZ",
+                        "ttl": 86400,
+                    },
+                    {
+                        "qtype": "TXT",
+                        "qname": "example.org",
                         "content": "something useful",
                         "ttl": 86400,
-                    }
+                    },
                 ]
             })
         );
@@ -942,7 +945,13 @@ mod tests {
                         "qname": "_psl.mydomain.org.",
                         "content": "https://github.com/publicsuffix/list/pull/XYZ",
                         "ttl": 86400,
-                    }
+                    },
+                    {
+                        "qtype": "TXT",
+                        "qname": "_psl.mydomain.org.",
+                        "content": "something useful",
+                        "ttl": 86400,
+                    },
                 ]
             })
         );
