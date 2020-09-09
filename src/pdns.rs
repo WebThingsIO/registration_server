@@ -413,6 +413,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
     let mut result = Vec::new();
 
     if qtype == "SOA" || qtype == "ANY" {
+        // Add "SOA" record.
         result.push(PdnsResponseParams::Lookup(build_soa_response(
             &original_qname,
             config,
@@ -420,6 +421,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
     }
 
     if qtype == "NS" || qtype == "ANY" {
+        // Add "NS" records.
         for record in build_ns_response(&original_qname, config) {
             result.push(PdnsResponseParams::Lookup(record));
         }
@@ -429,6 +431,27 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         // Add "MX" records.
         for record in build_mx_response(&original_qname, config) {
             result.push(PdnsResponseParams::Lookup(record));
+        }
+    }
+
+    if qtype == "CAA" || qtype == "ANY" {
+        // Add "CAA" records.
+        for record in build_caa_response(&original_qname, config) {
+            result.push(PdnsResponseParams::Lookup(record));
+        }
+    }
+
+    if qtype == "TXT" || qtype == "ANY" {
+        // Add "TXT" records.
+        for record in build_txt_response(&original_qname, config) {
+            result.push(PdnsResponseParams::Lookup(record));
+        }
+
+        // If the qname is _psl.$domain, add any TXT records and return, as this subdomain is
+        // forbidden otherwise.
+        let psl_domain = format!("_psl.{}.", domain);
+        if qname == psl_domain {
+            return Ok(PdnsResponse::Vector { result: result });
         }
     }
 
@@ -445,20 +468,9 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
     let ns_regex = Regex::new(r"^ns\d*$").unwrap();
     let is_ns_subdomain = ns_regex.is_match(&subdomain);
     let bare_domain = format!("{}.", domain);
+    let www_domain = format!("www.{}.", domain);
     let api_domain = format!("api.{}.", domain);
-    let psl_domain = format!("_psl.{}.", domain);
     let domain_lookup = conn.get_domain_by_name(&qname);
-
-    if qname == psl_domain {
-        // Add any TXT records, then just return, as this subdomain is forbidden otherwise.
-        if qtype == "TXT" || qtype == "ANY" {
-            for record in build_txt_response(&original_qname, config) {
-                result.push(PdnsResponseParams::Lookup(record));
-            }
-        }
-
-        return Ok(PdnsResponse::Vector { result: result });
-    }
 
     // Look for a record with the qname.
     if is_ns_subdomain || qname == api_domain || domain_lookup.is_ok() {
@@ -534,7 +546,11 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
             }
         }
 
-        if (qtype == "TXT" || qtype == "ANY") && qname != api_domain && !is_ns_subdomain {
+        if (qtype == "TXT" || qtype == "ANY")
+            && qname != api_domain
+            && !is_ns_subdomain
+            && original_qname.starts_with("_acme-challenge.")
+        {
             let record = record.clone().unwrap();
             if !record.dns_challenge.is_empty() {
                 // Add a "TXT" record with the DNS challenge content.
@@ -545,24 +561,10 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
                 )));
             }
         }
-
-        if qtype == "CAA" || qtype == "ANY" {
-            // Add "CAA" records.
-            for record in build_caa_response(&original_qname, config) {
-                result.push(PdnsResponseParams::Lookup(record));
-            }
-        }
+    } else if qname == www_domain || qname == bare_domain {
+        // TODO
     } else {
-        if qname != bare_domain {
-            info!("process_request(): No record for: {}", qname);
-        }
-
-        // If there's no record in the database, we add the "TXT" records from the config file.
-        if qtype == "TXT" || qtype == "ANY" {
-            for record in build_txt_response(&original_qname, config) {
-                result.push(PdnsResponseParams::Lookup(record));
-            }
-        }
+        info!("process_request(): No record for: {}", qname);
     }
 
     Ok(PdnsResponse::Vector { result: result })
@@ -910,6 +912,12 @@ mod tests {
                         "qtype": "MX",
                         "qname": "example.org",
                         "content": "10 inbound-smtp.us-west-2.amazonaws.com",
+                        "ttl": 86400,
+                    },
+                    {
+                        "qtype": "CAA",
+                        "qname": "example.org",
+                        "content": "0 issue \"letsencrypt.org\"",
                         "ttl": 86400,
                     },
                     {
