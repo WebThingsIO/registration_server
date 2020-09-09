@@ -1,11 +1,10 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy
+// of the MPL was not distributed with this file, You can obtain one at
+// http://mozilla.org/MPL/2.0/.
 
-// Communication with the PowerDNS server happens through the http
-// server.
-// See https://doc.powerdns.com/md/authoritative/backend-remote/ for
-// details about the various requests and responses.
+// Communication with the PowerDNS server happens through the Unix connector.
+// See https://doc.powerdns.com/authoritative/backends/remote.html for details about the various
+// requests and responses.
 
 use crate::config::Config;
 use crate::constants::DomainMode;
@@ -28,11 +27,11 @@ use std::thread;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct PdnsRequestParameters {
-    // initialize method
+    // "initialize" method
     path: Option<String>,
     timeout: Option<String>,
 
-    // lookup method
+    // "lookup" method
     qtype: Option<String>,
     qname: Option<String>,
     #[serde(rename = "zone-id")]
@@ -273,15 +272,15 @@ fn build_psl_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     }
 }
 
+// PageKite sends DNS requests to qnames like:
+// dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
+// 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.mozilla-iot.org.mozilla-iot.org
+// See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
 fn handle_pagekite_query(
     qname: &str,
     qtype: &str,
     config: &Config,
 ) -> Result<PdnsResponse, String> {
-    // PageKite sends DNS requests to qnames like:
-    // dd7251eef7c773a192feb06c0e07ac6020ac.tc730a6b9e2f28f407bb3871e98d3fe4e60c.
-    // 625558ecb0d283a5b058ba88fb3d9aa11d48.https-4443.fabrice.mozilla-iot.org.mozilla-iot.org
-    // See https://pagekite.net/wiki/Howto/DnsBasedAuthentication
     debug!(
         "handle_pagekite_query(): PageKite query for {} {}",
         qtype, qname
@@ -289,86 +288,82 @@ fn handle_pagekite_query(
 
     let mut result = Vec::new();
 
-    if qtype == "SOA" {
+    if qtype == "SOA" || qtype == "ANY" {
         result.push(PdnsResponseParams::Lookup(build_soa_response(
             qname, config,
         )));
-        return Ok(PdnsResponse::Vector { result: result });
     }
 
-    if qtype == "NS" {
+    if qtype == "NS" || qtype == "ANY" {
         for record in build_ns_response(qname, config) {
             result.push(PdnsResponseParams::Lookup(record));
         }
-        return Ok(PdnsResponse::Vector { result: result });
     }
 
-    if qtype != "A" && qtype != "ANY" {
-        return Err(format!("Unsupported PageKite request type: {}", qtype));
-    }
-
-    let conn = config.db.get_connection();
-    if conn.is_err() {
-        error!(
-            "handle_pagekite_query(): Failed to get database connection: {:?}",
-            conn.err()
-        );
-        return Err("handle_pagekite_query(): Failed to get database connection.".to_owned());
-    }
-    let conn = conn.unwrap();
-
-    // Split up the qname.
-    let parts: Vec<&str> = qname.split('.').collect();
-    let subdomain = format!("{}.{}.", parts[4], config.options.general.domain);
-    let ip = match conn.get_domain_by_name(&subdomain) {
-        Ok(record) => {
-            let srand = parts[0];
-            let token = parts[1];
-            let sign = parts[2];
-            let proto = parts[3];
-            let kite_domain = format!("{}.{}", parts[4], config.options.general.domain);
-            let payload = format!("{}:{}:{}:{}", proto, kite_domain, srand, token);
-            let salt = sign[..8].to_owned();
-
-            debug!(
-                "pagekit_query(): {} {} {} {} {}",
-                srand, token, sign, proto, kite_domain
+    if qtype == "A" || qtype == "ANY" {
+        let conn = config.db.get_connection();
+        if conn.is_err() {
+            error!(
+                "handle_pagekite_query(): Failed to get database connection: {:?}",
+                conn.err()
             );
+            return Err("handle_pagekite_query(): Failed to get database connection.".to_owned());
+        }
+        let conn = conn.unwrap();
 
-            let mut hasher = Sha1::new();
-            hasher.input_str(&format!("{}{}{}", record.token, payload, salt));
-            let calc = hasher.result_str();
+        // Split up the qname.
+        let parts: Vec<&str> = qname.split('.').collect();
+        let subdomain = format!("{}.{}.", parts[4], config.options.general.domain);
+        let ip = match conn.get_domain_by_name(&subdomain) {
+            Ok(record) => {
+                let srand = parts[0];
+                let token = parts[1];
+                let sign = parts[2];
+                let proto = parts[3];
+                let kite_domain = format!("{}.{}", parts[4], config.options.general.domain);
+                let payload = format!("{}:{}:{}:{}", proto, kite_domain, srand, token);
+                let salt = sign[..8].to_owned();
 
-            let calc_sub = calc[..28].to_owned();
-            let sign_sub = sign[8..36].to_owned();
+                debug!(
+                    "pagekit_query(): {} {} {} {} {}",
+                    srand, token, sign, proto, kite_domain
+                );
 
-            debug!(
-                "handle_pagekite_query(): Signatures: {} {}",
-                calc_sub, sign_sub
-            );
+                let mut hasher = Sha1::new();
+                hasher.input_str(&format!("{}{}{}", record.token, payload, salt));
+                let calc = hasher.result_str();
 
-            if calc_sub == sign_sub {
-                "255.255.254.255"
-            } else {
-                "255.255.255.1"
+                let calc_sub = calc[..28].to_owned();
+                let sign_sub = sign[8..36].to_owned();
+
+                debug!(
+                    "handle_pagekite_query(): Signatures: {} {}",
+                    calc_sub, sign_sub
+                );
+
+                if calc_sub == sign_sub {
+                    "255.255.254.255"
+                } else {
+                    "255.255.255.1"
+                }
             }
-        }
-        Err(_) => {
-            // Return 255.255.255.0 to PageKite to indicate failure.
-            "255.255.255.0"
-        }
-    };
+            Err(_) => {
+                // Return 255.255.255.0 to PageKite to indicate failure.
+                "255.255.255.0"
+            }
+        };
 
-    let ns_record = PdnsLookupResponse {
-        qtype: "A".to_owned(),
-        qname: qname.to_owned(),
-        content: ip.to_owned(),
-        ttl: config.options.pdns.tunnel_ttl,
-        domain_id: None,
-        scope_mask: None,
-        auth: None,
-    };
-    result.push(PdnsResponseParams::Lookup(ns_record));
+        let record = PdnsLookupResponse {
+            qtype: "A".to_owned(),
+            qname: qname.to_owned(),
+            content: ip.to_owned(),
+            ttl: config.options.pdns.tunnel_ttl,
+            domain_id: None,
+            scope_mask: None,
+            auth: None,
+        };
+        result.push(PdnsResponseParams::Lookup(record));
+    }
 
     Ok(PdnsResponse::Vector { result: result })
 }
@@ -377,6 +372,15 @@ fn handle_initialize(_req: PdnsRequest, _config: &Config) -> Result<PdnsResponse
     Ok(PdnsResponse::Bool { result: true })
 }
 
+// Example payload:
+//
+// {"method": "lookup",
+//  "parameters": {"local": "0.0.0.0",
+//                 "qname": "fabrice.mozilla-iot.org.",
+//                 "qtype": "SOA",
+//                 "real-remote": "63.245.221.198/32",
+//                 "remote": "63.245.221.198",
+//                 "zone-id": -1}}
 fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, String> {
     let original_qname = req.parameters.qname.unwrap().to_lowercase();
     let remote = req.parameters.remote;
@@ -388,26 +392,15 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         qtype, original_qname
     );
 
-    // Example payload:
-    //
-    // {"method": "lookup",
-    //  "parameters": {"local": "0.0.0.0",
-    //                 "qname": "fabrice.mozilla-iot.org.",
-    //                 "qtype": "SOA",
-    //                 "real-remote": "63.245.221.198/32",
-    //                 "remote": "63.245.221.198",
-    //                 "zone-id": -1}}
-
-    // If the qname ends up with .$domain.$domain. we consider that
-    // it's a PageKite request and process it separately.
+    // If the qname ends up with .$domain.$domain. we assume that it's a PageKite request and
+    // process it separately.
     let domain = &config.options.general.domain;
     if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
         return handle_pagekite_query(&qname, &qtype, config);
     }
 
-    // If the qname starts with `_acme-challenge.` this is a DNS-01
-    // challenge verification, so remove that part of the domain to
-    // retrieve our record.
+    // If the qname starts with `_acme-challenge.` this is a DNS-01 challenge verification, so
+    // remove that part of the domain to retrieve our record.
     // See https://tools.ietf.org/html/draft-ietf-acme-acme-06#section-8.4
     if qname.starts_with("_acme-challenge.") {
         qname = qname[16..].to_owned();
@@ -417,7 +410,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
 
     let mut result = Vec::new();
 
-    if qtype == "SOA" {
+    if qtype == "SOA" || qtype == "ANY" {
         result.push(PdnsResponseParams::Lookup(build_soa_response(
             &original_qname,
             config,
@@ -430,7 +423,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         }
     }
 
-    if qtype == "ANY" && config.options.pdns.mx_record.is_some() {
+    if (qtype == "MX" || qtype == "ANY") && config.options.pdns.mx_record.is_some() {
         // Add an "MX" record.
         result.push(PdnsResponseParams::Lookup(build_mx_response(
             &original_qname,
@@ -458,7 +451,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
     if qname == psl_domain {
         // Add the PSL record if known. If not, just return, as this subdomain is forbidden
         // otherwise.
-        if (qtype == "ANY" || qtype == "TXT") && config.options.pdns.psl_record.is_some() {
+        if (qtype == "TXT" || qtype == "ANY") && config.options.pdns.psl_record.is_some() {
             result.push(PdnsResponseParams::Lookup(build_psl_response(
                 &original_qname,
                 config,
@@ -475,7 +468,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
             Err(_) => None,
         };
 
-        if qtype == "ANY" || qtype == "A" {
+        if qtype == "A" || qtype == "ANY" {
             // Add an "A" record.
             if is_ns_subdomain {
                 for ns in &config.options.pdns.ns_records {
@@ -518,8 +511,8 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
 
                 match FromPrimitive::from_i32(record.mode) {
                     Some(DomainMode::Tunneled) => {
-                        // For a PageKite subdomain, we need to use the continent stored in
-                        // the database.
+                        // For a PageKite subdomain, we need to use the continent stored in the
+                        // database.
                         result.push(PdnsResponseParams::Lookup(build_a_response_tunnel(
                             &original_qname,
                             config.options.pdns.tunnel_ttl,
@@ -542,7 +535,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
             }
         }
 
-        if (qtype == "ANY" || qtype == "TXT") && qname != api_domain && !is_ns_subdomain {
+        if (qtype == "TXT" || qtype == "ANY") && qname != api_domain && !is_ns_subdomain {
             let record = record.clone().unwrap();
             if !record.dns_challenge.is_empty() {
                 // Add a "TXT" record with the DNS challenge content.
@@ -554,7 +547,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
             }
         }
 
-        if qtype == "ANY" {
+        if qtype == "CAA" || qtype == "ANY" {
             // Add a "CAA" record.
             result.push(PdnsResponseParams::Lookup(build_caa_response(
                 &original_qname,
@@ -567,7 +560,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         }
 
         // If there's no record in the database, we add the "TXT" record from the config file.
-        if qtype == "ANY" && config.options.pdns.txt_record.is_some() {
+        if (qtype == "TXT" || qtype == "ANY") && config.options.pdns.txt_record.is_some() {
             result.push(PdnsResponseParams::Lookup(build_txt_response(
                 &original_qname,
                 config,
@@ -898,6 +891,12 @@ mod tests {
             response,
             json!({
                 "result": [
+                    {
+                        "qtype": "SOA",
+                        "qname": "example.org",
+                        "content": "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60",
+                        "ttl": 86400,
+                    },
                     {
                         "qtype": "NS",
                         "qname": "example.org",
