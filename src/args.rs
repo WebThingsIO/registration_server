@@ -23,6 +23,7 @@ const USAGE: &str = "--config-file=[path]     'Path to a toml configuration file
 --txt-record=[record]...        'A TXT record the PowerDNS server should return (can be specified multiple times).'
 --ns-record=[record]...         'An NS record the PowerDNS server should return as host=ip (can be specified multiple times).'
 --soa-record=[record]           'The SOA record the PowerDNS server should return.'
+--www-address=[address]         'The address of the www (and empty) subdomain, i.e. www.mydomain.org or mydomain.org.'
 --geoip-default=[ip]            'The IP address of the default tunnel endpoint.'
 --geoip-database=[path]         'Path to the GeoIP2/GeoLite2 database.'
 --geoip-continent-af=[ip]       'The IP address of the tunnel endpoint for Africa.'
@@ -114,6 +115,7 @@ impl ArgsParser {
         optional!(confirmation_body, "confirmation-body");
         optional!(success_page, "success-page");
         optional!(error_page, "error-page");
+        optional!(www_address, "www-address");
         optional!(geoip_database, "geoip-database");
         optional!(geoip_continent_af, "geoip-continent-af");
         optional!(geoip_continent_an, "geoip-continent-an");
@@ -143,6 +145,7 @@ impl ArgsParser {
                 ns_records: ns_records,
                 txt_records: txt_records,
                 soa_record: String::from(matches.value_of("soa-record").unwrap_or("")),
+                www_address: www_address,
                 geoip: GeoIp {
                     default: matches
                         .value_of("geoip-default")
@@ -214,6 +217,7 @@ fn test_args() {
     assert_eq!(args.pdns.ns_records.len(), 0);
     assert_eq!(args.pdns.txt_records.len(), 0);
     assert_eq!(args.pdns.soa_record, "");
+    assert_eq!(args.pdns.www_address, None);
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, None);
     assert_eq!(args.pdns.geoip.continent.AF, None);
@@ -260,6 +264,7 @@ fn test_args() {
         "--txt-record=_my_psl",
         "--txt-record=_my_txt",
         "--soa-record=_my_soa",
+        "--www-address=9.8.7.6",
         "--email-server=test.email.com",
         "--email-user=my_email_user",
         "--email-password=my_password",
@@ -290,6 +295,7 @@ fn test_args() {
         ]
     );
     assert_eq!(args.pdns.soa_record, "_my_soa");
+    assert_eq!(args.pdns.www_address, Some("9.8.7.6".to_owned()));
     assert_eq!(args.pdns.txt_records, ["_my_psl", "_my_txt",]);
     assert_eq!(args.pdns.geoip.default, "1.2.3.4");
     assert_eq!(args.pdns.geoip.database, Some("/path/to/mmdb".to_owned()));
@@ -371,6 +377,7 @@ fn test_args() {
         ]
     );
     assert_eq!(args.pdns.soa_record, soa);
+    assert_eq!(args.pdns.www_address, Some("10.11.12.13".to_owned()));
     assert_eq!(
         args.pdns.txt_records,
         [

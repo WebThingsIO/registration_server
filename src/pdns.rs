@@ -172,6 +172,19 @@ fn build_a_response_real(qname: &str, ttl: u32, ip: String) -> PdnsLookupRespons
     }
 }
 
+// Returns a CNAME record.
+fn build_cname_response(qname: &str, ttl: u32, name: &str) -> PdnsLookupResponse {
+    PdnsLookupResponse {
+        qtype: "CNAME".to_owned(),
+        qname: qname.to_owned(),
+        content: name.to_owned(),
+        ttl: ttl,
+        domain_id: None,
+        scope_mask: None,
+        auth: None,
+    }
+}
+
 // Returns an SOA record for a given qname.
 fn build_soa_response(qname: &str, config: &Config) -> PdnsLookupResponse {
     PdnsLookupResponse {
@@ -561,8 +574,25 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
                 )));
             }
         }
-    } else if qname == www_domain || qname == bare_domain {
-        // TODO
+    } else if qname == www_domain
+        && config.options.pdns.www_address.is_some()
+        && (qtype == "A" || qtype == "CNAME" || qtype == "ANY")
+    {
+        // Return a CNAME record: www.$domain -> $domain
+        result.push(PdnsResponseParams::Lookup(build_cname_response(
+            &original_qname,
+            config.options.pdns.dns_ttl,
+            &bare_domain,
+        )));
+    } else if qname == bare_domain
+        && config.options.pdns.www_address.is_some()
+        && (qtype == "A" || qtype == "ANY")
+    {
+        result.push(PdnsResponseParams::Lookup(build_a_response_real(
+            &original_qname,
+            config.options.pdns.dns_ttl,
+            config.options.pdns.www_address.clone().unwrap(),
+        )));
     } else {
         info!("process_request(): No record for: {}", qname);
     }
@@ -1202,6 +1232,60 @@ mod tests {
                         "qname": "api.mydomain.org.",
                         "content": "9.8.7.6",
                         "ttl": 1,
+                    }
+                ],
+            })
+        );
+
+        // A query for www
+        let request = build_lookup(
+            "lookup",
+            Some("A"),
+            Some("www.mydomain.org."),
+            Some("57.74.224.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "CNAME",
+                        "qname": "www.mydomain.org.",
+                        "content": "mydomain.org.",
+                        "ttl": 86400,
+                    }
+                ],
+            })
+        );
+
+        // A query for bare domain
+        let request = build_lookup(
+            "lookup",
+            Some("A"),
+            Some("mydomain.org."),
+            Some("57.74.224.2"),
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "A",
+                        "qname": "mydomain.org.",
+                        "content": "10.11.12.13",
+                        "ttl": 86400,
                     }
                 ],
             })
