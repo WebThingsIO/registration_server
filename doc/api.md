@@ -47,7 +47,7 @@ This endpoint lets you remove a previously subscribed domain.
 
 ### Parameters
 
-* `token`: optional, the secret token assigned to this domain.
+* `token`: the secret token assigned to this domain.
 * `reclamationToken`: optional, the reclamation token assigned to this domain.
 
 ### Returns
@@ -146,3 +146,15 @@ Calling this endpoint will cancel an ongoing email verification flow.
 ### Returns
 
 An empty HTTP 200 response.
+
+## /connectivity-check
+
+Allows users to test the connectivity of their clients.
+
+### Parameters
+
+None.
+
+### Returns
+
+String "OK"
