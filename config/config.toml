@@ -46,7 +46,7 @@ server = "mail.gandi.net"
 user = "accounts@mydomain.org"
 password = "******"
 sender = "accounts@mydomain.org"
-reclamation_title = "Reclaim your Mozilla WebThings Gateway Domain"
+reclamation_title = "Reclaim your WebThings Gateway Domain"
 reclamation_body = """Hello,
 <br>
 <br>
@@ -54,11 +54,11 @@ Your reclamation token is: {token}
 <br>
 <br>
 If you did not request to reclaim your gateway domain, you can ignore this email."""
-confirmation_title = "Welcome to your Mozilla WebThings Gateway"
+confirmation_title = "Welcome to your WebThings Gateway"
 confirmation_body = """Hello,
 <br>
 <br>
-Welcome to your Mozilla WebThings Gateway! To confirm your email address, navigate to <a href="{link}">{link}</a>.
+Welcome to your WebThings Gateway! To confirm your email address, navigate to <a href="{link}">{link}</a>.
 <br>
 <br>
 Your gateway can be accessed at <a href="https://{domain}">https://{domain}</a>."""

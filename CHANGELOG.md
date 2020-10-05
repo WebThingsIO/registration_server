@@ -13,5 +13,5 @@
 ### Fixed
 - DNS responses now only include the appropriate records.
 
-[Unreleased]: https://github.com/mozilla-iot/registration_server/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/mozilla-iot/registration_server/compare/v0.2.0...v0.3.0
+[Unreleased]: https://github.com/WebThingsIO/registration_server/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/WebThingsIO/registration_server/compare/v0.2.0...v0.3.0

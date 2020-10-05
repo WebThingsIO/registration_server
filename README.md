@@ -1,7 +1,6 @@
 # Registration Server
 
-[![Build Status](https://github.com/mozilla-iot/registration_server/workflows/Rust%20application/badge.svg)](https://github.com/mozilla-iot/registration_server/workflows/Rust%20application)
-[![codecov](https://codecov.io/gh/mozilla-iot/registration_server/branch/master/graph/badge.svg)](https://codecov.io/gh/mozilla-iot/registration_server)
+[![Build Status](https://github.com/WebThingsIO/registration_server/workflows/Rust%20application/badge.svg)](https://github.com/WebThingsIO/registration_server/workflows/Rust%20application)
 [![license](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
 This server exposes an HTTP API that lets you register a WebThings Gateway for
@@ -73,7 +72,7 @@ See the `config/config.toml` for an example configuration file.
 ## Deploying
 
 A Docker image has been provided
-[here](https://github.com/mozilla-iot/registration-server-docker), containing
+[here](https://github.com/WebThingsIO/registration-server-docker), containing
 this server, a PowerDNS server, a PageKite server, and geoipupdate.
 
 ## API
