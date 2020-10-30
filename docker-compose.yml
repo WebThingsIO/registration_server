@@ -1,0 +1,20 @@
+version: "3"
+
+services:
+  registration-server:
+    container_name: registration-server
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:81:81"
+      - "443:4443"
+      - "53:53"
+      - "53:53/udp"
+    volumes:
+      - /opt/docker/registration-server/config:/home/user/config
+      - /opt/docker/registration-server/data:/home/user/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "10"

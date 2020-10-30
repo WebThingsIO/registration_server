@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -e
+
+# get the database path
+db_path=$(
+    grep ^db_path /home/user/config/config.toml | \
+    cut -d= -f2- | \
+    sed -E -e 's/^\s+//g' -e 's/\s+$//g' -e 's/^"//' -e 's/"$//'
+)
+
+# get the initial GeoIP database, if configured
+if [ -f /home/user/config/GeoIP.conf ]; then
+    cp /home/user/config/GeoIP.conf /etc/GeoIP.conf
+    /usr/bin/geoipupdate
+fi
+
+# set up the database
+/usr/local/cargo/bin/diesel \
+    --database-url "${db_path}" \
+    setup \
+    --migration-dir "/home/user/registration_server/migrations/{{db_type}}"
+
+# run all of our background services
+exec /usr/bin/runsvdir /etc/service

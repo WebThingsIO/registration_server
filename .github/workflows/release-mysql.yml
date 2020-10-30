@@ -1,0 +1,24 @@
+name: Build and push images
+
+on:
+  push:
+    tags:
+    - v[0-9]+.[0-9]+.[0-9]+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set release version
+        run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
+      - name: Build image
+        uses: ilteoood/docker_buildx@master
+        with:
+          publish: true
+          imageName: webthingsio/registration-server
+          platform: linux/amd64,linux/arm/v7,linux/arm64
+          buildArg: db_type=mysql
+          tag: mysql,${{ env.RELEASE_VERSION }}-mysql
+          dockerHubUser: ${{ secrets.DOCKER_HUB_USER }}
+          dockerHubPassword: ${{ secrets.DOCKER_HUB_PASSWORD }}
