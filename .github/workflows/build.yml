@@ -1,4 +1,4 @@
-name: Rust application
+name: build
 
 on:
   pull_request:
