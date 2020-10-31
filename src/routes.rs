@@ -740,8 +740,8 @@ mod tests {
     use crate::database::DatabasePool;
     use crate::models::Domain;
     use actix_rt;
+    use actix_web::web::Bytes;
     use actix_web::{middleware, test, App};
-    use bytes::Bytes;
     use std;
     use std::thread::sleep;
     use std::time;
