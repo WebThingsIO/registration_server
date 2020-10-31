@@ -1,4 +1,4 @@
-name: Build and push images
+name: Build and push images (mysql)
 
 on:
   push:
