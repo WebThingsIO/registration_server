@@ -44,9 +44,3 @@ jobs:
     - name: Run integration tests
       run: |
         ./run_tests.sh
-    - name: Build Docker image
-      uses: ilteoood/docker_buildx@master
-      with:
-        publish: false
-        imageName: webthingsio/registration-server
-        platform: linux/amd64,linux/arm64
