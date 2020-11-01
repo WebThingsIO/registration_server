@@ -5,15 +5,14 @@ RUN echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/so
     sed -i 's/ main$/ main contrib/g' /etc/apt/sources.list && \
     apt update && \
     apt dist-upgrade -y && \
-    apt install  -y \
+    apt install -y \
         cron \
         geoipupdate \
         pdns-backend-remote \
         pdns-server \
         python-six \
-        runit && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
-    touch /etc/inittab
+        supervisor && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install PageKite
 RUN curl -s https://pagekite.net/pk/ | bash
@@ -34,7 +33,7 @@ RUN cargo build --release --features "${db_type}" && \
 USER root
 ADD docker/init /
 ADD docker/etc/cron.weekly/geoipupdate /etc/cron.weekly/
-ADD docker/etc/service /etc/service
+ADD docker/etc/supervisor/conf.d/supervisord.conf /etc/supervisor/conf.d/
 
 RUN sed -i "s/{{db_type}}/${db_type}/" /init
 

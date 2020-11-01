@@ -22,4 +22,4 @@ fi
     --migration-dir "/home/user/registration_server/migrations/{{db_type}}"
 
 # run all of our background services
-exec /usr/bin/runsvdir /etc/service
+exec /usr/bin/supervisord
