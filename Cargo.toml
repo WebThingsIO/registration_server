@@ -1,6 +1,6 @@
 [package]
 name = "registration_server"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["WebThingsIO <team@webthings.io>"]
 edition = "2018"
 
