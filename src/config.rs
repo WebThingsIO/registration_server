@@ -40,9 +40,9 @@ pub struct PdnsOptions {
     pub caa_records: Vec<String>,
     pub mx_records: Vec<String>,
     pub ns_records: Vec<Vec<String>>,
-    pub txt_records: Vec<String>,
+    pub txt_records: Vec<Vec<String>>,
     pub soa_record: String,
-    pub www_address: Option<String>,
+    pub www_addresses: Vec<String>,
     pub geoip: GeoIp,
 }
 

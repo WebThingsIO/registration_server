@@ -253,18 +253,25 @@ fn build_caa_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
 }
 
 // Returns a TXT record for a given qname.
-fn build_txt_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
+fn build_txt_response(
+    qname: &str,
+    is_bare_domain: bool,
+    subdomain: &str,
+    config: &Config,
+) -> Vec<PdnsLookupResponse> {
     let mut records = vec![];
     for txt in &config.options.pdns.txt_records {
-        records.push(PdnsLookupResponse {
-            qtype: "TXT".to_owned(),
-            qname: qname.to_owned(),
-            content: txt.to_owned(),
-            ttl: config.options.pdns.dns_ttl,
-            domain_id: None,
-            scope_mask: None,
-            auth: None,
-        });
+        if txt[0] == "*" || txt[0] == subdomain || (txt[0] == "@" && is_bare_domain) {
+            records.push(PdnsLookupResponse {
+                qtype: "TXT".to_owned(),
+                qname: qname.to_owned(),
+                content: txt[1].to_owned(),
+                ttl: config.options.pdns.dns_ttl,
+                domain_id: None,
+                scope_mask: None,
+                auth: None,
+            });
+        }
     }
 
     records
@@ -413,6 +420,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
     if qname.ends_with(&format!(".{}.{}.", domain, domain)) {
         return handle_pagekite_query(&qname, &qtype, config);
     }
+    let bare_domain = format!("{}.", domain);
 
     // If the qname starts with `_acme-challenge.` this is a DNS-01 challenge verification, so
     // remove that part of the domain to retrieve our record.
@@ -433,14 +441,14 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         )));
     }
 
-    if qtype == "NS" || qtype == "ANY" {
+    if qname == bare_domain && (qtype == "NS" || qtype == "ANY") {
         // Add "NS" records.
         for record in build_ns_response(&original_qname, config) {
             result.push(PdnsResponseParams::Lookup(record));
         }
     }
 
-    if qtype == "MX" || qtype == "ANY" {
+    if qname == bare_domain && (qtype == "MX" || qtype == "ANY") {
         // Add "MX" records.
         for record in build_mx_response(&original_qname, config) {
             result.push(PdnsResponseParams::Lookup(record));
@@ -456,7 +464,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
 
     if qtype == "TXT" || qtype == "ANY" {
         // Add "TXT" records.
-        for record in build_txt_response(&original_qname, config) {
+        for record in build_txt_response(&original_qname, qname == bare_domain, subdomain, config) {
             result.push(PdnsResponseParams::Lookup(record));
         }
 
@@ -480,7 +488,6 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
 
     let ns_regex = Regex::new(r"^ns\d*$").unwrap();
     let is_ns_subdomain = ns_regex.is_match(&subdomain);
-    let bare_domain = format!("{}.", domain);
     let www_domain = format!("www.{}.", domain);
     let api_domain = format!("api.{}.", domain);
     let domain_lookup = conn.get_domain_by_name(&qname);
@@ -575,7 +582,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
             }
         }
     } else if qname == www_domain
-        && config.options.pdns.www_address.is_some()
+        && config.options.pdns.www_addresses.len() > 0
         && (qtype == "A" || qtype == "CNAME" || qtype == "ANY")
     {
         // Return a CNAME record: www.$domain -> $domain
@@ -585,14 +592,16 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
             &bare_domain,
         )));
     } else if qname == bare_domain
-        && config.options.pdns.www_address.is_some()
+        && config.options.pdns.www_addresses.len() > 0
         && (qtype == "A" || qtype == "ANY")
     {
-        result.push(PdnsResponseParams::Lookup(build_a_response_real(
-            &original_qname,
-            config.options.pdns.dns_ttl,
-            config.options.pdns.www_address.clone().unwrap(),
-        )));
+        for addr in &config.options.pdns.www_addresses {
+            result.push(PdnsResponseParams::Lookup(build_a_response_real(
+                &original_qname,
+                config.options.pdns.dns_ttl,
+                addr.clone(),
+            )));
+        }
     } else {
         info!("process_request(): No record for: {}", qname);
     }
@@ -832,7 +841,7 @@ mod tests {
         let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
         assert_json_eq!(response, empty_success.clone());
 
-        // Build a lookup request and send it to the stream.
+        // Build a lookup request for the wrong domain and send it to the stream.
         let request = build_lookup("lookup", Some("A"), Some("example.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
@@ -843,7 +852,7 @@ mod tests {
         assert_json_eq!(response, empty_error.clone());
 
         // Build an SOA lookup request and send it to the stream.
-        let request = build_lookup("lookup", Some("SOA"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("SOA"), Some("mydomain.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -853,32 +862,14 @@ mod tests {
         assert_json_include!(actual: response, expected: soa_exampleorg.clone());
 
         // Build an NS lookup request and send it to the stream.
-        let request = build_lookup("lookup", Some("NS"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("NS"), Some("mydomain.org"), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
 
         let len = stream.read(&mut answer).unwrap();
         let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
-        assert_json_eq!(
-            response,
-            json!({
-                "result": [
-                    {
-                        "qtype": "NS",
-                        "qname": "example.org",
-                        "content": "ns1.mydomain.org.",
-                        "ttl": 86400,
-                    },
-                    {
-                        "qtype": "NS",
-                        "qname": "example.org",
-                        "content": "ns2.mydomain.org.",
-                        "ttl": 86400,
-                    }
-                ]
-            })
-        );
+        assert_json_eq!(response, empty_error.clone());
 
         // SOA PageKite query, to create a successful response without having
         // to setup records in the db.
@@ -909,7 +900,7 @@ mod tests {
         );
 
         // ANY query
-        let request = build_lookup("lookup", Some("ANY"), Some("example.org"), None);
+        let request = build_lookup("lookup", Some("ANY"), Some("mydomain.org."), None);
         let body = serde_json::to_string(&request).unwrap();
         stream.write_all(body.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -922,45 +913,45 @@ mod tests {
                 "result": [
                     {
                         "qtype": "SOA",
-                        "qname": "example.org",
+                        "qname": "mydomain.org.",
                         "content": "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60",
                         "ttl": 86400,
                     },
                     {
                         "qtype": "NS",
-                        "qname": "example.org",
+                        "qname": "mydomain.org.",
                         "content": "ns1.mydomain.org.",
                         "ttl": 86400,
                     },
                     {
                         "qtype": "NS",
-                        "qname": "example.org",
+                        "qname": "mydomain.org.",
                         "content": "ns2.mydomain.org.",
                         "ttl": 86400,
                     },
                     {
                         "qtype": "MX",
-                        "qname": "example.org",
+                        "qname": "mydomain.org.",
                         "content": "10 inbound-smtp.us-west-2.amazonaws.com",
                         "ttl": 86400,
                     },
                     {
                         "qtype": "CAA",
-                        "qname": "example.org",
+                        "qname": "mydomain.org.",
                         "content": "0 issue \"letsencrypt.org\"",
                         "ttl": 86400,
                     },
                     {
                         "qtype": "TXT",
-                        "qname": "example.org",
-                        "content": "https://github.com/publicsuffix/list/pull/XYZ",
+                        "qname": "mydomain.org.",
+                        "content": "something useful",
                         "ttl": 86400,
                     },
                     {
-                        "qtype": "TXT",
-                        "qname": "example.org",
-                        "content": "something useful",
-                        "ttl": 86400,
+                        "qtype": "A",
+                        "qname": "mydomain.org.",
+                        "content": "10.11.12.13",
+                        "ttl": 86400
                     },
                 ]
             })
@@ -982,12 +973,6 @@ mod tests {
                         "qtype": "TXT",
                         "qname": "_psl.mydomain.org.",
                         "content": "https://github.com/publicsuffix/list/pull/XYZ",
-                        "ttl": 86400,
-                    },
-                    {
-                        "qtype": "TXT",
-                        "qname": "_psl.mydomain.org.",
-                        "content": "something useful",
                         "ttl": 86400,
                     },
                 ]

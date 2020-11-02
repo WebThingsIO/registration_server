@@ -28,11 +28,13 @@ impl ArgsParser {
     pub fn from_env() -> Args {
         ArgsParser::from_matches(
             &App::new("registration_server")
-                .arg(Arg::with_name("config-file")
-                      .long("config-file")
-                      .help("Path to a toml configuration file.")
-                      .takes_value(true)
-                      .required(true))
+                .arg(
+                    Arg::with_name("config-file")
+                        .long("config-file")
+                        .help("Path to a toml configuration file.")
+                        .takes_value(true)
+                        .required(true),
+                )
                 .get_matches(),
         )
     }
@@ -42,11 +44,13 @@ impl ArgsParser {
     pub fn from_vec(params: Vec<&str>) -> Args {
         ArgsParser::from_matches(
             &App::new("registration_server")
-                .arg(Arg::with_name("config-file")
-                      .long("config-file")
-                      .help("Path to a toml configuration file.")
-                      .takes_value(true)
-                      .required(true))
+                .arg(
+                    Arg::with_name("config-file")
+                        .long("config-file")
+                        .help("Path to a toml configuration file.")
+                        .takes_value(true)
+                        .required(true),
+                )
                 .get_matches_from(params),
         )
     }
@@ -104,12 +108,12 @@ fn test_args() {
         ]
     );
     assert_eq!(args.pdns.soa_record, soa);
-    assert_eq!(args.pdns.www_address, Some("10.11.12.13".to_owned()));
+    assert_eq!(args.pdns.www_addresses, ["10.11.12.13"]);
     assert_eq!(
         args.pdns.txt_records,
         [
-            "https://github.com/publicsuffix/list/pull/XYZ",
-            "something useful",
+            ["_psl", "https://github.com/publicsuffix/list/pull/XYZ"],
+            ["@", "something useful"],
         ]
     );
     assert_eq!(
