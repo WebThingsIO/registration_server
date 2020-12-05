@@ -2,7 +2,7 @@ name: Move PR to Review in progress
 
 on:
   pull_request:
-    types: [assigned]
+    types: [opened]
 
 jobs:
   automate-project-columns:
