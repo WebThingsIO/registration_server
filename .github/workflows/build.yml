@@ -35,7 +35,7 @@ jobs:
       run: |
         rustup install stable
         rustup default stable
-        cargo install diesel_cli
+        cargo install diesel_cli@~1.4.0
     - name: Check builds
       run: |
         cargo build --features mysql
