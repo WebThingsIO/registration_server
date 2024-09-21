@@ -277,6 +277,37 @@ fn build_txt_response(
     records
 }
 
+// Returns a CNAME record for a given qname.
+fn build_config_cname_response(
+    qname: &str,
+    config: &Config,
+) -> Vec<PdnsLookupResponse> {
+    let sanitized_qname = remove_trailing_dot(qname);
+    let mut records = vec![];
+    for cname in &config.options.pdns.cname_records {
+        if cname[0] == sanitized_qname {
+            records.push(PdnsLookupResponse {
+                qtype: "CNAME".to_owned(),
+                qname: qname.to_owned(),
+                content: cname[1].to_owned(),
+                ttl: config.options.pdns.dns_ttl,
+                domain_id: None,
+                scope_mask: None,
+                auth: None,
+            });
+        }
+    }
+
+    records
+}
+
+fn remove_trailing_dot(s: &str) -> &str {
+    match s.chars().last() {
+        Some('.') => &s[0..s.len() - 1],
+        _ => s
+    }
+}
+
 // Returns a TXT record with the DNS challenge content.
 fn build_dns_challenge_response(
     qname: &str,
@@ -473,6 +504,13 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         let psl_domain = format!("_psl.{}.", domain);
         if qname == psl_domain {
             return Ok(PdnsResponse::Vector { result: result });
+        }
+    }
+
+    if qtype == "CNAME" || qtype == "ANY" {
+        // Add "CNAME" records.
+        for record in build_config_cname_response(&original_qname, config) {
+            result.push(PdnsResponseParams::Lookup(record));
         }
     }
 
@@ -976,6 +1014,33 @@ mod tests {
                         "ttl": 86400,
                     },
                 ]
+            })
+        );
+
+        // A query for a subdomain
+        let request = build_lookup(
+            "lookup",
+            Some("CNAME"),
+            Some("subdomain.mydomain.org."),
+            None,
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "CNAME",
+                        "qname": "subdomain.mydomain.org.",
+                        "content": "mydomain.org",
+                        "ttl": 86400,
+                    }
+                ],
             })
         );
 

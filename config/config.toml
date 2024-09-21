@@ -25,6 +25,10 @@ txt_records = [
   [ "_psl", "https://github.com/publicsuffix/list/pull/XYZ" ],
   [ "@", "something useful" ],
 ]
+cname_records = [
+  [ "subdomain.mydomain.org", "mydomain.org" ],
+  [ "subdomain2.mydomain.org", "mydomain.org" ],
+]
 soa_record = "ns1.mydomain.org. dns-admin.mydomain.org. 2018082801 900 900 1209600 60"
 www_addresses = [
   "10.11.12.13",
