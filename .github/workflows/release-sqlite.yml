@@ -21,4 +21,4 @@ jobs:
           buildArg: db_type=sqlite
           tag: sqlite,${{ env.RELEASE_VERSION }}-sqlite
           dockerHubUser: ${{ secrets.DOCKER_HUB_USER }}
-          dockerHubPassword: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          dockerHubPassword: ${{ secrets.DOCKER_HUB_PAT }}

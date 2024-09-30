@@ -21,4 +21,4 @@ jobs:
           buildArg: db_type=postgres
           tag: postgres,${{ env.RELEASE_VERSION }}-postgres
           dockerHubUser: ${{ secrets.DOCKER_HUB_USER }}
-          dockerHubPassword: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          dockerHubPassword: ${{ secrets.DOCKER_HUB_PAT }}
