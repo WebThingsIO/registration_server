@@ -21,4 +21,4 @@ jobs:
           buildArg: db_type=mysql
           tag: mysql,${{ env.RELEASE_VERSION }}-mysql
           dockerHubUser: ${{ secrets.DOCKER_HUB_USER }}
-          dockerHubPassword: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          dockerHubPassword: ${{ secrets.DOCKER_HUB_PAT }}
