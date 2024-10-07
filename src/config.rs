@@ -38,7 +38,7 @@ pub struct PdnsOptions {
     pub tunnel_ttl: u32,
     pub api_ttl: u32,
     pub caa_records: Vec<String>,
-    pub mx_records: Vec<String>,
+    pub mx_records: Vec<(String,String)>,
     pub ns_records: Vec<Vec<String>>,
     pub txt_records: Vec<Vec<String>>,
     pub cname_records: Vec<Vec<String>>,

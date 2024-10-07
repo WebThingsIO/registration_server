@@ -98,7 +98,10 @@ fn test_args() {
     assert_eq!(args.pdns.caa_records, ["0 issue \"letsencrypt.org\"",]);
     assert_eq!(
         args.pdns.mx_records,
-        ["10 inbound-smtp.us-west-2.amazonaws.com"]
+        [
+            ("@".to_owned(), "10 inbound-smtp.us-west-2.amazonaws.com".to_owned()),
+            ("mail".to_owned(), "10 mail.inbound-smtp.us-west-2.amazonaws.com".to_owned())
+        ]
     );
     assert_eq!(
         args.pdns.ns_records,
