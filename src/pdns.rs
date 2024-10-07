@@ -217,18 +217,20 @@ fn build_ns_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
 }
 
 // Returns an MX record for a given qname.
-fn build_mx_response(qname: &str, config: &Config) -> Vec<PdnsLookupResponse> {
+fn build_mx_response(qname: &str, is_bare_domain: bool, subdomain: &str, config: &Config) -> Vec<PdnsLookupResponse> {
     let mut records = vec![];
-    for mx in &config.options.pdns.mx_records {
-        records.push(PdnsLookupResponse {
-            qtype: "MX".to_owned(),
-            qname: qname.to_owned(),
-            content: mx.to_owned(),
-            ttl: config.options.pdns.dns_ttl,
-            domain_id: None,
-            scope_mask: None,
-            auth: None,
-        });
+    for (domain, mx) in &config.options.pdns.mx_records {
+        if domain == subdomain || (domain == "@" && is_bare_domain) {
+            records.push(PdnsLookupResponse {
+                qtype: "MX".to_owned(),
+                qname: qname.to_owned(),
+                content: mx.to_owned(),
+                ttl: config.options.pdns.dns_ttl,
+                domain_id: None,
+                scope_mask: None,
+                auth: None,
+            });
+        }
     }
 
     records
@@ -452,6 +454,7 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         return handle_pagekite_query(&qname, &qtype, config);
     }
     let bare_domain = format!("{}.", domain);
+    let is_bare_domain = qname == bare_domain;
 
     // If the qname starts with `_acme-challenge.` this is a DNS-01 challenge verification, so
     // remove that part of the domain to retrieve our record.
@@ -479,9 +482,9 @@ fn handle_lookup(req: PdnsRequest, config: &Config) -> Result<PdnsResponse, Stri
         }
     }
 
-    if qname == bare_domain && (qtype == "MX" || qtype == "ANY") {
+    if qtype == "MX" || qtype == "ANY" {
         // Add "MX" records.
-        for record in build_mx_response(&original_qname, config) {
+        for record in build_mx_response(&original_qname, is_bare_domain, subdomain, config) {
             result.push(PdnsResponseParams::Lookup(record));
         }
     }
@@ -992,6 +995,33 @@ mod tests {
                         "ttl": 86400
                     },
                 ]
+            })
+        );
+
+        // MX query
+        let request = build_lookup(
+            "lookup",
+            Some("MX"),
+            Some("mail.mydomain.org."),
+            None,
+        );
+        let body = serde_json::to_string(&request).unwrap();
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.write_all(b"\n").unwrap();
+
+        let len = stream.read(&mut answer).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&answer[..len]).unwrap();
+        assert_json_eq!(
+            response,
+            json!({
+                "result": [
+                    {
+                        "qtype": "MX",
+                        "qname": "mail.mydomain.org.",
+                        "content": "10 mail.inbound-smtp.us-west-2.amazonaws.com",
+                        "ttl": 86400,
+                    }
+                ],
             })
         );
 

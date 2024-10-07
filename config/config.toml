@@ -15,7 +15,10 @@ caa_records = [
   "0 issue \"letsencrypt.org\"",
 ]
 mx_records = [
-  "10 inbound-smtp.us-west-2.amazonaws.com",
+  # mydomain.org
+  ["@", "10 inbound-smtp.us-west-2.amazonaws.com"],
+  # mail.mydomain.org
+  ["mail", "10 mail.inbound-smtp.us-west-2.amazonaws.com"],
 ]
 ns_records = [
   [ "ns1.mydomain.org.", "5.6.7.8" ],
