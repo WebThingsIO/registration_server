@@ -69,16 +69,6 @@ enum PdnsResponseParams {
 }
 
 #[derive(Serialize)]
-struct PdnsBoolResponse {
-    result: bool,
-}
-
-#[derive(Serialize)]
-struct PdnsVecResponse {
-    result: Vec<PdnsResponseParams>,
-}
-
-#[derive(Serialize)]
 #[serde(untagged)]
 enum PdnsResponse {
     Bool { result: bool },
@@ -729,12 +719,12 @@ fn handle_socket_request(mut stream: UnixStream, config: &Config) {
                 }
                 Err(err) => {
                     error!("handle_socket_request(): Error serializing JSON: {}", err);
-                    send!(error_response.clone());
+                    send!(error_response);
                 }
             },
             Err(err) => {
                 error!("handle_socket_request(): Error processing request: {}", err);
-                send!(error_response.clone());
+                send!(error_response);
             }
         }
     }
