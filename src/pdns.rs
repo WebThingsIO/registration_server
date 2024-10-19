@@ -276,17 +276,19 @@ fn build_config_cname_response(
 ) -> Vec<PdnsLookupResponse> {
     let sanitized_qname = remove_trailing_dot(qname);
     let mut records = vec![];
-    for cname in &config.options.pdns.cname_records {
-        if cname[0] == sanitized_qname {
-            records.push(PdnsLookupResponse {
-                qtype: "CNAME".to_owned(),
-                qname: qname.to_owned(),
-                content: cname[1].to_owned(),
-                ttl: config.options.pdns.dns_ttl,
-                domain_id: None,
-                scope_mask: None,
-                auth: None,
-            });
+    if let Some(cname_records) = &config.options.pdns.cname_records {
+        for cname in cname_records {
+            if cname[0] == sanitized_qname {
+                records.push(PdnsLookupResponse {
+                    qtype: "CNAME".to_owned(),
+                    qname: qname.to_owned(),
+                    content: cname[1].to_owned(),
+                    ttl: config.options.pdns.dns_ttl,
+                    domain_id: None,
+                    scope_mask: None,
+                    auth: None,
+                });
+            }
         }
     }
 

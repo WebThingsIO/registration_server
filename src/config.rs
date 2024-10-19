@@ -41,7 +41,7 @@ pub struct PdnsOptions {
     pub mx_records: Vec<(String,String)>,
     pub ns_records: Vec<Vec<String>>,
     pub txt_records: Vec<Vec<String>>,
-    pub cname_records: Vec<Vec<String>>,
+    pub cname_records: Option<Vec<Vec<String>>>,
     pub soa_record: String,
     pub www_addresses: Vec<String>,
     pub geoip: GeoIp,
